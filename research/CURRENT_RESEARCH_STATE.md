@@ -48,12 +48,25 @@ GPU coordination (ACTUAL, 22:48 UTC): r3-fern actually took the GPU first
 waiting politely. r3-frieren has not yet pushed code or started — they have
 been nudged.
 
-## Compatibility notes discovered live
+## Compatibility notes discovered live (Round 1 hardware setup)
 
-- vLLM 0.21.0 + FlashInfer 0.6.8.post1 is the installed stack.
-- `VLLM_ATTENTION_BACKEND` env var is unrecognized in vLLM 0.21 — students
-  must use the CLI flag `--attention-backend FLASHINFER` instead. I have
-  patched the original PR bodies via comments for r3-frieren and r3-fern.
+- **vLLM 0.21.0 + FlashInfer 0.6.8.post1** is the installed stack.
+- **`VLLM_ATTENTION_BACKEND` env var is unrecognized in vLLM 0.21** — use
+  CLI flag `--attention-backend FLASHINFER` (or `FLASH_ATTN`) instead.
+- **FlashInfer JIT compile needs `curand.h`**, missing initially from
+  `/usr/local/cuda/include/`. r3-tanjiro fixed it by symlinking from
+  `/usr/local/lib/python3.10/dist-packages/nvidia/curand/include/curand.h`
+  into `/usr/local/cuda/include/curand.h`. This unblocks all FP8/FlashInfer
+  attempts. Both r3-fern's first attempt (22:46) and r3-tanjiro's first
+  attempt failed on this before the fix.
+- **Hardware appears to be sm_120f, not sm_90 (H100)** — total GPU memory
+  ≈ 97887 MiB suggests Blackwell-class H100 96GB or B100. The reference
+  snapshot in `program.md` is for H100 80GB / Mistral-7B / 2h. Our results
+  may not be directly comparable; report our measured speedup anyway and
+  let the human team triangulate.
+- **CUDA graph capture with FP8 + FlashInfer crashes silently** on this
+  hardware during r3-tanjiro's run — switching to `FLASH_ATTN` backend and
+  reducing `--gpu-memory-utilization` from 0.95 → 0.90 worked as fallback.
 
 ## Plausible next-round directions
 
