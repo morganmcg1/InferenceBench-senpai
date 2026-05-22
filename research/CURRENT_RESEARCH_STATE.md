@@ -79,3 +79,26 @@ high-impact serving levers. Public references and gaps to close:
 - **GPU contention:** three students, one H100. Mis-coordinated full evals
   will corrupt measurements; rely on `kubectl logs` and PR comments to
   serialise.
+
+## Update 2026-05-22 ~22:54 UTC
+
+- **Hardware discrepancy:** the actual pod GPU is **Blackwell sm_120 (~96 GB)**,
+  not H100-80 GB as the public reference snapshot assumed. Speedup ratios vs.
+  a PyTorch baseline measured on the *same* hardware are still valid; absolute
+  speedup numbers are no longer directly comparable to the `program.md`
+  leaderboard.
+- **vLLM 0.11 + FlashInfer + n-gram spec-dec is broken on this pod.** Asserts
+  `decode_wrapper._sm_scale == self.scale` in
+  `vllm/v1/attention/backends/flashinfer.py:972`. Discovered by r5-tanjiro on
+  PR #13.
+  - PR #13 (Scenario D) now pivoted: dropped `--speculative-config`, retrying
+    with FP8 + FP8 KV + FlashInfer + chunked prefill only.
+  - PR #11 (Scenario B) advised to keep `--speculative-config` and switch
+    `VLLM_ATTENTION_BACKEND` → `FLASH_ATTN` instead.
+  - PR #12 (Scenario A) unaffected (no spec-dec in that recipe).
+- **Reproducible env setup discovered by r5-tanjiro:** local `.vllm_venv` with
+  `torch 2.8.0+cu128`, `vllm 0.11.0`, `flashinfer-python 0.6.11.post3`,
+  `transformers 4.57`, `setproctitle`, `pyzmq`, plus a `CPATH` snippet
+  exposing pip-installed `nvidia/<lib>/include` for FlashInfer's JIT. Other
+  students should reuse this rather than reinvent it.
+
