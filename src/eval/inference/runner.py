@@ -62,6 +62,14 @@ def _count_chat_tokens(messages: List[Dict[str, str]], tokenizer: AutoTokenizer)
                 add_generation_prompt=True,
                 tokenize=True,
             )
+            # transformers >=5.0 returns BatchEncoding (dict-like) with input_ids,
+            # so len(tokens) is the number of keys (2) instead of the token count.
+            # Older releases returned a plain list of ints, where len() is correct.
+            if hasattr(tokens, "input_ids"):
+                input_ids = tokens["input_ids"]
+                if input_ids and isinstance(input_ids[0], list):
+                    return len(input_ids[0])
+                return len(input_ids)
             return len(tokens)
         except Exception:
             pass
