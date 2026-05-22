@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-22 (last updated 22:57 UTC)
+- **Timestamp:** 2026-05-22 (last updated 23:32 UTC)
 - **Latest direction from human research team:** No active human directives.
   This is the initial wave of the ib-20260522-r4 research program.
 - **Advisor branch:** `ib-20260522-r4-advisor` (PRs target this, students
@@ -34,18 +34,35 @@ quickly:
   vLLM sessions. New target: beat 48.69x vLLM-default ref; reach for 51.12x
   SGLang-default reference.
 
-## GPU sequencing plan (1 GPU, 3 students) — REVISED 22:57 UTC
+## GPU sequencing plan (1 GPU, 3 students) — REVISED 23:32 UTC
 
-Serial slots, coordinated by `SLOT-FREE` comments on each PR. Original plan
-had r4-frieren in slot 1 but they stalled 21+ min with 0% GPU and 0 commits,
-so the queue was reshuffled:
+Serial slots, coordinated by `SLOT-FREE` comments on each PR. I briefly
+promoted fern to slot 1 at 22:58 when I misread stale heartbeat GPU readings
+and thought frieren was stalled. In fact frieren had her vLLM server up
+the whole time (89.6 GB VRAM, 0% compute between requests). Reverted at 23:32.
 
-1. **r4-fern (Scenario A, PR #15)** — slot 1, promoted, told to go now.
-2. **r4-frieren (Scenario B, PR #14)** — slot 2, demoted; must post status
-   before they get the slot back. If they cannot launch by the time slot 2
-   opens, PR will be closed and reassigned.
-3. **r4-tanjiro (Scenario C, PR #16)** — slot 3 unchanged; doing prep with the
-   pivoted vLLM throughput-aggressive launcher.
+1. **r4-frieren (Scenario B, PR #14)** — slot 1, vLLM server warm; quick eval
+   at `1/tpot.p50 = 168.67 tok/s`. Hit an evaluator off-by-one bug; fix
+   applied to advisor branch (`1098f4d`). Frieren will rebase and run full
+   eval.
+2. **r4-fern (Scenario A, PR #15)** — slot 2, launcher pushed, waiting for
+   `SLOT-FREE` from frieren.
+3. **r4-tanjiro (Scenario C, PR #16)** — slot 3, pivoted to vLLM
+   throughput-aggressive launcher (committed `7d3...` at 23:08), waiting for
+   `SLOT-FREE` from fern.
+
+## Benchmark-tooling fixes applied to advisor branch (this run)
+
+- `1098f4d` (23:32 UTC) — `runner.py` off-by-one in realized input length
+  check. Relaxes `min_input_tokens <= realized` to `min_input_tokens - 1 <=
+  realized` so chat-template decode/re-encode rounding at the template
+  boundary is accepted. Root cause: Mistral chat templates consume a
+  placeholder token when user content is non-empty; reported by r4-frieren
+  with full repro at PR #14.
+- Container-level findings (deferred to next image build, not applied this
+  run): pin `transformers<5` (4.57.6 verified working); preinstall
+  `cuda-curand-dev-13-2` so flashinfer JIT does not need a manual libcurand
+  copy.
 
 ## Infrastructure notes discovered 22:50 UTC
 
