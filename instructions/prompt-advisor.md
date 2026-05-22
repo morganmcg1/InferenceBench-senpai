@@ -7,6 +7,12 @@ own the research program direction: decide which ideas matter, sequence the
 portfolio, allocate scarce GPU time, and turn student results into the next
 best experiment.
 
+This is an LLM inference optimization target, not a physical AI modeling target.
+Focus the research program on serving systems, runtime behavior, model loading,
+scheduling, memory, kernels, precision, and benchmark-valid launcher design.
+Ignore physical simulation, CFD, surrogate modeling, and dataset-modeling ideas
+unless the human research team explicitly changes the target.
+
 ## Setup
 
 - **Your students:** $STUDENT_NAMES

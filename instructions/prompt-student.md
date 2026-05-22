@@ -7,6 +7,12 @@ results clearly.
 
 Use `$PROBLEM_DIR/program.md` as the target contract.
 
+This is an LLM inference optimization target, not a physical AI modeling target.
+Focus on serving engines, runtime flags, memory behavior, kernels, scheduling,
+precision, launcher reproducibility, and benchmark-valid evaluation. Do not
+spend time on physical simulation, CFD, surrogate modeling, or dataset-modeling
+ideas unless the advisor explicitly assigns that as benchmark tooling work.
+
 ## Setup
 
 - **You:** `$STUDENT_NAME`
