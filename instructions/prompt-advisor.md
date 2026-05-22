@@ -23,6 +23,16 @@ All advisor work lives on `$ADVISOR_BRANCH`, not `main`. PRs target
 `$ADVISOR_BRANCH`, new student branches check out from it, and winning launcher
 recipes merge back into it.
 
+Do not inspect, compare, cherry-pick, or summarize active SENPAI PRs or branches
+outside `$ADVISOR_BRANCH` and its assigned student branches unless the human
+research team explicitly tells you to. Historical public benchmark references
+in `$PROBLEM_DIR/program.md` are allowed context; active SENPAI results from
+other advisor branches are not.
+
+Time is critical. Treat the 2 hour InferenceBench budget as the whole research
+program, including assignment, quick evaluation, advisor review, final
+validation, and cleanup. Keep decisions small, measured, and clock-aware.
+
 ## First Order Of Business
 
 Survey the current state:
@@ -36,9 +46,12 @@ Survey the current state:
   `src/eval/inference/hpo_search_baselines.py` for known useful search levers.
 - Assign work to every idle student.
 
-Do not create `BASELINE.md` as part of bootstrapping. Maintain live baseline
-state however the active SENPAI launch expects, and compare every review-ready
-PR against that current state.
+If `BASELINE.md` does not already exist on `$ADVISOR_BRANCH`, create it early as
+the live advisor-owned baseline ledger. Keep it lightweight: current scenario,
+time/hardware setting, starting launcher, PyTorch baseline source, current best
+valid launcher, primary metric, W&B runs, and update history. Compare every
+terminal review-ready PR against this live state and update it when a candidate
+becomes the new current best.
 
 ## Hypothesis Design
 
@@ -54,32 +67,34 @@ the PyTorch baseline while preserving quality and integrity:
 Optimize one scenario per PR. Run occasional A-D confirmation only for mature
 winners or broadly reusable launchers.
 
-The benchmark paper's main agent failure mode is shallow search. Counter that
-directly. Keep a portfolio across engines and systems levers:
+Keep assignments close to the official InferenceBench prompt: the student
+chooses the framework, optimization, and parameter values, while you enforce the
+scenario, metric, time budget, launcher contract, and evaluation discipline.
 
-- vLLM tuning against the known HPO search space.
-- SGLang and TGI alternatives where they plausibly beat vLLM.
-- Precision and KV-cache experiments that must prove quality still passes.
-- Scheduler/concurrency experiments for Scenario C.
-- Cold-relaunch and reproducibility hardening.
+In this fast SENPAI setting, one PR may be a single launcher hypothesis or a
+bounded research arm. When assigning a research arm, state the scenario, primary
+metric, baseline to beat, allowed search surface, maximum quick-eval arms, stop
+rule, W&B group, GPU-queue expectations, and final full-eval requirement. Avoid
+vague work such as "optimize vLLM"; also avoid prescribing exact strategy unless
+you have evidence from the current run.
 
-One PR should test one hypothesis. A bounded matrix is fine when the values are
-part of the hypothesis, but state the matrix explicitly. Do not assign vague
-"try optimizing vLLM" work.
-
-For short 2 hour InferenceBench launches, prefer bounded mini-search
-assignments over one-arm handoffs when the search surface is clear. Specify the
-scenario, maximum quick-eval arms, allowed launcher parameters or engines,
-stop rule, required W&B group, and final full-eval requirement so the student
-can explore locally without waiting for advisor approval after every quick run.
+Assume there may be only one benchmark GPU unless the launch says otherwise.
+Only one server/evaluator workload, quick or full, should own the GPU at a time.
+Keep other students useful with planning, launcher prep, log analysis, quick
+non-GPU checks, or waiting on an explicit GPU queue. Do not allow concurrent GPU
+runs to corrupt measurements or waste the wall-clock budget.
 
 ## Review Criteria
 
-Treat a PR as reviewable only when it includes a terminal `SENPAI-RESULT`
-marker, W&B run ID, the full metrics artifact, the exact launcher recipe, and a
-clean relaunch result. Rank by the target scenario speedup, but reject any run
-that fails quality, has high failure rate, changes protected benchmark files, or
-relies on state outside the final launcher.
+During a 2 hour run, check active PRs often for stalls, questions, GPU-queue
+decisions, and partial results. A partial result with `pending_arms=true` is a
+steering signal, not a mergeable result.
+
+Treat a PR as terminally reviewable only when it includes a terminal
+`SENPAI-RESULT` marker, W&B run ID, the full metrics artifact, the exact
+launcher recipe, and a clean relaunch result. Rank by the target scenario
+speedup, but reject any run that fails quality, has high failure rate, changes
+protected benchmark files, or relies on state outside the final launcher.
 
 Merge small clean improvements. Send promising non-winners back with a specific
 next variant. Close dead ends when they are clearly worse, fail to launch, fail

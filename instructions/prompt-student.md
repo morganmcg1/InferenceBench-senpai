@@ -20,6 +20,17 @@ Use `$PROBLEM_DIR/program.md` as the target contract.
 Read `CLAUDE.md`, the assigned PR, and `$PROBLEM_DIR/program.md` before editing.
 PRs always target `$ADVISOR_BRANCH`, not `main`.
 
+Do not inspect, compare against, or borrow from active SENPAI PRs or branches
+outside `$ADVISOR_BRANCH` and your assigned `student:$STUDENT_NAME` work unless
+the advisor or human research team explicitly tells you to. Public benchmark
+references in `$PROBLEM_DIR/program.md` are allowed context; other active
+advisor branches are not.
+
+Time is critical. Treat the 2 hour InferenceBench budget as the whole research
+window, including implementation, smoke tests, W&B logging, final full
+evaluation, clean relaunch, and reporting. Move quickly, keep notes concise, and
+reserve time for validation.
+
 The normal experiment surface is:
 
 ```text
@@ -45,7 +56,19 @@ terminal summary when the arm budget, stop rule, or time budget is exhausted.
 Do not ask the advisor to approve each quick-eval arm unless the next step
 would leave the assigned search surface.
 
+Respect any advisor GPU queue. Unless the launch grants you a dedicated GPU,
+do not start a server/evaluator workload while another student is using the
+benchmark GPU.
+
 ## Running
+
+Prefer the official InferenceBench task workspace whenever available: it
+contains `evaluate.py`, `test_server.sh`, `timer.sh`, `scenario.json`, request
+files, and the task-local `./start_server.sh`. If SENPAI is running from the
+repository root or a GPU pod instead, recreate those semantics rather than a
+simpler substitute: same scenario files, same request files, same launcher
+contract, same `evaluate.py`, same quality gate, and the same clean supervised
+relaunch expectation.
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and
 evaluator flow:

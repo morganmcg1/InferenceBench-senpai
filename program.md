@@ -49,9 +49,9 @@ InferenceBench README/site for Mistral-7B-Instruct-v0.3 with a 2 hour budget
 per run on one NVIDIA H100 80GB GPU. This is the headline setting to target
 unless the human research team explicitly launches a different model, hardware,
 time budget, or starting-point ablation.
-They are initial context for the advisor, not a maintained `BASELINE.md`.
-The advisor branch should maintain its own live baseline state during a SENPAI
-run.
+They are initial context for the advisor. The advisor branch should maintain
+its own live `BASELINE.md` during a SENPAI run and compare terminal results
+against that current state.
 
 | Method | Aggregate | Sc. A TTFT | Sc. B TPOT | Sc. C req/s | Sc. D geomean |
 |---|---:|---:|---:|---:|---:|
@@ -64,11 +64,10 @@ run.
 | HF TGI default, no agent | 3.30x | 1.14x | 1.37x | 41.94x | 1.80x |
 | PyTorch baseline | 1.00x | 1.00x | 1.00x | 1.00x | 1.00x |
 
-The headline lesson from the benchmark is that agents often know the right
-serving vocabulary but do too little controlled search. SENPAI should directly
-attack that failure mode: assign concrete hypotheses, keep a diverse portfolio,
-measure each candidate, preserve the best valid launcher, and compound small
-validated improvements.
+The headline lesson from the benchmark is that successful runs keep measuring
+and iterating under the time limit. SENPAI should preserve the benchmark's broad
+agent freedom while adding coordination, live baseline tracking, W&B telemetry,
+and protection against duplicated or invalid work.
 
 ## Codebase
 
@@ -164,6 +163,10 @@ Allowed serving levers include:
   same base model architecture is preserved and the quality gate still passes.
 - Kernel and backend tuning: FlashAttention, FlashInfer, Triton kernels,
   speculative decoding, CUDA/Triton cache placement, and compile settings.
+
+These categories are examples, not a whitelist. Creative approaches are allowed
+when they preserve the assigned model, OpenAI-compatible API, metric semantics,
+quality gate, integrity rules, and clean relaunch behavior.
 
 The base model must remain the assigned `INFERENCE_BENCH_BASE_MODEL`. A
 different model repo, smaller substitute, external API, response cache, or
@@ -271,27 +274,15 @@ from serving-optimization PRs.
 
 ## Experiment Strategy
 
-SENPAI should run a portfolio, not a single hill-climb. Useful experiment
-families include:
+The official prompt gives agents broad freedom over framework, optimization,
+and parameter choices. SENPAI should keep that freedom while adding coordination:
+the advisor manages scarce time and GPU access, students run bounded research
+arms or single hypotheses, and every decision is measured through the official
+evaluator.
 
-- Reproduce and refine the strongest vLLM search-space regions by scenario.
-- Compare vLLM against SGLang and TGI on the same scenario and seed budget.
-- Scenario A: prefill-specific tuning, chunked prefill toggles, attention
-  backend, max batched tokens, block size, memory utilization, and prefix cache
-  behavior.
-- Scenario B: decode throughput, CUDA graph settings, speculative decoding,
-  quantization, KV-cache dtype, and max sequence limits.
-- Scenario C: scheduler/concurrency settings, max running requests, queueing
-  behavior, batch limits, and traffic-profile robustness.
-- Scenario D: balanced settings that avoid optimizing one latency component at
-  the expense of another.
-- Robustness and launch hygiene: cold-start time, dependency isolation, cache
-  placement under `/tmp`, GPU cleanup, and clean relaunch reproducibility.
-
-Do not assign only scalar sweeps. Sweeps are valuable when they are bounded and
-scenario-specific, but the benchmark rewards systems judgment: choosing the
-right engine, backend, cache layout, scheduler, and quality-preserving precision
-recipe for each workload.
+Do not overfit to this document's example levers. Choose strategies based on the
+active scenario, current live baseline, measured failures, remaining wall-clock
+time, and available GPU capacity.
 
 ## Results Contract
 
@@ -332,22 +323,10 @@ clearly identify the failed hypothesis, failure mode, and next likely move.
 
 ## Advisor Guidance
 
-Assign one hypothesis per PR. A strong assignment names the scenario, engine,
-exact candidate launcher change, expected metric movement, baseline to compare
-against, and required evaluation depth. If a hypothesis needs several values,
-make that bounded matrix explicit and use a shared W&B group or result label.
-
-Review winners in the metric direction defined above. Merge only candidates
-that preserve benchmark integrity and improve the advisor-maintained current
-baseline. Small clean improvements should merge because serving optimizations
-compound, but a speedup that fails quality or only works because of brittle
-session state is not a win.
-
-When progress stalls, change the strategy tier: move from vLLM flag tuning to
-engine comparison, precision strategy, scheduler design, speculative decoding,
-or launch/runtime architecture. The public paper shows that non-agent search
-beats agents because it explores more configurations. Use SENPAI to make
-exploration disciplined and persistent.
+Detailed advisor workflow lives in `instructions/prompt-advisor.md`. This
+program defines the metric, contract, protected boundaries, and result schema;
+the advisor should choose concrete strategy based on live evidence from the
+current run.
 
 ## Roles
 
