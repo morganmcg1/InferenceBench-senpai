@@ -64,11 +64,6 @@ against that current state.
 | HF TGI default, no agent | 3.30x | 1.14x | 1.37x | 41.94x | 1.80x |
 | PyTorch baseline | 1.00x | 1.00x | 1.00x | 1.00x | 1.00x |
 
-The headline lesson from the benchmark is that successful runs keep measuring
-and iterating under the time limit. SENPAI should preserve the benchmark's broad
-agent freedom while adding coordination, live baseline tracking, W&B telemetry,
-and protection against duplicated or invalid work.
-
 ## Codebase
 
 - `README.md` - official benchmark overview, leaderboard, scenarios, gates, and
@@ -274,11 +269,10 @@ from serving-optimization PRs.
 
 ## Experiment Strategy
 
-The official prompt gives agents broad freedom over framework, optimization,
-and parameter choices. SENPAI should keep that freedom while adding coordination:
-the advisor manages scarce time and GPU access, students run bounded research
-arms or single hypotheses, and every decision is measured through the official
-evaluator.
+This target gives agents broad freedom over framework, optimization, and
+parameter choices. SENPAI adds coordination: the advisor manages scarce time and
+GPU access, students run bounded research arms or single hypotheses, and every
+decision is measured through the official evaluator.
 
 Do not overfit to this document's example levers. Choose strategies based on the
 active scenario, current live baseline, measured failures, remaining wall-clock

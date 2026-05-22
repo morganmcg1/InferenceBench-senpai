@@ -56,9 +56,10 @@ terminal summary when the arm budget, stop rule, or time budget is exhausted.
 Do not ask the advisor to approve each quick-eval arm unless the next step
 would leave the assigned search surface.
 
-Respect any advisor GPU queue. Unless the launch grants you a dedicated GPU,
-do not start a server/evaluator workload while another student is using the
-benchmark GPU.
+Respect the advisor's GPU coordination strategy. If another student is handling
+the main heavy GPU workload, keep making progress through smoke tests,
+low-memory probes, launcher prep, log analysis, or research that can inform the
+next GPU slot.
 
 ## Running
 
@@ -129,3 +130,12 @@ Report results in a PR comment using the `SENPAI-RESULT` format from
 Negative results are useful. If a candidate fails, say whether it failed to
 start, ran out of memory, failed quality, regressed the primary metric, or only
 helped a secondary metric.
+
+## Top Takeaways
+
+- Urgency: the full research window is 2 hours, including final validation and
+  reporting.
+- Effective coordination: keep the advisor informed with concise evidence,
+  respect the GPU plan, and do not leak across advisor branches.
+- Record-breaking inference ideas: move beyond defaults when the evidence
+  supports it, while preserving the benchmark contract exactly.
