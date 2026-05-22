@@ -496,7 +496,11 @@ def _prepare_requests(
         messages = [dict(m) for m in item["messages"]]
         messages = _truncate_messages(messages, tokenizer, target_input_tokens, keep="head")
         realized_input_tokens = _count_chat_tokens(messages, tokenizer)
-        if not (min_input_tokens <= realized_input_tokens <= target_input_tokens):
+        # Some chat templates (e.g. Mistral) consume a placeholder token when user
+        # content is non-empty, so the decode/re-encode round-trip in
+        # _truncate_messages can produce realized = target - 1 at the template
+        # boundary. Allow that 1-token under-shoot so sampling proceeds.
+        if not (min_input_tokens - 1 <= realized_input_tokens <= target_input_tokens):
             raise RuntimeError(
                 "Sampled LongBench-v2 request realized outside input range: "
                 f"seed={seed} request_index={req_idx} target_input_token_count={target_input_tokens} "
