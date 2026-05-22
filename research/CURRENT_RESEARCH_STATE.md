@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-22
+- **Timestamp:** 2026-05-22 (last updated 22:57 UTC)
 - **Latest direction from human research team:** No active human directives.
   This is the initial wave of the ib-20260522-r4 research program.
 - **Advisor branch:** `ib-20260522-r4-advisor` (PRs target this, students
@@ -26,19 +26,42 @@ quickly:
   cache, chunked prefill disabled (concurrency 1 gets no overlap benefit), CUDA
   graphs on.
 - **Scenario C (high-load, baseline to beat: 51.12x SGLang default):** PR #16,
-  r4-tanjiro — SGLang with LPM scheduling, mem_fraction_static=0.90,
-  max_running_requests=256, chunked_prefill_size=8192. SGLang default already
-  leads C; this pushes prefix-cache hit rate further.
+  r4-tanjiro — **PIVOTED 22:57 UTC** from SGLang to vLLM throughput-aggressive
+  (max-num-seqs=256, max-num-batched-tokens=16384, FP8 KV cache, block-size=32,
+  chunked-prefill on, prefix caching on). Pivot reason: pod ships vLLM 0.11.0
+  but not sglang; installing sglang would clobber flash-attn-4 / flashinfer /
+  transformers / openai and risk corrupting the other two students' in-flight
+  vLLM sessions. New target: beat 48.69x vLLM-default ref; reach for 51.12x
+  SGLang-default reference.
 
-## GPU sequencing plan (1 GPU, 3 students)
+## GPU sequencing plan (1 GPU, 3 students) — REVISED 22:57 UTC
 
-Serial slots, coordinated by `SLOT-FREE` comments on each PR:
+Serial slots, coordinated by `SLOT-FREE` comments on each PR. Original plan
+had r4-frieren in slot 1 but they stalled 21+ min with 0% GPU and 0 commits,
+so the queue was reshuffled:
 
-1. r4-frieren (Scenario B, PR #14) — start now.
-2. r4-fern (Scenario A, PR #15) — waits, prepares launcher and pre-stages
-   workspace.
-3. r4-tanjiro (Scenario C, PR #16) — waits, validates SGLang CLI surface and
-   pre-stages workspace.
+1. **r4-fern (Scenario A, PR #15)** — slot 1, promoted, told to go now.
+2. **r4-frieren (Scenario B, PR #14)** — slot 2, demoted; must post status
+   before they get the slot back. If they cannot launch by the time slot 2
+   opens, PR will be closed and reassigned.
+3. **r4-tanjiro (Scenario C, PR #16)** — slot 3 unchanged; doing prep with the
+   pivoted vLLM throughput-aggressive launcher.
+
+## Infrastructure notes discovered 22:50 UTC
+
+- Pod has vLLM 0.11.0; **does not have sglang or TGI** installed and we cannot
+  install sglang without disturbing in-flight vLLM sessions. All round-1 and
+  near-term hypotheses must be **vLLM-only** unless a clean isolated venv path
+  is opened up.
+- No precomputed `pytorch_baseline_metrics.json` on the pod for any scenario.
+  Students should log raw metrics to W&B and compare against the public
+  reference snapshot (PyTorch=1.00x, vLLM-default per scenario) in their
+  terminal `SENPAI-RESULT` comments. `--baseline-primary 1.0` is the
+  workaround for `log_metrics_to_wandb.py`.
+- Scenario task workspaces on this pod do **not** include `test_server.sh`.
+  Students should background-launch `start_server.sh` directly and call
+  `python evaluate.py --server-url ...`. This preserves the contract as long
+  as the launcher itself is foreground (`exec ...`) and self-contained.
 
 Each student does quick eval first, caps at 3 quick-eval arms within their
 launcher family, only runs full eval if quick eval clearly clears their
