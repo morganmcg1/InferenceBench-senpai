@@ -102,3 +102,51 @@ high-impact serving levers. Public references and gaps to close:
   exposing pip-installed `nvidia/<lib>/include` for FlashInfer's JIT. Other
   students should reuse this rather than reinvent it.
 
+## Update 2026-05-22 ~23:40 UTC
+
+- **FlashInfer + sm_120 root cause confirmed:** the assertion fires from
+  FlashInfer kernel warmup (`kernel_warmup.py:55 _dummy_run(num_tokens=16,
+  create_mixed_batch=True)`), *independent* of speculative decoding. The
+  TRTLLM bypass `supports_trtllm_attention()` in `vllm/utils/flashinfer.py:191`
+  only returns True on **SM 100** (Hopper), so sm_120 (Blackwell RTX PRO 6000)
+  cannot escape the regular decode-wrapper path. Confirmed by both r5-tanjiro
+  (PR #13) and r5-frieren (PR #11).
+- **All three students now on Triton/FA-2-3 attention:** PR #11, #12, #13 all
+  using `VLLM_ATTENTION_BACKEND=FLASH_ATTN` or default Triton on sm_120; no
+  FlashInfer in any terminal arm this launch.
+- **r5-fern's FlashInfer venv-patch experiment (smoke-only, not for terminal):**
+  Two patches made FlashInfer functional on a tiny smoke prompt:
+    1. Relax `decode_wrapper._sm_scale == self.scale` assert (line ~972) to
+       `math.isclose` + overwrite — the strict equality check is overly
+       conservative; the computed scale matches numerically.
+    2. Probe `_cached_module.plan()` arity in `fast_plan_decode` (line ~1146):
+       vLLM 0.11.0 hardcodes a 15-arg call but FlashInfer 0.5.3+ extended the
+       ABI to 19 args (`window_left, fixed_split_size=-1, disable_split_kv=False,
+       num_colocated_ctas=0`); try-except appends extras on TypeError.
+  These patches live in `.vllm_venv` and do not survive a clean supervised
+  relaunch, and the 10-token smoke does not validate 8K-prefill paths.
+  **Useful follow-up:** worth filing upstream against vLLM 0.11 / FlashInfer
+  0.6.11 ABI mismatch, and worth re-attempting a Scenario A FlashInfer run
+  once those land in a pinned wheel.
+- **`--tokenizer-mode mistral` SPM bug (r5-frieren):** rejects every
+  `/v1/{chat/,}completions` on this SPM Mistral with `Expected
+  special_token_policy to be a SpecialTokenPolicy, got <class 'NoneType'>`
+  (vLLM 0.11.0 sets `_special_token_policy=None` for SPM; only Tekken gets a
+  default). Use default `auto` mode — returns `LlamaTokenizerFast`, decodes
+  correctly.
+- **Baseline strategy this launch:** no precomputed PyTorch baseline exists
+  on the Blackwell pod. r5-tanjiro (PR #13) is producing the Scenario D
+  PyTorch baseline via `precompute_baseline.py` + `transformers_openai_server`
+  on this hardware (output: `senpai/research/baselines/pytorch_baseline_D_blackwell.json`).
+  PR #11 and #12 will report raw `1/tpot.p50` and `1/ttft.p50` as
+  `primary_metric.value` sentinels and label `Baseline mode:
+  raw_primary_objective` clearly in their bodies; the
+  `speedup_over_pytorch` ratios will be computed post-hoc by the advisor once
+  baselines exist. **No fabricated H100→Blackwell extrapolations** allowed —
+  the relative PyTorch/vLLM gap is hardware-dependent.
+- **GPU queue at 23:48 UTC:** r5-frieren running quick eval on Scenario B
+  (PR #11, GPU 87933 MiB @ 94%); r5-fern queued (PR #12, launcher already
+  updated to FLASH_ATTN); r5-tanjiro queued (PR #13, will run Scenario D
+  PyTorch baseline first, then optional FA + FP8 + FP8 KV candidate if
+  >20 min remains in wall-clock).
+
