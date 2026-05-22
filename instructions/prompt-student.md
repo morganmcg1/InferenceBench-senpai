@@ -38,6 +38,13 @@ scripts unless the advisor explicitly assigns tooling work.
 Keep the PR focused on the assigned hypothesis. If you see a tempting unrelated
 idea, put it in "Suggested follow-ups" rather than implementing it.
 
+If the PR gives you a bounded local arm budget, use it. For example, run a
+small sequence of quick evaluations within the assigned launcher family,
+discard invalid or crashing arms, keep W&B logging complete, and submit one
+terminal summary when the arm budget, stop rule, or time budget is exhausted.
+Do not ask the advisor to approve each quick-eval arm unless the next step
+would leave the assigned search surface.
+
 ## Running
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and

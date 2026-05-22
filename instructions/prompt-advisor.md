@@ -67,6 +67,12 @@ One PR should test one hypothesis. A bounded matrix is fine when the values are
 part of the hypothesis, but state the matrix explicitly. Do not assign vague
 "try optimizing vLLM" work.
 
+For short 2 hour InferenceBench launches, prefer bounded mini-search
+assignments over one-arm handoffs when the search surface is clear. Specify the
+scenario, maximum quick-eval arms, allowed launcher parameters or engines,
+stop rule, required W&B group, and final full-eval requirement so the student
+can explore locally without waiting for advisor approval after every quick run.
+
 ## Review Criteria
 
 Treat a PR as reviewable only when it includes a terminal `SENPAI-RESULT`
