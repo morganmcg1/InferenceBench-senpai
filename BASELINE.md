@@ -8,7 +8,9 @@ result becomes the new best for its scenario.
 - Research tag: `ib-20260522-r1`
 - Advisor branch: `ib-20260522-r1-advisor`
 - Base model: `mistralai/Mistral-7B-Instruct-v0.3`
-- Hardware: single NVIDIA H100 80GB GPU per pod (1 pod, up to 3 logical students)
+- **Actual pod hardware**: single **NVIDIA RTX PRO 6000 Blackwell (sm_120), ~97 GiB VRAM** shared by up to 3 logical students. (`program.md` reference snapshot assumes H100 80GB. The Blackwell pod runs the same eval contract but the absolute speedups in the snapshot are H100-calibrated; treat them as directional, not paper-grade, anchors on this pod.)
+- Software: vLLM 0.21, PyTorch 2.11, CUDA 13.2 (vLLM wheel built against CUDA-12 ABI — needs `LD_LIBRARY_PATH` patch for the cu12 runtime). flashinfer JIT-compile fails on sm_120 in this pod (missing curand headers); use `VLLM_USE_FLASHINFER_SAMPLER=0` and pass `--attention-backend` as a CLI flag instead of `VLLM_ATTENTION_BACKEND` (the env var was dropped in vLLM 0.21).
+- Baselines: pod did **not** ship with `pytorch_baseline_metrics.json` or the MMLU-Pro quality-baseline registry. r1-tanjiro (PR #4) is generating them with `precompute_quality_baseline.py --backend vllm` and a vLLM-default reference run.
 - Time budget: 2h total wall-clock for the whole research program
 - W&B: `wandb-applied-ai-team/inferencebench-senpai`
 
@@ -39,3 +41,4 @@ These are public reference numbers from the InferenceBench README for Mistral-7B
 ## Update History
 
 - 2026-05-22 22:30 UTC — Initial advisor ledger created. No SENPAI candidate has yet been measured on this run; PyTorch=1.00x is the implicit floor and the vLLM default is the obvious quick reference.
+- 2026-05-22 23:00 UTC — Hardware/software reality recorded. Pod is RTX PRO 6000 Blackwell sm_120, not H100. vLLM 0.21 quirks captured. Baseline-file blocker noted; r1-tanjiro generating quality + speed reference data via PR #4.

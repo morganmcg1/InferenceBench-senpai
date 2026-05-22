@@ -1,8 +1,11 @@
 # SENPAI Research State (ib-20260522-r1)
 
-- Date: 2026-05-22 22:55 UTC
+- Date: 2026-05-22 23:00 UTC
 - Most recent research direction from human researcher team: none yet (no issues open; repo issues disabled).
-- Live blocker: pod did not ship with `pytorch_baseline_metrics.json` or the MMLU-Pro quality-baseline registry. Without them every `evaluate.py` reports `quality_check.pass: false`. r1-tanjiro (PR #4) is generating both before their Sc C arms, using `precompute_quality_baseline.py --backend vllm` (officially supported by `quality_gate.py`) and a vLLM-default reference run for speedup calibration. r1-frieren/r1-fern told to rebase onto the resulting baseline files before their *terminal* full eval and to set `INFERENCE_BENCH_QUALITY_BASELINE_BACKEND=vllm`.
+- Live environment facts (matter for every assignment in this run):
+  - Pod hardware is **RTX PRO 6000 Blackwell (sm_120) ~97 GiB VRAM**, not H100 80GB. Reference-snapshot speedup anchors (1.25x / 2.25x / 48.69x / etc.) are directional on this hardware.
+  - vLLM 0.21 on sm_120: flashinfer sampler JIT fails (missing curand headers) — set `VLLM_USE_FLASHINFER_SAMPLER=0`. `VLLM_ATTENTION_BACKEND` env var was dropped — pass `--attention-backend` as a CLI flag instead. CUDA-12 wheel needs `LD_LIBRARY_PATH` for the bundled cu12 runtime (pod has CUDA 13.2).
+  - Baseline files missing — r1-tanjiro (PR #4) generating via `precompute_quality_baseline.py --backend vllm` + a vLLM-default speed reference. All terminal full evals must wait for these files and set `INFERENCE_BENCH_QUALITY_BASELINE_BACKEND=vllm`.
 - Current research focus and themes:
   - **InferenceBench**: optimize per-scenario speedup over the PyTorch baseline for
     Mistral-7B-Instruct-v0.3 on a single H100 80GB, 2h budget per run. Paper-facing
