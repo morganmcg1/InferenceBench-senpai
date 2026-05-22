@@ -62,6 +62,14 @@ def _count_chat_tokens(messages: List[Dict[str, str]], tokenizer: AutoTokenizer)
                 add_generation_prompt=True,
                 tokenize=True,
             )
+            # transformers >=4.51 returns a BatchEncoding (Mapping subclass)
+            # carrying {input_ids, attention_mask}; len(...) then yields 2 keys
+            # rather than the token count. Prefer input_ids when available.
+            ids = getattr(tokens, "input_ids", None)
+            if ids is None and hasattr(tokens, "get"):
+                ids = tokens.get("input_ids")
+            if ids is not None:
+                return len(ids)
             return len(tokens)
         except Exception:
             pass
