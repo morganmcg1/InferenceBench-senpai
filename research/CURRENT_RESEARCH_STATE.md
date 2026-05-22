@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-22 (last updated 23:42 UTC)
+- **Timestamp:** 2026-05-22 (last updated 23:54 UTC)
 - **Latest direction from human research team:** No active human directives.
   This is the initial wave of the ib-20260522-r4 research program.
 - **Advisor branch:** `ib-20260522-r4-advisor` (PRs target this, students
@@ -34,26 +34,27 @@ quickly:
   vLLM sessions. New target: beat 48.69x vLLM-default ref; reach for 51.12x
   SGLang-default reference.
 
-## GPU sequencing plan (1 GPU, 3 students) — REVISED 23:42 UTC
+## GPU sequencing plan (1 GPU, 3 students) — REVISED 23:54 UTC
 
-Serial slots, coordinated by `SLOT-FREE` comments on each PR. I briefly
-promoted fern to slot 1 at 22:58 when I misread stale heartbeat GPU readings
-and thought frieren was stalled. In fact frieren had her vLLM server up
-the whole time (89.6 GB VRAM, 0% compute between requests). Reverted at 23:32.
+**De-facto slot order discovered at 23:53** (via r4-frieren's forensic
+timeline on PR #14): r4-fern actually launched her vLLM server at 23:33:08,
+exactly 1 second after my walk-back comment at 23:33:07. The walk-back never
+applied — fern has effectively been on slot 1 since 23:33. r4-frieren's own
+server was torn down at 23:29:03 by the supervised wrapper after quick eval.
+The 90 GB / 100% GPU at 23:51 is fern's Scenario A run, not frieren's.
 
-1. **r4-frieren (Scenario B, PR #14)** — slot 1, vLLM server warm at 89 GB;
-   quick eval at `1/tpot.p50 = 168.67 tok/s`. Hit an evaluator off-by-one bug;
-   fix applied to advisor branch (`1098f4d`). Frieren is pulling the fix and
-   re-running full eval. (Label briefly went to `status:review` after quick
-   eval; restored to `status:wip` at 23:42 by advisor — she must re-flip to
-   `status:review` only after posting a terminal `SENPAI-RESULT`.)
-2. **r4-fern (Scenario A, PR #15)** — slot 2, launcher pushed at 22:44,
-   waiting for `SLOT-FREE` from frieren. Warned at 23:42 about the
-   MAX_MODEL_LEN=131072 launcher-template bug (see below).
-3. **r4-tanjiro (Scenario C, PR #16)** — slot 3, pivoted to vLLM
-   throughput-aggressive launcher (committed `dbc7a1e` at 23:08, plus the
-   MAX_MODEL_LEN fix `b91a1d6` at 23:37), workspace pre-staged. Waiting for
-   `SLOT-FREE` from fern.
+1. **r4-fern (Scenario A, PR #15)** — **actual slot 1** (since 23:33),
+   mid-eval at 23:51 (90 GB VRAM, 100% util). Server up despite the
+   MAX_MODEL_LEN=131072 default. Pending terminal `SENPAI-RESULT`.
+2. **r4-frieren (Scenario B, PR #14)** — slot 2 (next up). Local state ready:
+   runner.py fix `1098f4d` merged, launcher unchanged from 168.67 tok/s
+   quick-eval config. Server shut down at 23:29; will relaunch as soon as
+   fern posts `SLOT-FREE` on PR #15. Frieren confirmed option (a) hold
+   strategy at 23:44 and 23:53 — no need to kill fern's run.
+3. **r4-tanjiro (Scenario C, PR #16)** — slot 3. Pivoted to vLLM
+   throughput-aggressive (`dbc7a1e`), MAX_MODEL_LEN fix applied
+   (`b91a1d6`), workspace pre-staged. Waits for frieren's `SLOT-FREE`
+   on PR #14 (i.e. effectively waits for fern → frieren chain to finish).
 
 ## Benchmark-tooling fixes applied to advisor branch (this run)
 
