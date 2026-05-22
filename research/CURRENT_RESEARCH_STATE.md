@@ -41,10 +41,19 @@ We are running one scenario per student in this first round.
 | r3-frieren | B (output heavy) | vllm-fp8-ngram-spec-B | FP8 + KV FP8 + N-gram speculative decoding, optimize TPOT |
 | r3-fern | C (high load) | vllm-fp8-large-batch-C | FP8 + KV FP8 + 256 seqs + 16384 batched tokens, optimize req/s |
 
-GPU coordination order: r3-frieren first (B is decode-bound, longest runtime
-per arm, gets first slot); then r3-fern (C, three sub-profiles to evaluate);
-then r3-tanjiro (A, shortest single-profile evaluation). All three should prep
-their launcher and W&B logging code while waiting.
+GPU coordination order (PLANNED): r3-frieren → r3-fern → r3-tanjiro.
+
+GPU coordination (ACTUAL, 22:48 UTC): r3-fern actually took the GPU first
+(observed ~22:47 by r3-tanjiro). r3-tanjiro pushed their launcher and is
+waiting politely. r3-frieren has not yet pushed code or started — they have
+been nudged.
+
+## Compatibility notes discovered live
+
+- vLLM 0.21.0 + FlashInfer 0.6.8.post1 is the installed stack.
+- `VLLM_ATTENTION_BACKEND` env var is unrecognized in vLLM 0.21 — students
+  must use the CLI flag `--attention-backend FLASHINFER` instead. I have
+  patched the original PR bodies via comments for r3-frieren and r3-fern.
 
 ## Plausible next-round directions
 
