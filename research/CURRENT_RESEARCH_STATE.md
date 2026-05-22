@@ -53,12 +53,21 @@ been nudged.
 - **vLLM 0.21.0 + FlashInfer 0.6.8.post1** is the installed stack.
 - **`VLLM_ATTENTION_BACKEND` env var is unrecognized in vLLM 0.21** — use
   CLI flag `--attention-backend FLASHINFER` (or `FLASH_ATTN`) instead.
+  vLLM 0.21 auto-selects FLASHINFER for fp8 KV on Blackwell anyway
+  (r3-frieren confirmed at runtime: `Using FLASHINFER attention backend out of
+  potential backends: ['FLASHINFER', 'TRITON_ATTN']`).
 - **FlashInfer JIT compile needs `curand.h`**, missing initially from
   `/usr/local/cuda/include/`. r3-tanjiro fixed it by symlinking from
   `/usr/local/lib/python3.10/dist-packages/nvidia/curand/include/curand.h`
   into `/usr/local/cuda/include/curand.h`. This unblocks all FP8/FlashInfer
   attempts. Both r3-fern's first attempt (22:46) and r3-tanjiro's first
   attempt failed on this before the fix.
+- **FlashInfer FP8 JIT additionally needs `LD_LIBRARY_PATH` and `CPATH`
+  workarounds** — r3-frieren documented these in PR #5 commit `6b027ee`.
+  `LD_LIBRARY_PATH` must include the nvidia pip-installed lib paths
+  (`/usr/local/lib/python3.10/dist-packages/nvidia/{cuda_nvrtc,cuda_runtime,...}/lib`)
+  for `libnvJitLink.so.12` resolution. `CPATH` must include the FlashInfer
+  FP8 JIT include path.
 - **Hardware appears to be sm_120f, not sm_90 (H100)** — total GPU memory
   ≈ 97887 MiB suggests Blackwell-class H100 96GB or B100. The reference
   snapshot in `program.md` is for H100 80GB / Mistral-7B / 2h. Our results
@@ -67,6 +76,40 @@ been nudged.
 - **CUDA graph capture with FP8 + FlashInfer crashes silently** on this
   hardware during r3-tanjiro's run — switching to `FLASH_ATTN` backend and
   reducing `--gpu-memory-utilization` from 0.95 → 0.90 worked as fallback.
+  Further fallback if needed: `--enforce-eager` (disables cudagraphs).
+- **vLLM emits suboptimality warning** when `max_num_batched_tokens` is too
+  tight relative to speculative-decoding draft count: `max_num_scheduled_tokens
+  is set to 4096 based on the speculative decoding settings. Consider increasing
+  max_num_batched_tokens to accommodate the additional draft token slots.`
+  Discovered by r3-frieren on PR #5 — v2 launcher bumps to 8192.
+
+## R3 launch infrastructure blocker (filed as issue #17)
+
+**Quality gate and `scenario/<X>/speedup_over_pytorch` cannot be computed**
+because two baseline files are absent from this harness checkout:
+
+1. `src/eval/inference/baselines/quality/mistralai_Mistral-7B-Instruct-v0.3_torch.json`
+   — `runner.py` short-circuits with `error:"missing baseline accuracy for: mmlu_pro"`
+   when missing, so MMLU-Pro inference is never run.
+2. `pytorch_baseline_metrics.json` per-scenario — needed by
+   `senpai/log_metrics_to_wandb.py` for the paper-facing speedup ratio.
+
+Impact: r3-frieren's PR #5 has clean recipe (TPOT p50 = 5.09 ms, 64/64
+success on burst, 93GB/97GB VRAM) but cannot prove > 15.23x SMAC3 reference.
+Rough position by manual estimation is ~7-16x, bracketing SMAC3.
+
+Mitigation for remaining R3 students: report **raw primary metrics** in
+SENPAI-RESULT markers (e.g., `scenario/<X>/inverse_<metric>_p50`). Ignore
+the quality gate short-circuit error. Do not attempt to edit benchmark
+files. Wait for human team to land the baseline files before any merge.
+
+## Round 1 status (live, 23:55 UTC)
+
+| Student | PR | Scenario | Status | Result |
+|---|---|---|---|---|
+| r3-frieren | #5 | B (TPOT) | held WIP, queued v2 | TPOT p50 = 5.09 ms, 196.4 tok/s, 64/64. Recipe works, awaits baseline for speedup. |
+| r3-fern | #6 | C (req/s) | WIP, claiming GPU | (eval pending, ETA ~30 min) |
+| r3-tanjiro | #10 | A (TTFT) | WIP, waiting GPU | (likely quick-eval-only tail slot ~00:25 UTC) |
 
 ## Plausible next-round directions
 

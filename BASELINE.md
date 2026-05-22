@@ -13,10 +13,18 @@ Speedups are measured vs. the PyTorch naive baseline using the official
 `evaluate.py --json-output-file` output and computed by
 `senpai/summarize_metrics.py`. Quality gate must pass (MMLU-Pro ratio >= 0.95).
 
+**Blocker on R3 launch:** PyTorch baseline metrics file and MMLU-Pro quality
+baseline registry are both missing from this harness checkout
+(see https://github.com/morganmcg1/InferenceBench-senpai/issues/17). Until the
+human team lands those files, `scenario/<X>/speedup_over_pytorch` and the
+quality gate cannot be computed automatically. We're recording the raw primary
+metric values below as interim live bests; PR holds and merges await the
+baseline files.
+
 | Scenario | Primary metric | Current best (this branch) | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
 | A: Input heavy (TTFT) | `scenario/A/speedup_over_pytorch` | (none yet) | - | - | - |
-| B: Output heavy (TPOT) | `scenario/B/speedup_over_pytorch` | (none yet) | - | - | - |
+| B: Output heavy (TPOT) | `scenario/B/inverse_tpot_p50` (raw, no speedup) | 196.40 tok/s | `senpai/launchers/scenario_b/vllm-fp8-ngram-spec-B/start_server.sh` | `7o8ol62m` | #5 (held, awaiting baseline) |
 | C: High load (req/s geomean) | `scenario/C/speedup_over_pytorch` | (none yet) | - | - | - |
 | D: General (geomean) | `scenario/D/speedup_over_pytorch` | (none yet) | - | - | - |
 | Aggregate (A-D geomean) | `aggregate/geomean_speedup_over_pytorch` | (none yet) | - | - | - |
@@ -42,3 +50,9 @@ Mistral-7B-Instruct-v0.3 / H100 80GB / 2h setting.
 - 2026-05-22 — Initial ledger created. No terminal launchers yet; assigning
   first round of hypotheses to r3-frieren (Scenario B), r3-fern (Scenario C),
   r3-tanjiro (Scenario A) sharing a single H100.
+- 2026-05-22 23:55 UTC — PR #5 (r3-frieren / Scenario B) posted terminal
+  SENPAI-RESULT. TPOT p50 = 5.09 ms, inverse_tpot_p50 = 196.40 tok/s, 64/64
+  success on burst, VRAM 93GB/97GB. Quality gate did not run and speedup over
+  PyTorch could not be computed (missing baseline files — issue #17 filed).
+  PR held as `status:wip` pending baseline files; r3-frieren given v2
+  follow-up addressing the `max_num_batched_tokens` vLLM suboptimality warning.
