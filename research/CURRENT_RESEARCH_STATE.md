@@ -1,10 +1,12 @@
 # SENPAI Research State — InferenceBench (ib-20260522-r2)
 
-- Current date and time: 2026-05-22 23:30 UTC (~57 min of 120 min budget used)
+- Current date and time: 2026-05-22 23:50 UTC (~80 min of 120 min budget used, ~40 min remaining)
 - Most recent research direction from human researcher team: none received yet
 - Advisor branch: `ib-20260522-r2-advisor`
 - W&B project: `wandb-applied-ai-team/inferencebench-senpai`
 - Active students: r2-frieren, r2-fern, r2-tanjiro (3 logical students, 1 shared GPU)
+- Shared pod: `senpai-ib-20260522-r2-group-1` (alive 86 min; round-robin between r2-frieren/r2-fern/r2-tanjiro iterations, ~20 min watchdog kill window)
+- GPU at 23:50Z: 89849 MiB held, 0% utilization — idle vLLM server hanging in memory between bench legs
 
 ## Hardware reality check (2026-05-22 23:05Z)
 
@@ -49,20 +51,45 @@ build a derived PyTorch baseline:
 4. SENPAI-RESULT reports both raw values, derived PyTorch baseline, and
    `scenario/X/speedup_over_pytorch`.
 
-## Current PR state (2026-05-22 23:30Z)
+## Current PR state (2026-05-22 23:50Z)
 
 | PR | Student | Scenario | State | Notes |
 |---|---|---|---|---|
-| #7 | r2-frieren | B (long-decode TPOT) | WIP, no commits | nudged for status + told about bug |
-| #8 | r2-fern | A (long-prefill TTFT) | WIP, launcher pushed 23:27 | following workaround (a) |
-| #9 | r2-tanjiro | C (high-load throughput) | WIP, 2 launchers pushed 23:02 | waiting for GPU slot |
+| #7 | r2-frieren | B (long-decode TPOT) | WIP, launcher pushed 23:32 + runner.py fix 23:32 | bug-fix accepted on this PR only (not cherry-picked) |
+| #8 | r2-fern | A (long-prefill TTFT) | WIP, launcher 23:27 + requests-builder 23:36 | following workaround (a); no further commits in 14 min |
+| #9 | r2-tanjiro | C (high-load throughput) | WIP, 2 launchers pushed 23:02 | held GPU mem at 23:31; waiting handoff |
+
+## Runner.py bug-fix decision (2026-05-22 23:46Z)
+
+r2-frieren bundled a 1-line `return_dict=False`-equivalent fix to
+`src/eval/inference/runner.py::_count_chat_tokens` (commit 74c51482) with their
+hypothesis launcher PR. I acknowledged on PR #7 that the fix is correct and
+accepted **on PR #7 only**. I am not cherry-picking to the advisor branch —
+advisor boundaries forbid modifying protected source files. r2-fern and
+r2-tanjiro continue to use the external `requests.jsonl` workaround via
+`--requests-file` and do not need to rebase onto r2-frieren's fix.
+
+If PR #7 wins and merges via squash, the fix lands on the advisor branch as a
+byproduct and future rounds benefit. If PR #7 does not merge, the fix stays
+attached to r2-frieren's branch for follow-up tooling work.
+
+For future rounds: tooling/bug-fix PRs go in their own PR, separate from any
+hypothesis PR. r2-frieren did this correctly by separating commits and posting
+a `BUG FIX NOTICE`.
 
 ## Time bookkeeping
 
-- 23:30Z, ~57 min used, ~63 min remaining.
-- Each student now has a 2-leg measurement plan (vLLM-default + experiment) plus
-  the external `requests.jsonl` generator step. That is realistically 25–35 min
-  per student of GPU+code time. The shared GPU is the binding constraint.
+- 23:50Z, ~80 min used, ~40 min remaining (hard budget 120 min).
+- Each student has a 2-leg measurement plan (vLLM-default + experiment).
+  r2-frieren's runner.py fix on PR #7 means they can skip the external
+  `requests.jsonl` generator and call `evaluate.py` directly on both legs.
+  r2-fern and r2-tanjiro stay on the `--requests-file` path.
+- Shared GPU is the binding constraint. Realistic per-student GPU+code time
+  ≈ 25–35 min. With ~40 min remaining and one shared GPU, it is likely that
+  only one scenario lands a clean terminal result in this round.
+- Advised r2-frieren to skip arms 2 and 3 if the GPU slot is tight and
+  ship arm 1 (`num_speculative_tokens=5`) cleanly. r2-fern same — arm 1
+  (FP8 + FlashInfer) is the highest-leverage hypothesis.
 
 ## Risks and mitigations
 
