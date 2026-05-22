@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-22 (last updated 23:32 UTC)
+- **Timestamp:** 2026-05-22 (last updated 23:42 UTC)
 - **Latest direction from human research team:** No active human directives.
   This is the initial wave of the ib-20260522-r4 research program.
 - **Advisor branch:** `ib-20260522-r4-advisor` (PRs target this, students
@@ -34,21 +34,25 @@ quickly:
   vLLM sessions. New target: beat 48.69x vLLM-default ref; reach for 51.12x
   SGLang-default reference.
 
-## GPU sequencing plan (1 GPU, 3 students) — REVISED 23:32 UTC
+## GPU sequencing plan (1 GPU, 3 students) — REVISED 23:42 UTC
 
 Serial slots, coordinated by `SLOT-FREE` comments on each PR. I briefly
 promoted fern to slot 1 at 22:58 when I misread stale heartbeat GPU readings
 and thought frieren was stalled. In fact frieren had her vLLM server up
 the whole time (89.6 GB VRAM, 0% compute between requests). Reverted at 23:32.
 
-1. **r4-frieren (Scenario B, PR #14)** — slot 1, vLLM server warm; quick eval
-   at `1/tpot.p50 = 168.67 tok/s`. Hit an evaluator off-by-one bug; fix
-   applied to advisor branch (`1098f4d`). Frieren will rebase and run full
-   eval.
-2. **r4-fern (Scenario A, PR #15)** — slot 2, launcher pushed, waiting for
-   `SLOT-FREE` from frieren.
+1. **r4-frieren (Scenario B, PR #14)** — slot 1, vLLM server warm at 89 GB;
+   quick eval at `1/tpot.p50 = 168.67 tok/s`. Hit an evaluator off-by-one bug;
+   fix applied to advisor branch (`1098f4d`). Frieren is pulling the fix and
+   re-running full eval. (Label briefly went to `status:review` after quick
+   eval; restored to `status:wip` at 23:42 by advisor — she must re-flip to
+   `status:review` only after posting a terminal `SENPAI-RESULT`.)
+2. **r4-fern (Scenario A, PR #15)** — slot 2, launcher pushed at 22:44,
+   waiting for `SLOT-FREE` from frieren. Warned at 23:42 about the
+   MAX_MODEL_LEN=131072 launcher-template bug (see below).
 3. **r4-tanjiro (Scenario C, PR #16)** — slot 3, pivoted to vLLM
-   throughput-aggressive launcher (committed `7d3...` at 23:08), waiting for
+   throughput-aggressive launcher (committed `dbc7a1e` at 23:08, plus the
+   MAX_MODEL_LEN fix `b91a1d6` at 23:37), workspace pre-staged. Waiting for
    `SLOT-FREE` from fern.
 
 ## Benchmark-tooling fixes applied to advisor branch (this run)
@@ -63,6 +67,18 @@ the whole time (89.6 GB VRAM, 0% compute between requests). Reverted at 23:32.
   run): pin `transformers<5` (4.57.6 verified working); preinstall
   `cuda-curand-dev-13-2` so flashinfer JIT does not need a manual libcurand
   copy.
+
+## Launcher-template bug (template-side, not benchmark-side) — 23:37 UTC
+
+- `MAX_MODEL_LEN` default in the round-1 PR template (used by all three
+  launchers) is `131072`, which exceeds Mistral-7B-Instruct-v0.3's
+  `max_position_embeddings=32768`. vLLM may reject this at pydantic
+  ModelConfig validation. r4-tanjiro caught this with a supervised smoke
+  launch and fixed his copy to `4096` (commit `b91a1d6`). r4-frieren's
+  Scenario B server (max-num-seqs=4) came up fine with the 131072 default —
+  bug appears to fire only for some flag combinations. Future launcher
+  templates should default to `≤32768` (Scenario A/B/D need `<= 16384`;
+  Scenario C needs `<= 4096`).
 
 ## Infrastructure notes discovered 22:50 UTC
 
