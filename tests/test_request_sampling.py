@@ -21,6 +21,12 @@ class FakeTokenizer:
         return " ".join(tokens)
 
 
+class BatchEncodingLikeTokenizer(FakeTokenizer):
+    def apply_chat_template(self, messages, add_generation_prompt=True, tokenize=True):
+        tokens = super().apply_chat_template(messages, add_generation_prompt, tokenize)
+        return {"input_ids": [tokens]}
+
+
 def _write_longbench_samples(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -84,3 +90,12 @@ def test_prepare_requests_requires_tokenizer_for_implicit_sampling(tmp_path, mon
 
     with pytest.raises(RuntimeError, match="requires the base model tokenizer"):
         runner._prepare_requests(_speed_config(num_requests=1), limit=None, tokenizer=None, max_model_len=None)
+
+
+def test_count_chat_tokens_handles_batchencoding_like_template_result():
+    tokenizer = BatchEncodingLikeTokenizer()
+
+    assert runner._count_chat_tokens(
+        [{"role": "user", "content": "one two three"}],
+        tokenizer,
+    ) == 3

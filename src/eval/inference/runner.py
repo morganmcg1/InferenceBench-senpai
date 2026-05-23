@@ -62,7 +62,17 @@ def _count_chat_tokens(messages: List[Dict[str, str]], tokenizer: AutoTokenizer)
                 add_generation_prompt=True,
                 tokenize=True,
             )
-            return len(tokens)
+            if isinstance(tokens, dict) and "input_ids" in tokens:
+                ids = tokens["input_ids"]
+            elif hasattr(tokens, "keys") and "input_ids" in tokens.keys():
+                ids = tokens["input_ids"]
+            else:
+                ids = tokens
+            if hasattr(ids, "tolist"):
+                ids = ids.tolist()
+            if isinstance(ids, list) and ids and isinstance(ids[0], list):
+                return len(ids[0])
+            return len(ids)
         except Exception:
             pass
     joined = "\n".join(f"{m.get('role')}: {m.get('content','')}" for m in messages)
