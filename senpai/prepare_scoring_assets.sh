@@ -19,6 +19,42 @@ EXPORT_DIR=""
 LEADERBOARD_MODE=0
 REQUIRE_WANDB=1
 RUN_PRECOMPUTE=1
+EXPORTED_ON_EXIT=0
+
+export_assets() {
+  local exit_code="$1"
+  if [[ -z "$EXPORT_DIR" || ! -d src/eval/inference/baselines ]]; then
+    return 0
+  fi
+  mkdir -p "$EXPORT_DIR"
+  rm -rf "$EXPORT_DIR/baselines"
+  cp -a src/eval/inference/baselines "$EXPORT_DIR/baselines"
+  {
+    echo "generated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "repo_head=$(git rev-parse HEAD 2>/dev/null || true)"
+    echo "base_model=$BASE_MODEL"
+    echo "scenarios=$(IFS=,; echo "${scenario_letters[*]:-}")"
+    echo "backend=$BACKEND"
+    echo "quality_backend=$QUALITY_BACKEND"
+    echo "dataset_seed=$DATASET_SEED"
+    echo "quality_seed=$QUALITY_SEED"
+    echo "mmlupro_n=$MMLUPRO_N"
+    echo "expected_gpu=$EXPECTED_GPU"
+    echo "exit_code=$exit_code"
+  } > "$EXPORT_DIR/manifest.env"
+  EXPORTED_ON_EXIT=1
+  echo "[prepare] exported scoring assets to $EXPORT_DIR (exit_code=$exit_code)"
+}
+
+on_exit() {
+  local exit_code="$?"
+  if [[ "$EXPORTED_ON_EXIT" == "0" ]]; then
+    export_assets "$exit_code" || true
+  fi
+  exit "$exit_code"
+}
+
+trap on_exit EXIT
 
 usage() {
   cat <<'EOF'
@@ -151,21 +187,8 @@ fi
 python "${preflight_args[@]}"
 
 if [[ -n "$EXPORT_DIR" ]]; then
-  mkdir -p "$EXPORT_DIR"
-  rm -rf "$EXPORT_DIR/baselines"
-  cp -a src/eval/inference/baselines "$EXPORT_DIR/baselines"
   python "${preflight_args[@]}" --json-output "$EXPORT_DIR/preflight.json"
-  {
-    echo "generated_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    echo "repo_head=$(git rev-parse HEAD 2>/dev/null || true)"
-    echo "base_model=$BASE_MODEL"
-    echo "scenarios=$(IFS=,; echo "${scenario_letters[*]}")"
-    echo "backend=$BACKEND"
-    echo "quality_backend=$QUALITY_BACKEND"
-    echo "dataset_seed=$DATASET_SEED"
-    echo "quality_seed=$QUALITY_SEED"
-    echo "mmlupro_n=$MMLUPRO_N"
-    echo "expected_gpu=$EXPECTED_GPU"
-  } > "$EXPORT_DIR/manifest.env"
-  echo "[prepare] exported scoring assets to $EXPORT_DIR"
+  if [[ "$EXPORTED_ON_EXIT" == "0" ]]; then
+    export_assets 0
+  fi
 fi
