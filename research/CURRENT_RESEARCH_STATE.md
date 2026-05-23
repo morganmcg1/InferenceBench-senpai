@@ -76,6 +76,15 @@ Listed for future advisor invocations once the Scenario C shakedown closes:
   any time remains; otherwise post a clear "squeeze, no GPU" comment so the
   launcher recipe and container-def bug carry to the next round.
 
+## Operational: gh rate limit (observed 11:26-11:28 UTC)
+
+Student group pod is hitting GitHub API rate limit (user ID 20516801, HTTP
+403). Affects students' ability to poll PR comments and post SLOT-FREE.
+Hourly limit resets at 12:00 UTC. GPU work is unaffected (git-local), so
+bootstrap continues. Effect: SLOT-FREE may post late and r5-fern may not
+read advisor comments promptly. Avoid spamming PR comments while
+rate-limited — they consume the students' own quota when polled.
+
 ## Open Risks
 
 - Torch baseline bootstrap on Scenario C may exceed 75 minutes on RTX PRO 6000;
