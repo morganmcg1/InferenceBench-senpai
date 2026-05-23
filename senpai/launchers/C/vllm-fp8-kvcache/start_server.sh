@@ -65,6 +65,9 @@ echo "VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND}"
 echo "HF_HOME=${HF_HOME}"
 echo "========================================================"
 
+# --quantization is intentionally omitted (== model weights stay FP16).
+# vLLM does not accept "none" as a CLI value for --quantization; the HPO search
+# space's "none" choice is implemented by skipping the flag entirely.
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
     --host "${HOST}" \
@@ -76,7 +79,6 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --no-enable-prefix-caching \
     --enable-chunked-prefill \
     --kv-cache-dtype fp8 \
-    --quantization none \
     --tokenizer-mode auto \
     --trust-remote-code \
     --disable-log-stats

@@ -20,7 +20,7 @@ MMLU-Pro quality gate at tau=0.95 should still pass.
 | `--enable-chunked-prefill` | on | Interleaves prefill with decode under concurrent traffic. |
 | `--no-enable-prefix-caching` | on | Scenario C samples LongBench prompts with low cross-request overlap. |
 | `--kv-cache-dtype` | `fp8` | **Primary independent variable.** |
-| `--quantization` | `none` | KV-only; weights stay FP16 to preserve quality. |
+| `--quantization` | (omitted) | KV-only; weights stay FP16 to preserve quality. vLLM rejects `--quantization none` at startup; the HPO search-space encoding of "none" is implemented by skipping the flag. |
 | CUDA graphs | on (no `--enforce-eager`) | Graph capture amortizes at steady-state batch sizes. |
 | `--max-model-len` | 32768 | Plenty for the 1024-in / 1024-out Scenario C mix. |
 | `VLLM_ATTENTION_BACKEND` | `FLASHINFER` | Required on some Blackwell builds for FP8 KV. Falls back to default if JIT fails. |
