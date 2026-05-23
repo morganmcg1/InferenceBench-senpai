@@ -29,6 +29,12 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 # FlashInfer hint (older vLLM read this env; vLLM 0.21+ uses --attention-backend).
 export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASHINFER}"
 
+# Disable FlashInfer's sampler JIT path on this pod (its sampling.cu needs
+# curand.h, which is not installed in the system CUDA 13 toolkit; the
+# FlashInfer attention kernels do not require it). Falls back to the PyTorch
+# native top-k/top-p sampler, which only matters during sampling, not prefill.
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+
 echo "=== vLLM (FlashInfer + FP8 KV + big prefill batch, Scenario A) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
