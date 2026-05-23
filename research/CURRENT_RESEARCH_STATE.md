@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **Last updated:** 2026-05-23
+- **Last updated:** 2026-05-23 (post round-1 baseline-blocker triage)
 - **Most recent research direction from human researcher team:** (none yet for
   this launch — boot only)
 - **Research tag:** `ib-20260523-rerun-r1`
@@ -39,27 +39,35 @@ improvement:
 - All terminal results must come from a clean relaunch + full `evaluate.py`
   run, not from the live training shell.
 
-## Round 1 assignments (boot)
+## Round 1 assignments (revised after baseline-blocker triage)
 
-- **r1-frieren → Scenario C** — PR #20
-  `r1-frieren/scenario-c-aggro-batch`. vLLM with `--max-num-seqs 512`,
-  `--max-num-batched-tokens 16384`, `--enable-prefix-caching`,
-  `--kv-cache-dtype fp8`, `--gpu-memory-utilization 0.95`, CUDA graphs on,
-  chunked prefill on. GPU slot 1.
-- **r1-fern → Scenario B** — PR #22
-  `r1-fern/scenario-b-ngram-spec`. vLLM with n-gram speculative decoding
-  (`num_speculative_tokens 5`, `prompt_lookup_max 4`, `prompt_lookup_min 2`),
-  `--kv-cache-dtype fp8`, `--max-num-seqs 8`, CUDA graphs on. GPU slot 2.
-- **r1-tanjiro → Scenario A** — PR #23
-  `r1-tanjiro/scenario-a-flashinfer-fp8`. vLLM with
-  `VLLM_ATTENTION_BACKEND=FLASHINFER`, `--max-num-batched-tokens 16384`,
-  `--kv-cache-dtype fp8`, `--gpu-memory-utilization 0.95`, chunked prefill on,
-  CUDA graphs on. GPU slot 3.
+Both r1-frieren and r1-fern flagged the same blocker: PyTorch baseline
+metrics + MMLU-Pro quality registry are absent on this freshly built target,
+and `senpai/materialize_requests.py` only handles request files. Without those
+artifacts no `speedup_over_pytorch` is computable. The round was re-sequenced:
 
-GPU coordination: each student posts `GPU-CLAIM: <slot>` before launching the
-server and `SLOT-FREE: <name> done with GPU` after teardown. Round-2 ideas
-queued in `research/RESEARCH_IDEAS_2026-05-23_round2.md` (in flight via
-researcher-agent).
+- **r1-frieren PR #20 (slot 1) — repurposed to tooling.** Run
+  `src.eval.inference.precompute_all_baselines --cache-quality-samples
+  --backends torch --scenarios A B D C` on the GPU. Soft cap 75 min. Posts
+  `SLOT-FREE` once Scenario A and B speed baselines + quality registry are
+  on disk; C and D continue only if time remains.
+- **r1-fern PR #22 (slot 2) — unchanged hypothesis, on hold.** vLLM
+  n-gram speculative decoding + FP8 KV on Scenario B, waits for r1-frieren's
+  scenario B baseline path.
+- **r1-tanjiro PR #23 (slot 3) — unchanged hypothesis, on hold.** vLLM
+  FlashInfer + FP8 KV + bigbatch on Scenario A, waits for r1-fern's
+  `SLOT-FREE` and r1-frieren's scenario A baseline path.
+
+GPU coordination protocol unchanged: each student posts `GPU-CLAIM: <slot>`
+before launching the server and `SLOT-FREE: <name> done with GPU` after
+teardown. r1-frieren's original Scenario C launcher work is deferred to a
+follow-up PR (round 2) so the tooling slot is not double-loaded.
+
+Round-2 hypothesis catalog: `research/RESEARCH_IDEAS_2026-05-23_round2.md`
+(12 ideas across all 4 scenarios — EAGLE-3 spec decode, SGLang RadixAttention,
+TGI tuned, TensorRT-LLM, AWQ / FP8-weights quantization, attention backend
+ablations, cross-scenario confirmation). Top wave to consider once baselines
+land: H2 (EAGLE-3 on Sc B) and H6 (Sc D chunked prefill).
 
 ## Potential next research directions
 
