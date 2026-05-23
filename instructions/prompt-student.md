@@ -83,7 +83,16 @@ simpler substitute: same scenario files, same request files, same launcher
 contract, same `evaluate.py`, same quality gate, and the same clean supervised
 relaunch expectation.
 
-When no task workspace has been prepared for you, create one with:
+Determine the task workspace in this order:
+
+1. Use the explicit workspace path in the assigned PR if the advisor provides
+   one.
+2. Otherwise use `$INFERENCE_BENCH_TASK_WORKSPACE` or
+   `$SENPAI_TASK_WORKSPACE` if either is set.
+3. Otherwise, if your current directory contains `evaluate.py`,
+   `test_server.sh`, `scenario.json`, and `start_server.sh`, treat the current
+   directory as the task workspace.
+4. Only if none of those are true, create a pod-local workspace yourself:
 
 ```bash
 python senpai/create_task_workspace.py --scenario <A|B|C|D> \
@@ -91,8 +100,8 @@ python senpai/create_task_workspace.py --scenario <A|B|C|D> \
   --starting-point vllm_running
 ```
 
-Then copy your launcher recipe into that workspace's `task/start_server.sh` and
-run evaluation from the workspace `task/` directory.
+For helper-created workspaces, copy your launcher recipe into
+`<workspace>/task/start_server.sh` and run evaluation from `<workspace>/task/`.
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and
 evaluator flow:

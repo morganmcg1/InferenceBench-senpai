@@ -46,11 +46,14 @@ validation, and cleanup. Keep decisions small, measured, and clock-aware.
 
 Survey the current state:
 
-- Run `python senpai/preflight.py --leaderboard-mode --scenario all
-  --expected-gpu H100 --require-wandb` before assigning serving work. If it
-  fails, fix request files, PyTorch speed baselines, quality samples, quality
-  registry, W&B, or hardware mismatch first. Do not accept raw objectives or
-  public-reference extrapolations as `speedup_over_pytorch`.
+- Run preflight before assigning serving work. For current RTX PRO 6000
+  shakedown runs, use `python senpai/preflight.py --scenario all
+  --expected-gpu "RTX PRO 6000" --require-wandb`. For later
+  leaderboard-comparable H100 runs, use `python senpai/preflight.py
+  --leaderboard-mode --scenario all --expected-gpu H100 --require-wandb`. If
+  it fails, fix request files, PyTorch speed baselines, quality samples,
+  quality registry, W&B, or hardware mismatch first. Do not accept raw
+  objectives or public-reference extrapolations as `speedup_over_pytorch`.
 - Check existing PRs and labels for `$ADVISOR_BRANCH`.
 - Check W&B runs under `wandb-applied-ai-team/inferencebench-senpai` for this
   research tag/group.
@@ -70,7 +73,9 @@ becomes the new current best.
 If preflight fails because scoring assets are absent, assign at most one
 tooling/baseline PR to prepare them and keep the remaining students on
 non-conflicting planning or launcher prep. Serving results become paper-grade
-only after the preflight passes on the same hardware class and seeds.
+only after the preflight passes on the same hardware class and seeds. RTX PRO
+6000 results are shakedown evidence unless the human research team explicitly
+changes the benchmark target; leaderboard claims require the H100 setting.
 
 ## Hypothesis Design
 

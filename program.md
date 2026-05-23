@@ -1,9 +1,12 @@
 # InferenceBench SENPAI Target
 
 Research target for open-ended LLM inference optimization. Given a fixed base
-LLM, one NVIDIA H100 80GB GPU, a scenario-specific workload, and a wall-clock
-budget, produce a reproducible OpenAI-compatible inference server that improves
-the scenario primary metric while passing quality and integrity gates.
+LLM, one benchmark GPU, a scenario-specific workload, and a wall-clock budget,
+produce a reproducible OpenAI-compatible inference server that improves the
+scenario primary metric while passing quality and integrity gates. The official
+leaderboard setting is one NVIDIA H100 80GB GPU; current SENPAI shakedown runs
+may use an NVIDIA RTX PRO 6000 Blackwell-class GPU with about 96GB VRAM and
+must not be treated as leaderboard-comparable until repeated on H100.
 
 This repository already contains the official InferenceBench benchmark harness.
 The SENPAI layer in this target is an experiment coordination layer around that
@@ -46,9 +49,11 @@ numbers look good.
 
 Timestamp: 2026-05-21. These are public reference numbers from the
 InferenceBench README/site for Mistral-7B-Instruct-v0.3 with a 2 hour budget
-per run on one NVIDIA H100 80GB GPU. This is the headline setting to target
-unless the human research team explicitly launches a different model, hardware,
-time budget, or starting-point ablation.
+per run on one NVIDIA H100 80GB GPU. This is the headline setting to target for
+leaderboard claims unless the human research team explicitly launches a
+different model, hardware, time budget, or starting-point ablation. RTX PRO 6000
+shakedown results are useful for search direction and infrastructure hardening,
+but should be repeated on H100 before claiming that they beat this table.
 They are initial context for the advisor. The advisor branch should maintain
 its own live `BASELINE.md` during a SENPAI run and compare terminal results
 against that current state.
@@ -174,19 +179,25 @@ verify that scoring assets already exist for the active hardware, model, seeds,
 and scenarios:
 
 ```bash
-python senpai/preflight.py \
-  --leaderboard-mode \
-  --scenario all \
+# Current RTX PRO 6000 shakedown mode
+python senpai/preflight.py --scenario all \
+  --expected-gpu "RTX PRO 6000" \
+  --require-wandb
+
+# Later H100 leaderboard-comparable mode
+python senpai/preflight.py --leaderboard-mode --scenario all \
   --expected-gpu H100 \
   --require-wandb
 ```
 
-This check must pass before claiming leaderboard-comparable results. It verifies
-the GPU class, W&B availability, deterministic speed request files, PyTorch
-speed baseline metrics, MMLU-Pro quality samples, and the PyTorch quality
-baseline registry. If it fails, treat baseline/request setup as the first
-research task; do not let students fabricate `speedup_over_pytorch` from public
-H100 ratios or report raw objectives as if they were speedups.
+This check must pass before claiming paper-grade results for the active
+hardware, and the `--leaderboard-mode --expected-gpu H100` version must pass
+before claiming leaderboard-comparable results. It verifies the GPU class, W&B
+availability, deterministic speed request files, PyTorch speed baseline
+metrics, MMLU-Pro quality samples, and the PyTorch quality baseline registry.
+If it fails, treat baseline/request setup as the first research task; do not let
+students fabricate `speedup_over_pytorch` from public H100 ratios or report raw
+objectives as if they were speedups.
 
 If request generation is blocked by tokenizer/runtime drift, materialize
 deterministic request files once from the SENPAI helper instead of editing

@@ -30,16 +30,24 @@ wrapper only; it does not change benchmark evaluation.
 
 ## Preflight
 
-Before a leaderboard-comparable launch, run:
+Before a launch, run the mode that matches the hardware:
 
 ```bash
+# Current RTX PRO 6000 shakedown mode
+python senpai/preflight.py --scenario all \
+  --expected-gpu "RTX PRO 6000" \
+  --require-wandb
+
+# Later H100 leaderboard-comparable mode
 python senpai/preflight.py --leaderboard-mode --scenario all \
   --expected-gpu H100 --require-wandb
 ```
 
 The check fails if deterministic requests, PyTorch speed baselines, MMLU-Pro
 quality samples, the PyTorch quality registry, W&B, or the requested hardware
-are missing. Fix those before assigning serving PRs.
+are missing. Fix those before assigning serving PRs. RTX PRO 6000 results are
+for orchestration and search-direction shakedown; repeat winners on H100 before
+claiming README leaderboard wins.
 
 If tokenizer/runtime drift prevents the official evaluator from sampling
 LongBench-v2 requests, materialize request files once without editing

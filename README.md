@@ -1,3 +1,58 @@
+## SENPAI Preparation Overlay
+
+This branch prepares the official InferenceBench repository to run as a SENPAI
+target while keeping the original benchmark README below intact.
+
+What changed for SENPAI:
+
+- Added `program.md` with the SENPAI target contract: scenario metrics,
+  protected benchmark boundaries, W&B logging requirements, result schema,
+  quality/integrity expectations, and the public 2026-05-21 reference snapshot.
+- Added `instructions/prompt-advisor.md` and `instructions/prompt-student.md`
+  with role-specific guidance for advisor/student coordination, branch
+  isolation, two-hour urgency, one-GPU scheduling, live `BASELINE.md`
+  management, and LLM inference optimization scope.
+- Added `senpai/` helpers for SENPAI-only functionality:
+  `preflight.py`, `materialize_requests.py`, `create_task_workspace.py`,
+  `summarize_metrics.py`, and `log_metrics_to_wandb.py`.
+- Added a combined SENPAI + InferenceBench container definition at
+  `docker/senpai-inferencebench.Dockerfile` and a GHCR build workflow.
+- Configured the expected W&B destination as
+  `wandb-applied-ai-team/inferencebench-senpai`.
+- Kept reusable SENPAI launchers, research notes, scoring preflight, and W&B
+  logging outside the protected benchmark evaluator and scenario files.
+
+Current hardware note:
+
+- Today’s SENPAI shakedown runs are on an NVIDIA RTX PRO 6000 Blackwell-class
+  GPU with about 96 GB VRAM, not the official leaderboard H100 80 GB setting.
+- RTX PRO 6000 results are useful for debugging orchestration, image/runtime
+  compatibility, request generation, baseline readiness, and promising
+  launcher directions.
+- Do not claim README leaderboard wins from RTX PRO 6000 measurements. The
+  final leaderboard-comparable runs should be repeated on a single H100 80 GB
+  GPU with matching PyTorch baselines, quality baseline registry, request
+  files, seeds, and full clean relaunch.
+
+Recommended SENPAI preflight:
+
+```bash
+# Current RTX PRO 6000 shakedown mode
+python senpai/preflight.py --scenario all \
+  --expected-gpu "RTX PRO 6000" \
+  --require-wandb
+
+# Later H100 leaderboard-comparable mode
+python senpai/preflight.py --leaderboard-mode --scenario all \
+  --expected-gpu H100 \
+  --require-wandb
+```
+
+If preflight fails, prepare the missing deterministic request files, PyTorch
+speed baselines, MMLU-Pro samples, and quality baseline registry before
+assigning serving-optimization PRs. Raw objectives from shakedown runs are
+research signals, not `speedup_over_pytorch` leaderboard results.
+
 <div align="center">
 
 <h1>InferenceBench: A Benchmark for Open-Ended LLM Inference Optimization by AI Agents</h1>
