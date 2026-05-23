@@ -1,0 +1,69 @@
+{
+  "scenario": "A",
+  "name": "Input heavy",
+  "mission": "Minimize time to first token for long-context prompts. Prioritize prefill speed while maintaining performance.",
+  "dataset": null,
+  "dataset_split": null,
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "profiles": {
+    "burst": {
+      "request_count": 4,
+      "success_count": 4,
+      "failure_count": 0,
+      "empty_output_count": 0,
+      "failure_rate": 0.0,
+      "ttft": {
+        "p50": 0.34452106803655624,
+        "p90": 15.42566977888346,
+        "p99": 21.24122887419536
+      },
+      "itl": {
+        "p50": 0.011711820028722286,
+        "p90": 0.01190467718988657,
+        "p99": 0.046838999837636945
+      },
+      "tpot": {
+        "p50": 0.017470713022883756,
+        "p90": 0.023027965617925684,
+        "p99": 0.024963802557382942
+      },
+      "generation_throughput_tokens_per_s": 53.759208215898035,
+      "request_throughput_req_per_s": 0.05957690375221094,
+      "json_valid_rate": null,
+      "choice_accuracy": null
+    }
+  },
+  "vram_peak_mb": 89791.0,
+  "speed_eval": {
+    "requests_source": null,
+    "requests_used_file": "requests_used_speed.jsonl",
+    "generation_log_file": "speed_generations.jsonl"
+  },
+  "quality_check": {
+    "tau": 0.95,
+    "pass": false,
+    "error": "missing baseline accuracy for: mmlu_pro",
+    "baseline_registry": "/tmp/ib-scn-a/inference_eval/baselines/quality/mistralai_Mistral-7B-Instruct-v0.3_torch.json",
+    "datasets": {
+      "mmlu_pro": {
+        "baseline_accuracy": null,
+        "baseline_ref": {
+          "note": "baseline registry missing: /tmp/ib-scn-a/inference_eval/baselines/quality/mistralai_Mistral-7B-Instruct-v0.3_torch.json"
+        }
+      }
+    }
+  },
+  "score": 0,
+  "eval_pipeline": {
+    "version": 1,
+    "steps": [
+      "speed_eval",
+      "quality_check"
+    ]
+  },
+  "eval_mode": {
+    "name": "quick",
+    "request_limit": 4,
+    "quality_n": 16
+  }
+}
