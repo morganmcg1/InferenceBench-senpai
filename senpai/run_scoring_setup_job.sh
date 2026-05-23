@@ -5,8 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 JOB_NAME="inferencebench-scoring-assets-$(date -u +%Y%m%d%H%M%S)"
-REPO_URL="$(git config --get remote.origin.url)"
 REPO_BRANCH="$(git branch --show-current)"
+UPSTREAM_REMOTE="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null | cut -d/ -f1 || true)"
+if [[ -n "$UPSTREAM_REMOTE" ]]; then
+  REPO_URL="$(git config --get "remote.${UPSTREAM_REMOTE}.url")"
+else
+  REPO_URL="$(git config --get remote.origin.url)"
+fi
 IMAGE="${INFERENCE_BENCH_SENPAI_IMAGE:-ghcr.io/morganmcg1/inferencebench-senpai:pr-1}"
 IMAGE_PULL_SECRET="${INFERENCE_BENCH_IMAGE_PULL_SECRET:-ghcr-morganmcg1-pull}"
 PVC_CLAIM_NAME="${INFERENCE_BENCH_PVC_CLAIM_NAME:-new-pvc}"
@@ -147,8 +152,11 @@ spec:
               mkdir -p /workspace
               rm -rf /workspace/inferencebench
               if [[ -n "\${GITHUB_TOKEN:-}" ]]; then
-                git -c http.extraHeader="Authorization: Bearer \${GITHUB_TOKEN}" \
+                umask 077
+                printf 'https://x-access-token:%s@github.com\n' "\$GITHUB_TOKEN" > /tmp/git-credentials
+                git -c credential.helper='store --file=/tmp/git-credentials' \
                   clone --branch "\$REPO_BRANCH" --single-branch "\$REPO_URL" /workspace/inferencebench
+                rm -f /tmp/git-credentials
               else
                 git clone --branch "\$REPO_BRANCH" --single-branch "\$REPO_URL" /workspace/inferencebench
               fi
