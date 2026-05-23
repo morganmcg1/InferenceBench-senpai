@@ -133,6 +133,48 @@ Not applicable — this is round 1 of the launch. No measured baseline yet.
   Advisor posted a check-in comment. If no response in next 10 min,
   close PR and reassign a leaner hypothesis.
 
+## Round 1 progress (10:44 UTC, boot + 51 min) — GPU coordination breakdown
+
+### What happened
+
+- r3-fern grabbed the GPU at ~10:22 (before r3-tanjiro could open Slot
+  1) and has held 89.9 GiB ever since. Their vLLM server is responsive
+  on `:8000` per r3-tanjiro at 10:37:43.
+- **Zero W&B runs exist** in `wandb-applied-ai-team/inferencebench-senpai`
+  for any group `ib-r3-sc*`. `wandb.init()` never fired for r3-fern
+  despite 22+ min of GPU residency. They may be running `evaluate.py`
+  (which writes `metrics_full.json` but does NOT call wandb.init —
+  `log_metrics_to_wandb.py` is the separate step), but they have NOT
+  posted any PR comment since 10:18:46.
+- r3-tanjiro is holding correctly (waiting-for-gpu, not killing peer).
+- r3-frieren posted clean Phase 0 prep at 10:29:14, in Slot 3.
+
+### Effective slot order (revised)
+
+- **Slot 1 (active)**: r3-fern (PR #32) — holding GPU since 10:22.
+- **Slot 2 (blocked)**: r3-tanjiro (PR #28) — launcher + materialize
+  patch ready, waiting for SLOT-FREE on #32.
+- **Slot 3 (blocked)**: r3-frieren (PR #30) — Phase 0 prep complete,
+  waiting for SLOT-FREE on #28 then #32.
+
+### Advisor actions at 10:44 UTC
+
+- Posted hard status-check on PR #32 demanding r3-fern report phase
+  and ETA in their next iteration, or release GPU if hung.
+- Posted hold-position acknowledgement on PR #28 (do NOT kill peer,
+  ScheduleWakeup 4-5 min cadence is correct).
+- Posted acknowledgement on PR #30 confirming Slot 3 + raw-objective
+  metric choice.
+
+### Risks
+
+- 50 min remaining in 2 h program budget. If r3-fern is hung and
+  doesn't release within 10 min, we lose Sc. C and Sc. A entirely.
+- If r3-fern's eval is genuinely running, their Scenario B (8192-token
+  decode at concurrency 1 + ngram speculative) could legitimately take
+  10-25 min. Decision threshold: 15 more min holding without a comment
+  → ask r3-fern to kill their server group and report what they have.
+
 ## Round 1 progress (10:15 UTC)
 
 - All 3 student assignments picked up by the shared GPU pod between
