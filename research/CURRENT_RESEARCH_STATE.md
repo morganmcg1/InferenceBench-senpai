@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **Last updated:** 2026-05-23 11:09 UTC (post slot-1 cut reverted; r1-frieren back on baselines)
+- **Last updated:** 2026-05-23 11:21 UTC (option-R pivot: kill baselines, r1-tanjiro takes partial Sc A)
 - **Most recent research direction from human researcher team:** (none yet for
   this launch — boot only)
 - **Research tag:** `ib-20260523-rerun-r1`
@@ -39,39 +39,38 @@ improvement:
 - All terminal results must come from a clean relaunch + full `evaluate.py`
   run, not from the live training shell.
 
-## Round 1 assignments (post 11:09 UTC race-condition recovery)
+## Round 1 assignments (post 11:21 UTC option-R pivot)
 
-First triage at 10:11 UTC: PyTorch baseline + MMLU-Pro registry absent,
-so PR #20 was repurposed from Sc C candidate to baseline tooling.
+Hard cluster cutoff verified at **11:48:08 UTC** (start gate file at
+`/mnt/new-pvc/senpai-start-gates/ib-20260523-rerun/start`); harvest
+starts at 11:43:08. r1-frieren's first precompute died at 10:49 (process
+death after the session boundary; no baseline written). They restarted
+at 11:13:57 with `setsid` + nohup-style detach. Revised projection
+landed Sc A baseline at ~11:48 — right at cutoff with zero buffer for
+commit+push, and quality registry + SLOT-FREE all past cutoff. Advisor
+pivoted to **option R**: kill the baseline run, accept no torch baseline,
+let r1-tanjiro run a partial Sc A vLLM candidate with raw TTFT only.
 
-At 10:46 UTC the slot was cut over apparent silence past the 10:43 hard
-deadline. But r1-frieren posted a status update at 10:49:38 reporting
-the precompute was actively running (Sc A baseline at 24%); my close
-action at 10:49:54 landed 16 seconds later. Race condition. PR #20
-reopened at 11:09 UTC, r1-frieren's plan approved with a quality-registry
-timing correction (8-17 min, not 25). The redirect on PR #23 was
-reverted; r1-fern was instructed to stand down for round 1.
-
-- **r1-frieren PR #20 (slot 1) — actively running.** Precompute on torch
-  backend, scenario A baseline at 24% as of 10:51 UTC. Plan: finish Sc A
-  baseline (~11:17), SIGTERM precompute parent (keep torch server alive),
-  run `precompute_quality_baseline` against orphan server (~8-17 min),
-  kill torch server, post `SLOT-FREE` at ~11:25-11:35. Sc B torch baseline
-  is dropped for this round (would consume the rest of the wall budget).
-  r1-frieren's senpai-only `robust_truncate_messages` patch in
-  `senpai/materialize_requests.py` is the canonical fix for the off-by-one
-  tokenizer roundtrip bug (was used to pre-materialize Sc A and B requests).
-- **r1-tanjiro PR #23 (slot 2) — unchanged hypothesis, holding.** vLLM
-  FlashInfer + FP8 KV + bigbatch on Sc A (launcher committed at
-  `senpai/launchers/A/flashinfer-fp8-bigbatch/start_server.sh`, commit
-  `f3c452d`). Workspace pre-staged at `/tmp/ib-A`. Waits for r1-frieren's
-  `SLOT-FREE` + Sc A baseline path. Expected GPU window: ~5-10 min on
-  vLLM with FlashInfer; cutoff for terminal start is ~11:38 UTC.
-- **r1-fern PR #22 — standing down for round 1.** Sc B torch baseline
-  unavailable in this window. Launcher (`senpai/launchers/B/ngram-spec-fp8-kv/`)
-  + workspace + dry-parse verification all committed. Will post
-  `terminal=false, status=blocked-on-missing-baseline` to close the round
-  cleanly. Carries over to round 2.
+- **r1-frieren PR #20 — kill directed at 11:21 UTC.** Their round-1
+  deliverable is the senpai-only `robust_truncate_messages` patch in
+  `senpai/materialize_requests.py` (commit `999179b`) + the materialized
+  request files for scenarios A, B, D under
+  `src/eval/inference/baselines/speed/torch/<scenario>/<safe_model>/requests.jsonl`.
+  These unblock all future torch baseline builds. Required post: `SLOT-FREE`
+  after SIGTERM of PID 74981.
+- **r1-tanjiro PR #23 — partial Sc A candidate (no baseline, no quality
+  registry).** As soon as r1-frieren's SLOT-FREE lands, run the FlashInfer
+  + FP8 + bigbatch launcher against the pre-materialized Sc A requests.
+  Report raw `1/ttft.p50` and observed MMLU-Pro accuracy, NOT
+  `speedup_over_pytorch` (no denominator). Must commit + push by 11:43 UTC
+  harvest start. Status: `partial-no-baseline`. Launcher needs the
+  `--max-model-len 32768` fix r1-tanjiro caught at 11:16 (Mistral-7B
+  position embeddings limit).
+- **r1-fern PR #22 — stood down at 11:12 UTC.** Posted
+  `terminal=false, status=blocked-on-missing-baseline` cleanly. Launcher
+  + workspace preserved for round 2. Flagged
+  `senpai/summarize_metrics.py::_baseline_primary_value` path-mismatch
+  bug for round-2 tooling fix.
 
 GPU coordination protocol unchanged: each student posts `GPU-CLAIM: <slot>`
 before launching the server and `SLOT-FREE: <name> done with GPU` after
