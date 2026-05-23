@@ -143,6 +143,39 @@ Not applicable — this is round 1 of the launch. No measured baseline yet.
 
 **r3-fern now idle.** Will assign round-2 experiment if budget permits, otherwise park for next session.
 
+## Round 1 progress (11:34 UTC, boot + 101 min) — curand crash + r3-frieren takeover
+
+**r3-tanjiro's Sc. C launcher crashed at 11:13:36** with FlashInfer JIT compile failure:
+`fatal error: curand.h: No such file or directory` in
+`flashinfer/data/include/flashinfer/sampling.cuh`. Root cause: pod has
+`libcurand-13-2` runtime but no dev headers; `nvidia-curand-cu13` PyPI wheel
+is a 1.4 KB stub.
+
+**r3-frieren found the root cause** (PR #30 comment 11:24:32) and patched
+their own launcher with `export VLLM_USE_FLASHINFER_SAMPLER=0`. This forces
+vLLM 0.21 to use the PyTorch-native top-k/top-p sampler, preserving
+FlashInfer attention while bypassing the broken sampling JIT compile.
+
+**r3-frieren took GPU at 11:29:13** after observing GPU clear for ~15 min
+and r3-tanjiro silent. Currently running Sc. A quick + full (--request-limit 16).
+ETA SLOT-FREE: ~11:40-11:45 UTC.
+
+**r3-tanjiro stood down at 11:43.** Their PR #28 was incorrectly flagged
+`status:review` after the failure report; label swapped back to `status:wip`.
+They will not get GPU time this session (budget end ~11:53 UTC).
+Their launcher with `VLLM_USE_FLASHINFER_SAMPLER=0` + FP8 quant + FlashInfer
++ max-num-seqs 256 is committed-ready in their branch for round 3.
+
+**r3-fern PR #33 (round-2 prep, Sc. B FlashInfer CLI + max_batched 8192)**
+created with the sampler-disable fix. Phase-0-only this session; round-3 GPU launch.
+
+### Key pod environment findings to bake into round 3
+
+1. **vLLM 0.21 dropped `VLLM_ATTENTION_BACKEND` env var.** Use `--attention-backend FLASHINFER` CLI flag.
+2. **FlashInfer sampling JIT compile broken on this pod.** Always set `VLLM_USE_FLASHINFER_SAMPLER=0` before launching. FlashInfer attention still works.
+3. **PyTorch baselines absent** (`src/eval/inference/baselines/{speed,quality}` empty for Mistral-7B). Round 1 used raw scenario objectives; round 3 should run a baseline-generation pass first if leaderboard numbers are wanted.
+4. **`senpai/materialize_requests.py` has two tokenizer-drift patches** (merged via PR #32). All 256 requests materialize cleanly.
+
 ---
 
 ## Round 1 progress (10:44 UTC, boot + 51 min) — GPU coordination breakdown
