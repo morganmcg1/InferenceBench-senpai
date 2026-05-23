@@ -169,6 +169,9 @@ def main() -> None:
     print(f"[precompute] detected model_id={model_id}")
     requests_list = baseline_eval._load_requests(requests_path)  # pylint: disable=protected-access
     print(f"[precompute] loaded {len(requests_list)} requests from {requests_path}")
+    if args.request_limit is not None and args.request_limit > 0 and len(requests_list) > args.request_limit:
+        requests_list = requests_list[: args.request_limit]
+        print(f"[precompute] truncated to {len(requests_list)} requests via --request-limit")
 
     log_path = out_dir / "baseline_generations.jsonl"
     if log_path.exists():
@@ -209,11 +212,13 @@ def main() -> None:
     registry["base_model"] = args.base_model
     registry.setdefault("note", "Precomputed baseline generations + metrics for InferenceBench quality gate.")
     registry.setdefault("scenarios", {})
+    log_path_abs = log_path.resolve()
+    baseline_metrics_path_abs = baseline_metrics_path.resolve()
     registry["scenarios"][args.scenario_id] = {
         "generated_at_unix": int(time.time()),
         "requests_sha256": requests_sha,
-        "baseline_log_file": str(log_path.relative_to(repo_root)),
-        "baseline_metrics_file": str(baseline_metrics_path.relative_to(repo_root)),
+        "baseline_log_file": str(log_path_abs.relative_to(repo_root)),
+        "baseline_metrics_file": str(baseline_metrics_path_abs.relative_to(repo_root)),
         "choice_accuracy": baseline_metrics.get("choice_accuracy"),
         "model_id": baseline_metrics.get("model_id"),
         "request_count": baseline_metrics.get("request_count"),

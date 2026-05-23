@@ -1,0 +1,41 @@
+{
+  "generated_at_unix": 1779535550,
+  "server_url": "http://127.0.0.1:9000",
+  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "scenario_id": "inference_scenario_b_output_heavy",
+  "requests_sha256": "6a7bb79e0cde7cf24334c6b60da319c7bf458c756e75067f28c1770e0f4b869d",
+  "baseline": {
+    "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+    "request_count": 8,
+    "success_count": 8,
+    "choice_accuracy": null,
+    "profiles": {
+      "burst": {
+        "request_count": 8,
+        "success_count": 8,
+        "failure_count": 0,
+        "empty_output_count": 0,
+        "failure_rate": 0.0,
+        "ttft": {
+          "p50": 0.0702756755053997,
+          "p90": 0.13787187049165367,
+          "p99": 0.17515169016085563
+        },
+        "itl": {
+          "p50": 0.01487543503753841,
+          "p90": 0.058810936566442255,
+          "p99": 0.11836280181072648
+        },
+        "tpot": {
+          "p50": 0.02874822384201519,
+          "p90": 0.056620283138349214,
+          "p99": 0.06601575982833478
+        },
+        "generation_throughput_tokens_per_s": 35.61234374438137,
+        "request_throughput_req_per_s": 0.012460352509485325,
+        "json_valid_rate": null,
+        "choice_accuracy": null
+      }
+    }
+  }
+}

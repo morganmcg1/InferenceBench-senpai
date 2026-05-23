@@ -1,0 +1,17 @@
+{
+  "format_version": 1,
+  "scenarios": {
+    "inference_scenario_b_output_heavy": {
+      "generated_at_unix": 1779535644,
+      "requests_sha256": "6a7bb79e0cde7cf24334c6b60da319c7bf458c756e75067f28c1770e0f4b869d",
+      "baseline_log_file": "src/eval/inference/baselines/speed/torch/inference_scenario_b_output_heavy/mistralai_Mistral-7B-Instruct-v0.3/baseline_generations.jsonl",
+      "baseline_metrics_file": "src/eval/inference/baselines/speed/torch/inference_scenario_b_output_heavy/mistralai_Mistral-7B-Instruct-v0.3/baseline_metrics.json",
+      "choice_accuracy": null,
+      "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+      "request_count": 8,
+      "request_limit_applied": 8
+    }
+  },
+  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "note": "Precomputed baseline generations + metrics for InferenceBench quality gate."
+}

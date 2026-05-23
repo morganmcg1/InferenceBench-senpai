@@ -33,7 +33,7 @@ out/
 scripts/
 tau_sensitivity_out/
 
-src/eval/inference/baselines/
+src/eval/inference/baselines/samples/longbench_v2/
 src/commit_utils/rejudge/
 
 # Random ephemeral

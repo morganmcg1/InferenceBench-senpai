@@ -1,0 +1,11 @@
+{
+  "generated_at_unix": 1779533898,
+  "dataset": "mmlu_pro",
+  "seed": 248,
+  "n": 500,
+  "server_url": "http://127.0.0.1:9000",
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "accuracy": 0.298,
+  "samples_file": "/workspace/senpai-r4-frieren/target/src/eval/inference/baselines/samples/mmlu_pro/248_500/samples.jsonl",
+  "baseline_log_file": "src/eval/inference/baselines/quality/torch/mistralai_Mistral-7B-Instruct-v0.3/mmlu_pro/248_500/baseline_generations.jsonl"
+}
