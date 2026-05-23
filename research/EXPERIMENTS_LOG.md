@@ -57,3 +57,85 @@ action requested from r2-fern this launch.
 3. Log the actual chosen VLLM_ATTENTION_BACKEND at server boot (the env var
    is exported but not visible in `ps`); FLASH_ATTN selection should be
    confirmed, otherwise FLASHINFER is the fallback to test.
+
+## 2026-05-23 11:43 UTC — PR #26: r2-frieren bootstrap + Scenario B vLLM (`r2-frieren/bootstrap-baselines-and-scenario-b-vllm-fp8-kv`)
+- Branch: `r2-frieren/bootstrap-baselines-and-scenario-b-vllm-fp8-kv`
+- Hypothesis: FP8 KV cache + FlashInfer + CUDA graphs for output-heavy decode (Scenario B,
+  inverse_tpot_p50 as primary). Plus shared bootstrap of materialize_requests for all
+  scenarios + Scenario B torch baseline.
+- Launcher (planned): `senpai/launchers/scenario_b/vllm_fp8_kv_flashinfer/start_server.sh`
+
+### Results (TERMINAL but quality_pass=false; 4-request sample, not 64)
+| Metric | Torch baseline | vLLM (this PR) | Ratio |
+|---|---:|---:|---:|
+| TPOT p50 (s) | 0.02117 | 0.01734 | 0.819 (lower better) |
+| ITL p50 (s) | 0.01504 | 0.01140 | 0.758 |
+| TTFT p50 (s) | 0.0814 | 0.0640 | 0.787 |
+| 1/TPOT_p50 (tok/s) | 47.23 | **57.67** | **1.221× over Torch** |
+| gen throughput (tok/s) | 47.32 | 59.25 | 1.252× |
+| VRAM peak (MiB) | — (server only) | 90,061 | — |
+| MMLU-Pro quality_pass | — | **false** | quality registry not present; gate did not run |
+| `speedup_over_pytorch` | — | **1.221** | **REAL number, matching torch baseline** |
+| W&B run | — | `linovatw` | group `ib-20260523-rerun-r2-pr26` |
+| Status | `terminal, quality_pass=false` | | Cannot enter BASELINE.md as validated winner |
+
+### Analysis
+- This is the **first and only `speedup_over_pytorch` number this launch with a
+  matching same-hardware torch baseline**. fern's PR #29 lacked baseline; tanjiro
+  was still running at this log point.
+- The planned FP8 KV + FlashInfer config could not run on RTX PRO 6000 (sm_120f):
+  - `VLLM_ATTENTION_BACKEND=FLASHINFER` → JIT compile of the sampling kernel fails
+    with `"CUDA compiler and CUDA toolkit headers are incompatible"` for
+    `gencode arch=compute_120f`.
+  - `VLLM_ATTENTION_BACKEND=FLASH_ATTN` + `--kv-cache-dtype fp8` →
+    `NotImplementedError: FlashAttention does not support fp8 kv-cache on this device.`
+  - Actual landed config: `FLASH_ATTN + fp16 KV`, `--gpu-memory-utilization 0.92`,
+    `--max-num-seqs 8 --max-num-batched-tokens 2048 --block-size 16`,
+    `--enable-chunked-prefill --no-enable-prefix-caching`, CUDA graphs on.
+- So the 1.22× speedup comes from vLLM's batching/scheduling, CUDA graphs, and
+  per-decode-step constants — **NOT from the planned KV-bytes or decode-kernel wins**.
+- Quality gate was never evaluated: `precompute_quality_baseline` had not produced
+  the MMLU-Pro torch registry, so the runner short-circuited at the baseline lookup
+  step before sending any quality requests. `quality_pass=false` here means
+  "unverified", not "MMLU-Pro failed against vLLM".
+- Sample is 4 requests, not the scenario's nominal 64. P50 TPOT is stable across
+  the 8192-token decode and is the most meaningful number here; p90/p99 are
+  effectively undefined at n=4.
+
+### Bug fixes piggy-backed on this PR (out of nominal scope, but legitimate)
+1. `src/eval/inference/servers/transformers_openai_server.py`: the OpenAI-style
+   `ignore_eos` flag was silently ignored. Scenario B requires it (8192 decode
+   tokens regardless of EOS). Pre-fix baselines would terminate early on EOS,
+   biasing TPOT p50 optimistic — making any vLLM-vs-torch ratio meaningless.
+   **This fix is important for ANY future Scenario B torch baseline on this
+   stack.** Worth cherry-picking into the advisor branch on a follow-up.
+2. `src/eval/inference/precompute_baseline.py`: `relative_to()` ValueError when
+   `--out-root` or `--registry` are passed as relative paths. Minor robustness fix.
+
+### Isolation issues (block merge as-is)
+- PR also modifies `research/CURRENT_RESEARCH_STATE.md` and **deletes 59 lines from
+  `research/EXPERIMENTS_LOG.md`** — both advisor-owned files. Merging would
+  clobber advisor state. The launcher + bug-fix content is interesting; the
+  research-file changes are not mergeable.
+
+### Decision
+Not merged. PR left open as documented partial:
+- Real `speedup_over_pytorch` = 1.221× for Scenario B on RTX PRO 6000, but
+  `quality_pass=false` (unverified, not failed), and 4-request sample is too
+  small for leaderboard claim.
+- Bug fixes are worth lifting on a follow-up but cannot be cherry-picked under
+  the wall-clock budget remaining in this launch.
+
+### Suggested follow-ups (next launch)
+1. Cherry-pick the `transformers_openai_server.py` `ignore_eos` fix into the
+   advisor branch BEFORE any future Scenario B torch baseline runs.
+2. Run `precompute_quality_baseline` to populate the MMLU-Pro torch registry
+   so the quality gate is enforceable end-to-end.
+3. Re-run Scenario B torch baseline with the full 64-request workload to harden
+   the speedup denominator.
+4. Investigate FlashInfer JIT compilation for `sm_120f` (RTX PRO 6000 Blackwell)
+   — pin `flashinfer<0.6.11` or upgrade the pod CUDA toolkit. Without this, the
+   advertised FP8 KV + FlashInfer hypothesis cannot actually be tested on this
+   hardware.
+5. The launcher directory name `vllm_fp8_kv_flashinfer/` is now misleading vs.
+   the actual landed config (`FLASH_ATTN + fp16 KV`). Rename on follow-up.
