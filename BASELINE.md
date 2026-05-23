@@ -21,9 +21,15 @@ the same hardware.
 
 ## Current Best Per Scenario (RTX PRO 6000 shakedown)
 
-No SENPAI launcher has been measured yet on this hardware. Starting point is the
-default `vllm_running` launcher (`src/starting_points/vllm_running/start_server.sh`).
-Treat that as the candidate floor; the PyTorch baseline is the speedup denominator.
+No SENPAI launcher has been measured yet on this hardware. Round 1 produced no
+leaderboard data — see `research/EXPERIMENTS_LOG.md` for the round-1 blocker
+analysis. Starting point remains the default `vllm_running` launcher
+(`src/starting_points/vllm_running/start_server.sh`).
+
+The PyTorch baseline (denominator for `speedup_over_pytorch`) does NOT exist on
+disk yet — round 1 attempted to build it but did not complete. Round-2 slot 1
+priority is landing the torch `baseline_metrics.json` for at least one scenario
+plus the MMLU-Pro quality registry.
 
 | Scenario | Primary metric | Reference H100 (vLLM SMAC3) | Current best launcher (RTX PRO 6000) | W&B run | PR |
 |---|---|---:|---|---|---|
@@ -36,3 +42,10 @@ Treat that as the candidate floor; the PyTorch baseline is the speedup denominat
 ## Update History
 
 - 2026-05-23: ledger created at advisor boot. No launchers measured yet.
+- 2026-05-23 11:48: round 1 closed with zero leaderboard data. All 3 PRs (#20
+  r1-frieren Sc C, #22 r1-fern Sc B, #23 r1-tanjiro Sc A) terminated with
+  `value:null` primary metrics. See `research/EXPERIMENTS_LOG.md` for the full
+  blocker analysis (vLLM 0.11→0.21 upgrade, tokenizer roundtrip patch,
+  FlashInfer JIT curand.h gap). Tooling carryover (materialized request files
+  for A/B/D, MMLU-Pro samples cache, `robust_truncate_messages` patch) was
+  cherry-picked to advisor branch and propagates to round 2.
