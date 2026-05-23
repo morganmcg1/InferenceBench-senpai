@@ -69,6 +69,12 @@ next GPU slot.
 
 ## Running
 
+First check whether the advisor has posted a passing `senpai/preflight.py`
+report or a `BASELINE.md` with concrete PyTorch baseline metric paths. If those
+assets are missing, do not invent a speedup from the public README table. Report
+raw objectives only when the advisor explicitly asks for a partial research
+signal, and label them as non-leaderboard evidence.
+
 Prefer the official InferenceBench task workspace whenever available: it
 contains `evaluate.py`, `test_server.sh`, `timer.sh`, `scenario.json`, request
 files, and the task-local `./start_server.sh`. If SENPAI is running from the
@@ -76,6 +82,17 @@ repository root or a GPU pod instead, recreate those semantics rather than a
 simpler substitute: same scenario files, same request files, same launcher
 contract, same `evaluate.py`, same quality gate, and the same clean supervised
 relaunch expectation.
+
+When no task workspace has been prepared for you, create one with:
+
+```bash
+python senpai/create_task_workspace.py --scenario <A|B|C|D> \
+  --output /tmp/inferencebench-<scenario> \
+  --starting-point vllm_running
+```
+
+Then copy your launcher recipe into that workspace's `task/start_server.sh` and
+run evaluation from the workspace `task/` directory.
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and
 evaluator flow:
@@ -136,6 +153,10 @@ Report results in a PR comment using the `SENPAI-RESULT` format from
 Negative results are useful. If a candidate fails, say whether it failed to
 start, ran out of memory, failed quality, regressed the primary metric, or only
 helped a secondary metric.
+
+Never put a raw objective into `scenario/<X>/speedup_over_pytorch` as a
+sentinel. If the PyTorch baseline is missing, say the result is partial and use
+the raw metric name from `senpai/summarize_metrics.py`.
 
 ## Top Takeaways
 

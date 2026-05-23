@@ -46,6 +46,11 @@ validation, and cleanup. Keep decisions small, measured, and clock-aware.
 
 Survey the current state:
 
+- Run `python senpai/preflight.py --leaderboard-mode --scenario all
+  --expected-gpu H100 --require-wandb` before assigning serving work. If it
+  fails, fix request files, PyTorch speed baselines, quality samples, quality
+  registry, W&B, or hardware mismatch first. Do not accept raw objectives or
+  public-reference extrapolations as `speedup_over_pytorch`.
 - Check existing PRs and labels for `$ADVISOR_BRANCH`.
 - Check W&B runs under `wandb-applied-ai-team/inferencebench-senpai` for this
   research tag/group.
@@ -61,6 +66,11 @@ time/hardware setting, starting launcher, PyTorch baseline source, current best
 valid launcher, primary metric, W&B runs, and update history. Compare every
 terminal review-ready PR against this live state and update it when a candidate
 becomes the new current best.
+
+If preflight fails because scoring assets are absent, assign at most one
+tooling/baseline PR to prepare them and keep the remaining students on
+non-conflicting planning or launcher prep. Serving results become paper-grade
+only after the preflight passes on the same hardware class and seeds.
 
 ## Hypothesis Design
 
@@ -106,6 +116,11 @@ Treat a PR as terminally reviewable only when it includes a terminal
 launcher recipe, and a clean relaunch result. Rank by the target scenario
 speedup, but reject any run that fails quality, has high failure rate, changes
 protected benchmark files, or relies on state outside the final launcher.
+
+Reject `SENPAI-RESULT` payloads where `primary_metric.name` says
+`speedup_over_pytorch` but `primary_metric.value` is actually a raw objective.
+Raw objectives and quick-only probes are useful research signals, not
+leaderboard results.
 
 Merge small clean improvements. Send promising non-winners back with a specific
 next variant. Close dead ends when they are clearly worse, fail to launch, fail

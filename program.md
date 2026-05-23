@@ -167,6 +167,50 @@ The base model must remain the assigned `INFERENCE_BENCH_BASE_MODEL`. A
 different model repo, smaller substitute, external API, response cache, or
 pre-generated output invalidates the run.
 
+## Launch Preflight And Scoring Assets
+
+Before assigning serving experiments in a paper-grade run, the advisor should
+verify that scoring assets already exist for the active hardware, model, seeds,
+and scenarios:
+
+```bash
+python senpai/preflight.py \
+  --leaderboard-mode \
+  --scenario all \
+  --expected-gpu H100 \
+  --require-wandb
+```
+
+This check must pass before claiming leaderboard-comparable results. It verifies
+the GPU class, W&B availability, deterministic speed request files, PyTorch
+speed baseline metrics, MMLU-Pro quality samples, and the PyTorch quality
+baseline registry. If it fails, treat baseline/request setup as the first
+research task; do not let students fabricate `speedup_over_pytorch` from public
+H100 ratios or report raw objectives as if they were speedups.
+
+If request generation is blocked by tokenizer/runtime drift, materialize
+deterministic request files once from the SENPAI helper instead of editing
+protected evaluator code:
+
+```bash
+INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 \
+python senpai/materialize_requests.py --scenario all --backend torch \
+  --base-model mistralai/Mistral-7B-Instruct-v0.3 --seed 248
+```
+
+For pod-local work, create task workspaces that mirror the official task
+layout rather than improvising from the repository root:
+
+```bash
+python senpai/create_task_workspace.py --scenario A \
+  --output /tmp/inferencebench-scenario-a \
+  --starting-point vllm_running
+```
+
+The task workspace still uses the official `evaluate.py`, quality gate, request
+files, launcher contract, and supervised relaunch shape. The helper only stages
+those pieces in a predictable pod-local directory.
+
 ## Running
 
 For local or pod-level exploration, start from a launcher recipe and copy it

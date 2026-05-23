@@ -27,3 +27,33 @@ wandb-applied-ai-team/inferencebench-senpai
 
 Use `log_metrics_to_wandb.py` on official `metrics.json` files. It is a logging
 wrapper only; it does not change benchmark evaluation.
+
+## Preflight
+
+Before a leaderboard-comparable launch, run:
+
+```bash
+python senpai/preflight.py --leaderboard-mode --scenario all \
+  --expected-gpu H100 --require-wandb
+```
+
+The check fails if deterministic requests, PyTorch speed baselines, MMLU-Pro
+quality samples, the PyTorch quality registry, W&B, or the requested hardware
+are missing. Fix those before assigning serving PRs.
+
+If tokenizer/runtime drift prevents the official evaluator from sampling
+LongBench-v2 requests, materialize request files once without editing
+`src/eval`:
+
+```bash
+INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 \
+python senpai/materialize_requests.py --scenario all --backend torch
+```
+
+For pod-local experiments, stage a task workspace that mirrors the official
+harness:
+
+```bash
+python senpai/create_task_workspace.py --scenario A \
+  --output /tmp/inferencebench-A --starting-point vllm_running
+```
