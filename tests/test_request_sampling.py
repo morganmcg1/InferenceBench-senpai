@@ -27,6 +27,11 @@ class BatchEncodingLikeTokenizer(FakeTokenizer):
         return {"input_ids": [tokens]}
 
 
+class SlightlyShortDecodeTokenizer(FakeTokenizer):
+    def decode(self, tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False):
+        return " ".join(tokens[:-1])
+
+
 def _write_longbench_samples(path, rows):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -99,3 +104,28 @@ def test_count_chat_tokens_handles_batchencoding_like_template_result():
         [{"role": "user", "content": "one two three"}],
         tokenizer,
     ) == 3
+
+
+def test_prepare_requests_tolerates_small_chat_template_boundary_drift(tmp_path, monkeypatch):
+    samples_path = tmp_path / "samples.jsonl"
+    _write_longbench_samples(
+        samples_path,
+        [
+            {
+                "sample_id": "source",
+                "messages": [{"role": "user", "content": " ".join(f"tok{i}" for i in range(20))}],
+            }
+        ],
+    )
+    monkeypatch.setattr(runner, "_find_longbench_samples_file", lambda *args, **kwargs: samples_path)
+    monkeypatch.setenv("INFERENCE_BENCH_INPUT_TOKEN_MARGIN", "1")
+
+    requests, _ = runner._prepare_requests(
+        _speed_config(num_requests=1),
+        limit=None,
+        tokenizer=SlightlyShortDecodeTokenizer(),
+        max_model_len=None,
+    )
+
+    assert len(requests) == 1
+    assert requests[0]["target_input_token_count"] - requests[0]["input_token_count"] == 1
