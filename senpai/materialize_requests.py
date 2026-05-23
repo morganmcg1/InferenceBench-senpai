@@ -70,6 +70,75 @@ def robust_count_chat_tokens(messages: list[dict[str, str]], tokenizer: Any) -> 
     return len(tokenizer.encode(joined, add_special_tokens=False))
 
 
+def robust_truncate_messages(
+    messages: list[dict[str, str]],
+    tokenizer: Any,
+    max_input_tokens: Any,
+    *,
+    keep: str = "tail",
+) -> list[dict[str, str]]:
+    """Truncate the trailing user message so that the realized chat-template
+    token count is as close as possible to max_input_tokens without exceeding.
+
+    Drop-in replacement for runner._truncate_messages that compensates for
+    decode->re-encode roundtrip drift (a 1-token miss can fail the realized
+    range check when target == min_input_tokens).
+    """
+    if tokenizer is None or max_input_tokens is None:
+        return messages
+    if max_input_tokens <= 0:
+        return messages
+
+    user_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            user_idx = i
+            break
+    if user_idx is None:
+        return messages
+
+    original = messages[user_idx].get("content", "")
+    msgs_without = [dict(m) for m in messages]
+    msgs_without[user_idx]["content"] = ""
+    base_tokens = robust_count_chat_tokens(msgs_without, tokenizer)
+    allowed_user_tokens = max(0, int(max_input_tokens) - int(base_tokens))
+
+    user_tokens = tokenizer.encode(original, add_special_tokens=False)
+    if len(user_tokens) <= allowed_user_tokens:
+        return messages
+
+    def _attempt(n: int) -> tuple[int, str]:
+        n = max(0, min(n, len(user_tokens)))
+        if keep == "head":
+            chunk = user_tokens[:n]
+        else:
+            chunk = user_tokens[-n:] if n > 0 else []
+        text = tokenizer.decode(chunk, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+        trial = [dict(m) for m in messages]
+        trial[user_idx]["content"] = text
+        return robust_count_chat_tokens(trial, tokenizer), text
+
+    best_realized = -1
+    best_text = ""
+    target = int(max_input_tokens)
+    span = list(range(max(0, allowed_user_tokens - 8), allowed_user_tokens + 9))
+    for n in span:
+        realized, text = _attempt(n)
+        if realized <= target and realized > best_realized:
+            best_realized = realized
+            best_text = text
+            if realized == target:
+                break
+
+    if best_realized < 0:
+        realized, text = _attempt(allowed_user_tokens)
+        best_realized = realized
+        best_text = text
+
+    messages[user_idx]["content"] = best_text
+    return messages
+
+
 def write_requests_jsonl(path: Path, requests_list: list[dict[str, Any]], runner: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -125,6 +194,7 @@ def main() -> None:
     # while materializing request files. This avoids the transformers
     # BatchEncoding len()==2 trap seen in the shakedown run.
     runner._count_chat_tokens = robust_count_chat_tokens  # type: ignore[attr-defined]  # pylint: disable=protected-access
+    runner._truncate_messages = robust_truncate_messages  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
     tokenizer = runner._get_tokenizer(args.base_model)  # pylint: disable=protected-access
     if tokenizer is None:
