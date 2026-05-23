@@ -124,7 +124,7 @@ def main() -> None:
 
     model_safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", (args.base_model or "unknown_model")).strip("_")
 
-    out_root = Path(args.out_root) if args.out_root else (repo_root / "src" / "eval" / "inference" / "baselines" / "speed" / "default")
+    out_root = Path(args.out_root).resolve() if args.out_root else (repo_root / "src" / "eval" / "inference" / "baselines" / "speed" / "default")
     # Layout: <out_root>/<scenario>/<model_safe>/...
     out_dir = out_root / args.scenario_id / model_safe
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -204,16 +204,23 @@ def main() -> None:
         "baseline": baseline_metrics,
     }, indent=2), encoding="utf-8")
 
-    registry_path = Path(args.registry) if args.registry else (repo_root / "src" / "eval" / "inference" / "baselines" / "speed" / "default" / f"{model_safe}.json")
+    registry_path = Path(args.registry).resolve() if args.registry else (repo_root / "src" / "eval" / "inference" / "baselines" / "speed" / "default" / f"{model_safe}.json")
     registry = _load_registry(registry_path)
     registry["base_model"] = args.base_model
     registry.setdefault("note", "Precomputed baseline generations + metrics for InferenceBench quality gate.")
     registry.setdefault("scenarios", {})
+
+    def _try_relative_to_repo(path: Path) -> str:
+        try:
+            return str(path.resolve().relative_to(repo_root))
+        except ValueError:
+            return str(path.resolve())
+
     registry["scenarios"][args.scenario_id] = {
         "generated_at_unix": int(time.time()),
         "requests_sha256": requests_sha,
-        "baseline_log_file": str(log_path.relative_to(repo_root)),
-        "baseline_metrics_file": str(baseline_metrics_path.relative_to(repo_root)),
+        "baseline_log_file": _try_relative_to_repo(log_path),
+        "baseline_metrics_file": _try_relative_to_repo(baseline_metrics_path),
         "choice_accuracy": baseline_metrics.get("choice_accuracy"),
         "model_id": baseline_metrics.get("model_id"),
         "request_count": baseline_metrics.get("request_count"),

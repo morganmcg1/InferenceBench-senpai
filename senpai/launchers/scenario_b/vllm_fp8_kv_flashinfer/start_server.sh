@@ -29,9 +29,23 @@ PY_USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/d
 export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USER_SITE:-}:${PYTHONPATH:-}"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASHINFER}"
+# On this Blackwell pod (sm_120f) the originally planned attention +
+# kv-cache combos do not work end-to-end:
+#   * VLLM_ATTENTION_BACKEND=FLASHINFER fails because the FlashInfer JIT
+#     can't compile its sampling kernel ("CUDA compiler and CUDA toolkit
+#     headers are incompatible").
+#   * VLLM_ATTENTION_BACKEND=FLASH_ATTN refuses fp8 kv-cache on this
+#     device ("FlashAttention does not support fp8 kv-cache on this
+#     device").
+# So we land with FLASH_ATTN + auto kv-cache dtype (fp16). The output-
+# heavy wins still come from CUDA graphs (default on), chunked prefill
+# for the short input phase, prefix-caching off (unique LongBench-v2
+# prompts), block_size=16, and max-num-seqs=8 — all geared toward keeping
+# per-decode-step latency small at concurrency 1.
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 
-echo "=== Scenario B vLLM launcher (fp8 kv + flashinfer + cuda graphs) ==="
+echo "=== Scenario B vLLM launcher (auto kv-dtype + flash-attn + cuda graphs) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
@@ -45,7 +59,6 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization 0.92 \
-    --kv-cache-dtype fp8 \
     --max-num-seqs 8 \
     --max-num-batched-tokens 2048 \
     --enable-chunked-prefill \

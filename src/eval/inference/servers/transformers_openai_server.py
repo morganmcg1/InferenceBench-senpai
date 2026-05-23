@@ -85,6 +85,7 @@ def _start_generation(
     messages: List[Dict[str, Any]],
     max_new_tokens: int,
     temperature: float,
+    ignore_eos: bool = False,
 ) -> Tuple[TextIteratorStreamer, threading.Thread]:
     """Launch `model.generate()` in a background thread and return its streamer.
 
@@ -112,6 +113,12 @@ def _start_generation(
     }
     if do_sample:
         gen_kwargs["temperature"] = float(temperature)
+    if ignore_eos:
+        # InferenceBench speed scenarios (and any caller passing ignore_eos via
+        # the OpenAI-style payload) need the model to keep decoding until
+        # max_new_tokens is hit. HF generate() honors EOS by default; disable
+        # both eos_token_id and the stopping criteria that depend on it.
+        gen_kwargs["eos_token_id"] = None
 
     def _run() -> None:
         try:
@@ -158,12 +165,14 @@ async def handle_chat_completions(request: web.Request) -> web.StreamResponse:
     stream = bool(payload.get("stream", True))
     max_tokens = int(payload.get("max_tokens", payload.get("max_new_tokens", 256)))
     temperature = float(payload.get("temperature", 0.0) or 0.0)
+    ignore_eos = bool(payload.get("ignore_eos", False))
 
     streamer, gen_thread = _start_generation(
         state,
         messages,
         max_new_tokens=max_tokens,
         temperature=temperature,
+        ignore_eos=ignore_eos,
     )
     chunk_queue = await _astream_chunks(streamer)
     chat_id = f"chatcmpl-{_now()}"
