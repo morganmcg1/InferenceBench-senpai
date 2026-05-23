@@ -41,15 +41,25 @@ improvement:
 
 ## Round 1 assignments (boot)
 
-- **r1-frieren → Scenario C:** vLLM with aggressive batching (`max_num_seqs`,
-  `max_num_batched_tokens`), `enable_prefix_caching`, `kv_cache_dtype=fp8`,
-  high `gpu_memory_utilization`. Highest speedup headroom (H100 ref 46.70x).
-- **r1-fern → Scenario B:** vLLM with n-gram speculative decoding,
-  `kv_cache_dtype=fp8`, CUDA graphs (no `--enforce-eager`), high gpu mem util.
-  Long decode benefits the most from token-level acceleration.
-- **r1-tanjiro → Scenario A:** vLLM with chunked prefill at a high
-  `max_num_batched_tokens`, FlashInfer attention backend,
-  `kv_cache_dtype=fp8`, `--enforce-eager=false`. Long prefill is compute-bound.
+- **r1-frieren → Scenario C** — PR #20
+  `r1-frieren/scenario-c-aggro-batch`. vLLM with `--max-num-seqs 512`,
+  `--max-num-batched-tokens 16384`, `--enable-prefix-caching`,
+  `--kv-cache-dtype fp8`, `--gpu-memory-utilization 0.95`, CUDA graphs on,
+  chunked prefill on. GPU slot 1.
+- **r1-fern → Scenario B** — PR #22
+  `r1-fern/scenario-b-ngram-spec`. vLLM with n-gram speculative decoding
+  (`num_speculative_tokens 5`, `prompt_lookup_max 4`, `prompt_lookup_min 2`),
+  `--kv-cache-dtype fp8`, `--max-num-seqs 8`, CUDA graphs on. GPU slot 2.
+- **r1-tanjiro → Scenario A** — PR #23
+  `r1-tanjiro/scenario-a-flashinfer-fp8`. vLLM with
+  `VLLM_ATTENTION_BACKEND=FLASHINFER`, `--max-num-batched-tokens 16384`,
+  `--kv-cache-dtype fp8`, `--gpu-memory-utilization 0.95`, chunked prefill on,
+  CUDA graphs on. GPU slot 3.
+
+GPU coordination: each student posts `GPU-CLAIM: <slot>` before launching the
+server and `SLOT-FREE: <name> done with GPU` after teardown. Round-2 ideas
+queued in `research/RESEARCH_IDEAS_2026-05-23_round2.md` (in flight via
+researcher-agent).
 
 ## Potential next research directions
 
