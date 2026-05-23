@@ -126,6 +126,59 @@ def main() -> None:
     # BatchEncoding len()==2 trap seen in the shakedown run.
     runner._count_chat_tokens = robust_count_chat_tokens  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
+    # Some BPE tokenizers lose ~1 token across decode→encode roundtrip at the
+    # user-message boundary, so the runner's _truncate_messages can land 1
+    # token below `min_input_tokens` and trip the strict realized-range check
+    # in _prepare_requests. Wrap _truncate_messages: if the realized count is
+    # below the target, allocate a couple extra user tokens and retry until
+    # the realized count is >= target (or we run out of user content).
+    _orig_truncate = runner._truncate_messages  # pylint: disable=protected-access
+
+    def _truncate_messages_robust(messages, tokenizer, max_input_tokens, *, keep="tail"):
+        # Save the pre-truncation user content because _orig_truncate mutates
+        # `messages` in place and we may need the original tokens to widen.
+        user_idx = None
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                user_idx = i
+                break
+        original_user_content = messages[user_idx].get("content", "") if user_idx is not None else ""
+        out = _orig_truncate(messages, tokenizer, max_input_tokens, keep=keep)
+        if tokenizer is None or max_input_tokens is None or max_input_tokens <= 0 or user_idx is None:
+            return out
+        realized = robust_count_chat_tokens(out, tokenizer)
+        if realized >= max_input_tokens:
+            return out
+        # The chat-template encode/decode roundtrip dropped 1+ tokens. Widen
+        # the user-tokens budget incrementally until realized >= target (or we
+        # exhaust the original user content).
+        user_tokens = tokenizer.encode(original_user_content, add_special_tokens=False)
+        messages_without_user = [dict(m) for m in out]
+        messages_without_user[user_idx]["content"] = ""
+        base_tokens = robust_count_chat_tokens(messages_without_user, tokenizer)
+        for extra in range(1, 9):
+            allowed = max_input_tokens - base_tokens + extra
+            if allowed <= 0:
+                break
+            if allowed > len(user_tokens):
+                allowed = len(user_tokens)
+            if keep == "head":
+                truncated_tokens = user_tokens[:allowed]
+            else:
+                truncated_tokens = user_tokens[-allowed:]
+            truncated_text = tokenizer.decode(
+                truncated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            )
+            out[user_idx]["content"] = truncated_text
+            realized = robust_count_chat_tokens(out, tokenizer)
+            if realized >= max_input_tokens:
+                return out
+            if allowed == len(user_tokens):
+                break
+        return out
+
+    runner._truncate_messages = _truncate_messages_robust  # type: ignore[attr-defined]  # pylint: disable=protected-access
+
     tokenizer = runner._get_tokenizer(args.base_model)  # pylint: disable=protected-access
     if tokenizer is None:
         raise SystemExit(

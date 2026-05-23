@@ -1,0 +1,9 @@
+{
+  "scenario": "A",
+  "scenario_folder": "inference_scenario_a_input_heavy",
+  "backend_namespace": "torch",
+  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "dataset_seed": 248,
+  "request_count": 128,
+  "materialized_by": "senpai/materialize_requests.py"
+}
