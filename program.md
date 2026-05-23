@@ -180,14 +180,12 @@ and scenarios:
 
 ```bash
 # Current RTX PRO 6000 shakedown mode
-python senpai/preflight.py --scenario all \
-  --expected-gpu "RTX PRO 6000" \
-  --require-wandb
+senpai/require_scoring_preflight.sh --scenario all \
+  --expected-gpu "RTX PRO 6000"
 
 # Later H100 leaderboard-comparable mode
-python senpai/preflight.py --leaderboard-mode --scenario all \
-  --expected-gpu H100 \
-  --require-wandb
+senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
+  --expected-gpu H100
 ```
 
 This check must pass before claiming paper-grade results for the active
@@ -198,6 +196,27 @@ metrics, MMLU-Pro quality samples, and the PyTorch quality baseline registry.
 If it fails, treat baseline/request setup as the first research task; do not let
 students fabricate `speedup_over_pytorch` from public H100 ratios or report raw
 objectives as if they were speedups.
+
+Prepare missing scoring assets outside the two-hour optimization clock. On the
+current RTX PRO 6000 cluster, use:
+
+```bash
+senpai/run_scoring_setup_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --export-slug rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+Then import and verify the exported assets before opening the SENPAI start
+gate:
+
+```bash
+senpai/require_scoring_preflight.sh \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
 
 For Kubernetes SENPAI launches, arm `senpai/arm_cluster_cutoff.sh` at startup
 instead of using a bare cleanup job. For a strict 2 hour window, pass the same

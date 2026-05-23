@@ -247,14 +247,43 @@ def check_speed_assets(
             )
         else:
             data = maybe_load_json(baseline) or {}
-            checks.append(
-                Check(
-                    f"speed_baseline_{scenario}",
-                    "pass",
-                    f"found {baseline.relative_to(root)}",
-                    {"has_baseline_wrapper": "baseline" in data},
+            baseline_payload = data.get("baseline") if isinstance(data.get("baseline"), dict) else data
+            request_count = int(baseline_payload.get("request_count", 0) or 0)
+            success_count = int(baseline_payload.get("success_count", 0) or 0)
+            profiles = baseline_payload.get("profiles") if isinstance(baseline_payload, dict) else {}
+            if request_count < expected_n:
+                checks.append(
+                    Check(
+                        f"speed_baseline_{scenario}",
+                        "fail",
+                        f"{baseline.relative_to(root)} has request_count={request_count}, expected at least {expected_n}",
+                    )
                 )
-            )
+            elif success_count < request_count:
+                checks.append(
+                    Check(
+                        f"speed_baseline_{scenario}",
+                        "fail",
+                        f"{baseline.relative_to(root)} has success_count={success_count} < request_count={request_count}",
+                    )
+                )
+            elif not isinstance(profiles, dict) or not profiles:
+                checks.append(
+                    Check(
+                        f"speed_baseline_{scenario}",
+                        "fail",
+                        f"{baseline.relative_to(root)} has no profile metrics",
+                    )
+                )
+            else:
+                checks.append(
+                    Check(
+                        f"speed_baseline_{scenario}",
+                        "pass",
+                        f"found {baseline.relative_to(root)} with {success_count}/{request_count} successful baseline requests",
+                        {"has_baseline_wrapper": "baseline" in data},
+                    )
+                )
 
         req = find_first(request_file_candidates(root, baseline_backend, folder, safe_model))
         if req is None:
@@ -338,6 +367,15 @@ def setup_commands(args: argparse.Namespace, safe_model: str, scenarios: list[st
     backend_safe = model_safe(args.quality_baseline_backend)
     q_registry_name = f"{safe_model}.json" if backend_safe == "vllm" else f"{safe_model}_{backend_safe}.json"
     return [
+        "senpai/prepare_scoring_assets.sh "
+        f"--scenario {scenario_arg} "
+        f"--expected-gpu {args.expected_gpu!r} "
+        f"--base-model {args.base_model!r} "
+        f"--backend {args.speed_baseline_backend} "
+        f"--quality-backend {args.quality_baseline_backend} "
+        f"--dataset-seed {args.dataset_seed} "
+        f"--quality-seed {args.quality_seed} "
+        f"--mmlupro-n {args.mmlupro_n}",
         "python -m src.eval.inference.cache_samples --seed "
         f"{args.dataset_seed} --longbench-n 503 --mmlupro-n {args.mmlupro_n}",
         "INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 "

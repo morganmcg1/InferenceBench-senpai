@@ -37,21 +37,41 @@ Current hardware note:
 Recommended SENPAI preflight:
 
 ```bash
-# Current RTX PRO 6000 shakedown mode
-python senpai/preflight.py --scenario all \
+# Current RTX PRO 6000 shakedown mode: hard launch gate
+senpai/require_scoring_preflight.sh --scenario all \
   --expected-gpu "RTX PRO 6000" \
-  --require-wandb
 
 # Later H100 leaderboard-comparable mode
-python senpai/preflight.py --leaderboard-mode --scenario all \
-  --expected-gpu H100 \
-  --require-wandb
+senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
+  --expected-gpu H100
 ```
 
 If preflight fails, prepare the missing deterministic request files, PyTorch
 speed baselines, MMLU-Pro samples, and quality baseline registry before
 assigning serving-optimization PRs. Raw objectives from shakedown runs are
 research signals, not `speedup_over_pytorch` leaderboard results.
+
+Required scoring setup before the 2 hour clock:
+
+```bash
+# Runs on one GPU outside the SENPAI optimization budget and exports assets
+# to the shared PVC for inspection or reuse.
+senpai/run_scoring_setup_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --export-slug rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+
+# In any clone that should be eligible for SENPAI launch, import/check them:
+senpai/require_scoring_preflight.sh \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+Do not start a SENPAI replicate unless `senpai/require_scoring_preflight.sh`
+passes in the same target branch/image/hardware context the advisor and
+students will use.
 
 Shared-pod shakedown notes:
 

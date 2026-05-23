@@ -74,11 +74,12 @@ terminate another student's active measurement.
 
 ## Running
 
-First check whether the advisor has posted a passing `senpai/preflight.py`
-report or a `BASELINE.md` with concrete PyTorch baseline metric paths. If those
-assets are missing, do not invent a speedup from the public README table. Report
-raw objectives only when the advisor explicitly asks for a partial research
-signal, and label them as non-leaderboard evidence.
+First check whether the advisor has posted a passing
+`senpai/require_scoring_preflight.sh` report or a `BASELINE.md` with concrete
+PyTorch baseline metric paths. If those assets are missing, do not invent a
+speedup from the public README table. Report raw objectives only when the
+advisor explicitly asks for a partial research signal, and label them as
+non-leaderboard evidence.
 
 Prefer the official InferenceBench task workspace whenever available: it
 contains `evaluate.py`, `test_server.sh`, `timer.sh`, `scenario.json`, request

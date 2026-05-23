@@ -34,13 +34,12 @@ Before a launch, run the mode that matches the hardware:
 
 ```bash
 # Current RTX PRO 6000 shakedown mode
-python senpai/preflight.py --scenario all \
-  --expected-gpu "RTX PRO 6000" \
-  --require-wandb
+senpai/require_scoring_preflight.sh --scenario all \
+  --expected-gpu "RTX PRO 6000"
 
 # Later H100 leaderboard-comparable mode
-python senpai/preflight.py --leaderboard-mode --scenario all \
-  --expected-gpu H100 --require-wandb
+senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
+  --expected-gpu H100
 ```
 
 The check fails if deterministic requests, PyTorch speed baselines, MMLU-Pro
@@ -48,6 +47,31 @@ quality samples, the PyTorch quality registry, W&B, or the requested hardware
 are missing. Fix those before assigning serving PRs. RTX PRO 6000 results are
 for orchestration and search-direction shakedown; repeat winners on H100 before
 claiming README leaderboard wins.
+
+To build the required scoring assets on the current RTX PRO 6000 cluster,
+outside the two-hour SENPAI optimization clock:
+
+```bash
+senpai/run_scoring_setup_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --export-slug rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+The job exports assets under
+`/mnt/new-pvc/inferencebench-senpai/scoring-assets/<slug>/`. Import and verify
+those assets in any launch clone with:
+
+```bash
+senpai/require_scoring_preflight.sh \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+Do not open the SENPAI start gate until this hard preflight passes in the same
+target branch, image, and hardware context the run will use.
 
 If tokenizer/runtime drift prevents the official evaluator from sampling
 LongBench-v2 requests, materialize request files once without editing

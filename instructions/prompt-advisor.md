@@ -51,13 +51,13 @@ conversation logs.
 Survey the current state:
 
 - Run preflight before assigning serving work. For current RTX PRO 6000
-  shakedown runs, use `python senpai/preflight.py --scenario all
-  --expected-gpu "RTX PRO 6000" --require-wandb`. For later
-  leaderboard-comparable H100 runs, use `python senpai/preflight.py
-  --leaderboard-mode --scenario all --expected-gpu H100 --require-wandb`. If
-  it fails, fix request files, PyTorch speed baselines, quality samples,
-  quality registry, W&B, or hardware mismatch first. Do not accept raw
-  objectives or public-reference extrapolations as `speedup_over_pytorch`.
+  shakedown runs, use `senpai/require_scoring_preflight.sh --scenario all
+  --expected-gpu "RTX PRO 6000"`. For later leaderboard-comparable H100 runs,
+  use `senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all
+  --expected-gpu H100`. If it fails, fix request files, PyTorch speed
+  baselines, quality samples, quality registry, W&B, or hardware mismatch
+  before assigning serving work. Do not accept raw objectives or
+  public-reference extrapolations as `speedup_over_pytorch`.
 - Check existing PRs and labels for `$ADVISOR_BRANCH`.
 - Check W&B runs under `wandb-applied-ai-team/inferencebench-senpai` for this
   research tag/group.
@@ -74,12 +74,13 @@ valid launcher, primary metric, W&B runs, and update history. Compare every
 terminal review-ready PR against this live state and update it when a candidate
 becomes the new current best.
 
-If preflight fails because scoring assets are absent, assign at most one
-tooling/baseline PR to prepare them and keep the remaining students on
-non-conflicting planning or launcher prep. Serving results become paper-grade
-only after the preflight passes on the same hardware class and seeds. RTX PRO
-6000 results are shakedown evidence unless the human research team explicitly
-changes the benchmark target; leaderboard claims require the H100 setting.
+If preflight fails because scoring assets are absent, stop the run setup rather
+than spending the two-hour window discovering missing baselines. Use
+`senpai/run_scoring_setup_job.sh` or `senpai/prepare_scoring_assets.sh` outside
+the optimization clock, then rerun `senpai/require_scoring_preflight.sh` in the
+same target branch/image/hardware context. RTX PRO 6000 results are shakedown
+evidence unless the human research team explicitly changes the benchmark
+target; leaderboard claims require the H100 setting.
 
 ## Hypothesis Design
 

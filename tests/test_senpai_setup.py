@@ -24,6 +24,29 @@ def test_preflight_finds_nested_speed_baseline(tmp_path: Path) -> None:
     assert found == metrics
 
 
+def test_preflight_rejects_partial_speed_baseline(tmp_path: Path) -> None:
+    safe_model = preflight.model_safe("org/model")
+    scenario = "inference_scenario_a_input_heavy"
+    scenario_dir = tmp_path / "src/eval/tasks" / scenario
+    scenario_dir.mkdir(parents=True)
+    (scenario_dir / "scenario.json").write_text('{"num_requests": 4}', encoding="utf-8")
+    metrics = tmp_path / "src/eval/inference/baselines/speed/torch" / scenario / safe_model / "baseline_metrics.json"
+    metrics.parent.mkdir(parents=True)
+    metrics.write_text(
+        '{"baseline": {"request_count": 4, "success_count": 3, "profiles": {"burst": {"success_count": 3}}}}',
+        encoding="utf-8",
+    )
+    requests = metrics.parent / "requests.jsonl"
+    requests.write_text("\n".join(["{}"] * 4) + "\n", encoding="utf-8")
+
+    checks, requests_ready = preflight.check_speed_assets(tmp_path, ["A"], safe_model, "torch")
+
+    assert requests_ready is True
+    baseline_check = next(c for c in checks if c.name == "speed_baseline_A")
+    assert baseline_check.status == "fail"
+    assert "success_count=3 < request_count=4" in baseline_check.detail
+
+
 def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
     out = tmp_path / "workspace"
     # Exercise the script through its file operations without requiring a GPU.
