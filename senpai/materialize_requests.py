@@ -70,6 +70,100 @@ def robust_count_chat_tokens(messages: list[dict[str, str]], tokenizer: Any) -> 
     return len(tokenizer.encode(joined, add_special_tokens=False))
 
 
+def robust_truncate_messages(
+    messages: list[dict[str, str]],
+    tokenizer: Any,
+    max_input_tokens: int | None,
+    *,
+    keep: str = "tail",
+) -> list[dict[str, str]]:
+    """Truncate the user message so that apply_chat_template(...) lands at exactly
+    max_input_tokens (or as close as possible). Fixes the runner._truncate_messages
+    off-by-one where tokenize -> decode -> apply_chat_template re-tokenize can lose 1+
+    tokens at the boundary, falling below the min_input_tokens bound check in
+    runner._prepare_requests. Iteratively adds/removes tokens until convergence.
+    """
+    if tokenizer is None or max_input_tokens is None:
+        return messages
+    if max_input_tokens <= 0:
+        max_input_tokens = 0
+
+    user_idx = None
+    for i in range(len(messages) - 1, -1, -1):
+        if messages[i].get("role") == "user":
+            user_idx = i
+            break
+    if user_idx is None:
+        return messages
+
+    original = messages[user_idx].get("content", "")
+    messages_without_user = [dict(m) for m in messages]
+    messages_without_user[user_idx]["content"] = ""
+    base_tokens = robust_count_chat_tokens(messages_without_user, tokenizer)
+    allowed_user_tokens = max_input_tokens - base_tokens
+    if allowed_user_tokens <= 0:
+        messages[user_idx]["content"] = ""
+        return messages
+
+    user_tokens = tokenizer.encode(original, add_special_tokens=False)
+    if len(user_tokens) <= allowed_user_tokens:
+        return messages
+
+    # Initial slice
+    take = allowed_user_tokens
+
+    best_text = ""
+    best_diff = None
+    for _attempt in range(96):
+        take = max(0, min(take, len(user_tokens)))
+        if take == 0:
+            text = ""
+        else:
+            if keep == "head":
+                slice_tokens = user_tokens[:take]
+            else:
+                slice_tokens = user_tokens[-take:]
+            text = tokenizer.decode(
+                slice_tokens,
+                skip_special_tokens=True,
+                clean_up_tokenization_spaces=False,
+            )
+        candidate_messages = [dict(m) for m in messages]
+        candidate_messages[user_idx]["content"] = text
+        realized = robust_count_chat_tokens(candidate_messages, tokenizer)
+        diff = realized - max_input_tokens
+        # Track the best <= target attempt as a fallback
+        if diff <= 0 and (best_diff is None or diff > best_diff):
+            best_diff = diff
+            best_text = text
+        if diff == 0:
+            messages[user_idx]["content"] = text
+            return messages
+        if diff > 0:
+            take -= 1
+            if take < 0:
+                break
+            continue
+        # diff < 0 — need more tokens
+        if take >= len(user_tokens):
+            break
+        take += -diff if -diff > 0 else 1
+
+    # Use the closest <= target attempt; if none found, fall back to original behaviour
+    if best_text or best_diff is not None:
+        messages[user_idx]["content"] = best_text
+        return messages
+    # Fallback (shouldn't happen): truncate naively
+    if keep == "head":
+        truncated_tokens = user_tokens[:allowed_user_tokens]
+    else:
+        truncated_tokens = user_tokens[-allowed_user_tokens:]
+    messages[user_idx]["content"] = tokenizer.decode(
+        truncated_tokens, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    )
+    return messages
+
+
 def write_requests_jsonl(path: Path, requests_list: list[dict[str, Any]], runner: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as handle:
@@ -122,9 +216,13 @@ def main() -> None:
     from src.eval.inference import runner  # pylint: disable=import-outside-toplevel
 
     # Keep the protected evaluator unchanged, but use a patched token counter
-    # while materializing request files. This avoids the transformers
-    # BatchEncoding len()==2 trap seen in the shakedown run.
+    # and truncate while materializing request files. The patched truncate
+    # converges to exactly target_input_tokens to avoid the tokenize -> decode ->
+    # apply_chat_template roundtrip losing 1 token at the boundary, which would
+    # fail runner._prepare_requests's realized_input_tokens >= min_input_tokens
+    # check on samples where the random target lands on the min bound.
     runner._count_chat_tokens = robust_count_chat_tokens  # type: ignore[attr-defined]  # pylint: disable=protected-access
+    runner._truncate_messages = robust_truncate_messages  # type: ignore[attr-defined]  # pylint: disable=protected-access
 
     tokenizer = runner._get_tokenizer(args.base_model)  # pylint: disable=protected-access
     if tokenizer is None:
