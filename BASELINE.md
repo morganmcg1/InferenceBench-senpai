@@ -52,6 +52,29 @@ PyTorch baseline on a scenario becomes the live current best for that scenario.
 These ratios come from H100. RTX PRO 6000 shakedown ratios will likely differ,
 so use them only as *direction* signal until repeated on H100.
 
+## Round 1 policy: raw-objective primary metrics
+
+PyTorch speed/quality baselines do not yet exist on this pod's writable
+filesystem for any scenario. Generating them inside the 2 h program
+budget would consume the GPU time we need for the actual launcher
+experiments. For round 1 only, terminal results report **raw scenario
+objectives** as `primary_metric.name`:
+
+- Scenario A → `scenario/A/raw/inverse_ttft_p50`
+- Scenario B → `scenario/B/raw/inverse_tpot_p50`
+- Scenario C → `scenario/C/raw/request_throughput_req_per_s_geomean`
+- Scenario D → `scenario/D/raw/geomean_inverse_latency_throughput`
+
+These are research-grade signals, NOT leaderboard-comparable. The
+`speedup_over_pytorch` columns above stay TBD until a future tooling PR
+generates the PyTorch baselines.
+
 ## Update history
 
-- 2026-05-23: file created. Awaiting first measured launcher.
+- 2026-05-23 09:50: file created. Awaiting first measured launcher.
+- 2026-05-23 10:24: round 1 raw-objective pivot recorded. Reasoning:
+  PyTorch baselines absent on the pod, 2 h budget can't absorb baseline
+  generation. r3-fern fixed vLLM 0.11→0.21 install on this pod (huge
+  unblock). r3-tanjiro patched a BPE round-trip drift in
+  `senpai/materialize_requests.py`. Slot order reshuffled: tanjiro →
+  fern → frieren (frieren still silent).

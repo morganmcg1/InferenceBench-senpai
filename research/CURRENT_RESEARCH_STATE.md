@@ -94,6 +94,45 @@ Likely follow-ups by scenario:
 
 Not applicable — this is round 1 of the launch. No measured baseline yet.
 
+## Round 1 progress (10:24 UTC, boot + 31 min)
+
+### Key findings from students
+
+- **PyTorch speed/quality baselines do not exist on this pod** for any of
+  the 4 scenarios. Generating them in the 2 h window costs ~30-60 min of
+  GPU per scenario, which would eat the experiment budget. **Pivot:** all
+  three round-1 launchers report a **raw scenario objective** as their
+  `primary_metric.name` (e.g.
+  `scenario/C/raw/request_throughput_req_per_s_geomean`,
+  `scenario/B/raw/inverse_tpot_p50`,
+  `scenario/A/raw/inverse_ttft_p50`) and clearly label results as
+  non-leaderboard partial evidence per `program.md`. Do NOT accept a
+  `speedup_over_pytorch` payload from any round-1 PR — there is no real
+  PyTorch baseline behind it.
+
+- **vLLM 0.11.0 install was broken on this pod image** (CUDA 12 wheel +
+  torch 2.8 ABI vs the host's CUDA 13.2 + torch 2.11.0). r3-fern
+  discovered this and fixed it with `pip install -U vllm` → 0.21.0. Also
+  required: `cbor2 setproctitle pyzmq nvidia-cuda-runtime-cu12`. Future
+  rounds: bake this into the container image (PR on senpai infra repo,
+  not this target repo).
+
+- **`materialize_requests.py` had a BPE round-trip drift bug** at req_idx
+  114 (seed 248, Scenario C). r3-tanjiro patched
+  `senpai/materialize_requests.py` (NOT the protected runner) with a
+  converging `_truncate_messages` monkey-patch. All 256 requests now
+  materialize cleanly. Patch lands when PR #28 merges.
+
+### Slot reshuffle (was: tanjiro → frieren → fern)
+
+- **Slot 1**: r3-tanjiro (PR #28) — has GPU now (confirmed 10:20:57).
+- **Slot 2**: r3-fern (PR #32) — vLLM-fix author, holding for SLOT-FREE
+  on #28. Announced launch at 10:18:46 before knowing r3-tanjiro was
+  taking GPU; advisor pushed coordination comment to defer.
+- **Slot 3**: r3-frieren (PR #30) — still silent at boot + 31 min.
+  Advisor posted a check-in comment. If no response in next 10 min,
+  close PR and reassign a leaner hypothesis.
+
 ## Round 1 progress (10:15 UTC)
 
 - All 3 student assignments picked up by the shared GPU pod between
