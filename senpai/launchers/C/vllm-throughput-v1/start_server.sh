@@ -7,13 +7,21 @@ set -euo pipefail
 # Source senpai/runtime_env.sh first so CPATH / LD_LIBRARY_PATH / cache dirs are
 # set before vLLM imports CUDA pip-package extensions.
 
-if [ -n "${PROBLEM_DIR:-}" ] && [ -f "${PROBLEM_DIR}/senpai/runtime_env.sh" ]; then
-    # shellcheck disable=SC1091
-    source "${PROBLEM_DIR}/senpai/runtime_env.sh"
-elif [ -f "$(dirname "$0")/../../../runtime_env.sh" ]; then
-    # shellcheck disable=SC1091
-    source "$(dirname "$0")/../../../runtime_env.sh"
-fi
+_runtime_env_candidates=(
+    "${TARGET_WORKDIR:-}/senpai/runtime_env.sh"
+    "${PROBLEM_DIR:-}/senpai/runtime_env.sh"
+    "$(dirname "$0")/../../../runtime_env.sh"
+    "/workspace/senpai-r5-fern/target/senpai/runtime_env.sh"
+)
+for _candidate in "${_runtime_env_candidates[@]}"; do
+    if [ -n "${_candidate}" ] && [ -f "${_candidate}" ]; then
+        # shellcheck disable=SC1090
+        source "${_candidate}"
+        echo "[start_server] sourced runtime_env from ${_candidate}"
+        break
+    fi
+done
+unset _runtime_env_candidates _candidate
 
 MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
 HOST="${HOST:-0.0.0.0}"
