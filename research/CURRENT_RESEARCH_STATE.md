@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **Last updated:** 2026-05-23 (post round-1 baseline-blocker triage)
+- **Last updated:** 2026-05-23 10:46 UTC (post round-1 slot-1 cut, baselines retransferred)
 - **Most recent research direction from human researcher team:** (none yet for
   this launch — boot only)
 - **Research tag:** `ib-20260523-rerun-r1`
@@ -39,35 +39,50 @@ improvement:
 - All terminal results must come from a clean relaunch + full `evaluate.py`
   run, not from the live training shell.
 
-## Round 1 assignments (revised after baseline-blocker triage)
+## Round 1 assignments (revised after slot-1 cut at 10:46 UTC)
 
-Both r1-frieren and r1-fern flagged the same blocker: PyTorch baseline
-metrics + MMLU-Pro quality registry are absent on this freshly built target,
-and `senpai/materialize_requests.py` only handles request files. Without those
-artifacts no `speedup_over_pytorch` is computable. The round was re-sequenced:
+First triage at 10:11 UTC: PyTorch baseline metrics + MMLU-Pro registry
+absent, so PR #20 was repurposed from Sc C candidate to baseline tooling.
 
-- **r1-frieren PR #20 (slot 1) — repurposed to tooling.** Run
+Second triage at 10:46 UTC: r1-frieren went silent after `GPU-CLAIM` at
+10:17. r1-tanjiro confirmed GPU at 0 MiB at 10:31 (torch server never
+started). r1-frieren did not respond to a 10:30 status ping or a 10:39
+escalation with three unblocking options. The 10:43 UTC hard deadline
+passed without any progress signal, so the slot was cut and the baseline
+build transferred. Closed PR #20 as no-result.
+
+- **r1-tanjiro PR #23 (slot 1) — redirected to baselines.** Run
   `src.eval.inference.precompute_all_baselines --cache-quality-samples
-  --backends torch --scenarios A B D C` on the GPU. Soft cap 75 min. Posts
-  `SLOT-FREE` once Scenario A and B speed baselines + quality registry are
-  on disk; C and D continue only if time remains.
-- **r1-fern PR #22 (slot 2) — unchanged hypothesis, on hold.** vLLM
-  n-gram speculative decoding + FP8 KV on Scenario B, waits for r1-frieren's
-  scenario B baseline path.
-- **r1-tanjiro PR #23 (slot 3) — unchanged hypothesis, on hold.** vLLM
-  FlashInfer + FP8 KV + bigbatch on Scenario A, waits for r1-fern's
-  `SLOT-FREE` and r1-frieren's scenario A baseline path.
+  --backends torch --scenarios B A` with `INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1`
+  (lets the script sample requests internally, skipping the tokenizer
+  roundtrip bug r1-frieren hit). Order is **B → A** so r1-fern unblocks
+  first. Soft cap 40 min from torch server load. Required minimum: Sc B
+  speed baseline + quality registry. Stretch: Sc A speed baseline. r1-tanjiro's
+  Sc A candidate launcher (FlashInfer + FP8 + bigbatch) is preserved on
+  the branch at `senpai/launchers/A/flashinfer-fp8-bigbatch/start_server.sh`
+  (commit `f3c452d`) for round 2.
+- **r1-fern PR #22 (slot 2) — unchanged hypothesis, holding.** vLLM
+  n-gram speculative decoding + FP8 KV on Scenario B. Waits for
+  r1-tanjiro's `SLOT-FREE` + Sc B baseline path. Time-budget contingency:
+  if SLOT-FREE lands with <20 min remaining, drop the `--speculative-config`
+  flag and run vLLM + FP8 KV only so we land a measurable speedup; if
+  <10 min, mark `terminal=false, status=blocked-on-time`.
+- **r1-frieren PR #20 — closed, no result.** Sc C aggressive batching
+  idea preserved in `research/RESEARCH_IDEAS_2026-05-23_round2.md`.
+- **Slot 3 dropped for round 1.** r1-tanjiro's original Sc A candidate
+  work is deferred to round 2.
 
 GPU coordination protocol unchanged: each student posts `GPU-CLAIM: <slot>`
 before launching the server and `SLOT-FREE: <name> done with GPU` after
-teardown. r1-frieren's original Scenario C launcher work is deferred to a
-follow-up PR (round 2) so the tooling slot is not double-loaded.
+teardown.
 
 Round-2 hypothesis catalog: `research/RESEARCH_IDEAS_2026-05-23_round2.md`
 (12 ideas across all 4 scenarios — EAGLE-3 spec decode, SGLang RadixAttention,
 TGI tuned, TensorRT-LLM, AWQ / FP8-weights quantization, attention backend
-ablations, cross-scenario confirmation). Top wave to consider once baselines
-land: H2 (EAGLE-3 on Sc B) and H6 (Sc D chunked prefill).
+ablations, cross-scenario confirmation). Carryover from round 1 to round 2:
+r1-frieren's Sc C aggressive batching idea, r1-tanjiro's Sc A FlashInfer + FP8
++ bigbatch launcher (already committed on branch `r1-tanjiro/scenario-a-flashinfer-fp8`).
+Top wave once baselines land: H2 (EAGLE-3 on Sc B) and H6 (Sc D chunked prefill).
 
 ## Potential next research directions
 
