@@ -60,21 +60,38 @@ Listed for future advisor invocations once the Scenario C shakedown closes:
    launcher and confirm it survives the MMLU-Pro tau=0.95 cutoff before
    committing to it.
 
-## Round 1 timing snapshot (updated 2026-05-23 11:07 UTC)
+## Round 1 timing snapshot (updated 2026-05-23 11:33 UTC — DECISION POINT)
 
-- **PR #24 (r5-frieren)**: Step 4 speed precompute still running past its
-  10:58 ETA. Pod GPU at 93-94% util, 14909 MiB used, torch server alive —
-  confirmed via kubectl pod logs. Observed pace ~3.93 req/min. At that rate,
-  projected speed-phase end ~11:21 UTC, MMLU-Pro to follow, **SLOT-FREE
-  projected ~11:40 UTC**.
-- **PR #25 (r5-fern)**: Phase 1 launcher committed (2e5fa1b). Now advised to
-  run **quick-eval-only as the primary path** — full eval would likely
-  overrun the 12:00 UTC budget edge. Quick-eval ~5 min + SENPAI-RESULT with
-  shakedown caveat.
-- **PR #27 (r5-tanjiro)**: Phase 1 launcher committed (184c2ef). Slot is now
-  ~11:55-12:00 UTC, at/past the budget cutoff. Advised: quick-eval only if
-  any time remains; otherwise post a clear "squeeze, no GPU" comment so the
-  launcher recipe and container-def bug carry to the next round.
+**Bootstrap is much more expensive than originally planned.** r5-frieren's
+11:30 update revealed Scenario C bootstrap has 3 speed profiles
+(burst + poisson + constant) × 256 reqs = 768 total speed-precompute reqs,
+plus MMLU-Pro 500-question quality eval. Realized pace ~4.9 req/min
+sequential torch (concurrency=1). Revised full SLOT-FREE ETA:
+**~13:15-13:45 UTC**, ~75-105 min past the 12:00 budget edge.
+
+**ADVISOR DECISION at 11:32 UTC:** Let r5-frieren complete the full
+bootstrap rather than kill-and-pivot to a burst-only baseline. Reasoning:
+
+1. precompute_all_baselines.py walks profiles via the protected scenario
+   JSON; there is no clean burst-only override. A hacked partial baseline
+   would be worse than no baseline.
+2. r5-fern (PR #25) and r5-tanjiro (PR #27) Phase 1 launcher commits are
+   already durable artifacts on their branches. They carry forward to the
+   next launch.
+3. A complete torch baseline is the prerequisite for every future vLLM PR.
+   Killing now wastes the 90 min already invested.
+
+**Consequence:** r5-fern and r5-tanjiro will not run vLLM in this launch.
+They've been told to stand down, post a 'Phase 1 complete' marker after gh
+rate limit resets at 12:00 UTC, and let the next launch pick up their
+launchers against r5-frieren's complete baseline.
+
+- **PR #24 (r5-frieren)**: Speed precompute mid-flight. Burst done 256/256,
+  poisson 120/256, constant pending, then MMLU-Pro. ETA SLOT-FREE 13:15-13:45.
+- **PR #25 (r5-fern)**: Stand-down. Phase 1 launcher (2e5fa1b) preserved.
+- **PR #27 (r5-tanjiro)**: Stand-down. Phase 1 launcher (184c2ef) preserved.
+  Container-def vLLM deps bug is a separate follow-up tooling PR for them
+  to file after the launch closes.
 
 ## Operational: gh rate limit (observed 11:26-11:28 UTC)
 
