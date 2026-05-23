@@ -143,6 +143,53 @@ Not applicable — this is round 1 of the launch. No measured baseline yet.
 
 **r3-fern now idle.** Will assign round-2 experiment if budget permits, otherwise park for next session.
 
+## Round 1 progress (11:45 UTC, boot + 112 min) — Sc. A result merged, round 1 closeout
+
+**PR #30 (r3-frieren, Sc. A) MERGED at 11:43 UTC.** `inverse_ttft_p50 = 2.8825`
+(TTFT.p50 = 347ms on 8192-token prefill, 16/16 success). FlashInfer attention
+backend **confirmed engaged** via server.log (`Using AttentionBackendEnum.FLASHINFER backend.`)
+— first confirmation in this session. Cold-relaunch quick (4 reqs) measured
+349ms p50, in-distribution with the full eval. VRAM peak 91029 MiB.
+W&B run `dfgkjud9`. BASELINE.md + EXPERIMENTS_LOG.md updated.
+
+### Round 1 final scorecard
+
+| Scenario | Status | Best raw metric | Launcher | W&B |
+|---|---|---|---|---|
+| A: 1/ttft.p50 burst | **MERGED** | 2.8825 (TTFT.p50 347ms) | `senpai/launchers/scenario_a/vllm-flashinfer-chunked-fp8kv/start_server.sh` | `dfgkjud9` |
+| B: 1/tpot.p50 burst | **MERGED** | 126.67 tok/s (8-req partial) | `senpai/launchers/scenario_b/vllm-ngram-spec-fp8kv/start_server.sh` | `qixqiu9x` |
+| C: req/s geomean | parked → round 3 | — (crash on curand) | `senpai/launchers/scenario_c/vllm-fp8-flashinfer/start_server.sh` (committed, sampler fix needed) | — |
+| D: geomean | not attempted | — | — | — |
+
+**Quality gate skipped on both winners** — MMLU-Pro baseline registry absent
+on this pod's writable filesystem. All round-1 numbers are non-leaderboard
+partial evidence per `program.md`.
+
+**Two of four scenarios with first-measured launchers.** Strong directional
+signal that the Blackwell `RTX PRO 6000` accepts H100-validated recipes:
+FlashInfer + chunked prefill + FP8 KV (Sc. A) and n-gram speculative +
+FP8 KV (Sc. B) both engaged correctly. Cross-pod transfer of recipes is
+not invalidated, just gated on baseline regeneration for `speedup_over_pytorch`.
+
+### Round 3 starting state (advisor handoff notes)
+
+1. **Both winning launchers are committed to advisor branch** with reproduce
+   blocks documented in BASELINE.md.
+2. **r3-tanjiro PR #28** is `status:wip` with FP8-weight quant + FlashInfer +
+   `VLLM_USE_FLASHINFER_SAMPLER=0` recipe ready; needs Sc. C eval as first
+   round-3 action.
+3. **r3-fern PR #33** is round-2 prep-only (Sc. B refinement: explicit
+   FlashInfer CLI flag + smaller `max_num_batched_tokens=8192` sweep).
+   Needs sampler-disable line added before any GPU work — see
+   `/tmp/msg_fern_pr33_fix.md` notes captured here.
+4. **r3-frieren PR #30 merged**, idle for next session. Strong candidate
+   for an Sc. A refinement PR (drop chunked prefill at concurrency=1,
+   sweep `max_num_batched_tokens`, capture-size 1 only) or a fresh Sc. D
+   geomean PR.
+5. **Pod-level fix needed:** install cuda-toolkit-13-2 / curand dev headers
+   so FlashInfer sampler can JIT — would let us drop the
+   `VLLM_USE_FLASHINFER_SAMPLER=0` workaround.
+
 ## Round 1 progress (11:34 UTC, boot + 101 min) — curand crash + r3-frieren takeover
 
 **r3-tanjiro's Sc. C launcher crashed at 11:13:36** with FlashInfer JIT compile failure:

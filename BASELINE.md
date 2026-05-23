@@ -32,11 +32,35 @@ See Round 1 policy section below.
 
 | Scenario | Round-1 raw metric | Current best raw value | Launcher path | W&B run | Notes |
 |---|---|---:|---|---|---|
-| A: Input-heavy (`1/ttft.p50` burst) | `scenario/A/raw/inverse_ttft_p50` | TBD | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting r3-frieren result |
+| A: Input-heavy (`1/ttft.p50` burst) | `scenario/A/raw/inverse_ttft_p50` | **2.8825** (16-req partial) | `senpai/launchers/scenario_a/vllm-flashinfer-chunked-fp8kv/start_server.sh` | `dfgkjud9` | PR #30 merged 2026-05-23 11:43 |
 | B: Output-heavy (`1/tpot.p50` burst) | `scenario/B/raw/inverse_tpot_p50` | **126.67 tok/s** (partial, 8 reqs) | `senpai/launchers/scenario_b/vllm-ngram-spec-fp8kv/start_server.sh` | `qixqiu9x` | PR #32 merged 2026-05-23 11:25 |
 | C: High-load (req/s geomean) | `scenario/C/raw/request_throughput_req_per_s_geomean` | TBD | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting r3-tanjiro result |
 | D: General (geomean) | `scenario/D/raw/geomean_inverse_latency_throughput` | TBD | — | — | Awaiting r3-frieren/r3-tanjiro results |
 | Aggregate (cross-scenario confirmation) | `aggregate/geomean_speedup_over_pytorch` | TBD | — | — | Run only after a mature single-scenario winner |
+
+### Scenario A current best detail (PR #30)
+
+- **Launcher:** `senpai/launchers/scenario_a/vllm-flashinfer-chunked-fp8kv/start_server.sh`
+- **Engine:** vLLM 0.21.0
+- **Flags:** `--attention-backend FLASHINFER --enable-chunked-prefill --enable-prefix-caching --kv-cache-dtype fp8 --max-num-batched-tokens 16384 --gpu-memory-utilization 0.92 --max-num-seqs 32 --block-size 16`
+- **Env vars:** `VLLM_USE_FLASHINFER_SAMPLER=0` (pod-environment workaround for missing curand dev headers)
+- **Attention backend:** FLASHINFER (confirmed engaged via server.log: `Using AttentionBackendEnum.FLASHINFER backend.`)
+- **Measured:** 16-req partial full eval, TTFT.p50 = 347ms → `1/ttft.p50 = 2.8825`; cold-relaunch quick = 349ms (in-distribution)
+- **Success rate:** 100% across full + relaunch
+- **VRAM peak:** 91029 MiB (~89 GiB)
+- **Quality gate:** SKIPPED (no MMLU-Pro baseline file on pod)
+- **W&B run:** `dfgkjud9` (`r3-frieren/vllm-flashinfer-chunked-fp8kv`, group `ib-r3-scA-flashinfer-chunked`)
+- **Reproduce:**
+  ```bash
+  cd "$PROBLEM_DIR"
+  source senpai/runtime_env.sh
+  python senpai/create_task_workspace.py --scenario A --output /tmp/inferencebench-scenario-a --starting-point vllm_running
+  cp senpai/launchers/scenario_a/vllm-flashinfer-chunked-fp8kv/start_server.sh /tmp/inferencebench-scenario-a/start_server.sh
+  chmod +x /tmp/inferencebench-scenario-a/start_server.sh
+  cd /tmp/inferencebench-scenario-a
+  ./start_server.sh > agent/server.log 2>&1 &
+  ./test_server.sh && python evaluate.py --json-output-file metrics_full.json
+  ```
 
 ### Scenario B current best detail (PR #32)
 
@@ -106,3 +130,11 @@ generates the PyTorch baselines.
   landed in `senpai/materialize_requests.py`. Quality gate not verifiable
   on this pod. W&B run `qixqiu9x`. Awaiting Sc. C (r3-tanjiro) and
   Sc. A (r3-frieren).
+- 2026-05-23 11:43: **Scenario A first measured launcher merged** (PR #30,
+  r3-frieren). `inverse_ttft_p50 = 2.8825` (TTFT.p50 = 347ms, 16-req partial),
+  FlashInfer (CLI flag confirmed engaged via `Using AttentionBackendEnum.FLASHINFER`)
+  + chunked prefill (max_num_batched_tokens=16384) + FP8 KV + prefix caching.
+  Required `VLLM_USE_FLASHINFER_SAMPLER=0` workaround for pod's missing
+  curand dev headers. Cold relaunch verified at 349ms. Quality gate skipped
+  (no MMLU-Pro baseline). W&B run `dfgkjud9`. Sc. C never tested in round 1
+  (r3-tanjiro crashed on curand, parked for round 3).
