@@ -65,6 +65,26 @@ Shared-pod shakedown notes:
   `/root/.claude` conversations are archived to the PVC. A bare cleanup job
   that only deletes deployments cannot recover `.claude` after pods are gone.
 
+For five parallel 2 hour InferenceBench SENPAI replicates using one advisor pod
+and one shared-student pod per replicate, arm the cutoff/harvest job as part of
+startup:
+
+```bash
+senpai/arm_cluster_cutoff.sh \
+  --run-slug ib-YYYYMMDD-rerun \
+  --tags-csv ib-YYYYMMDD-r1,ib-YYYYMMDD-r2,ib-YYYYMMDD-r3,ib-YYYYMMDD-r4,ib-YYYYMMDD-r5 \
+  --expected-pods 10 \
+  --expected-deployments 10 \
+  --budget-hours 2 \
+  --harvest-lead-seconds 300 \
+  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image-pull-secret ghcr-morganmcg1-pull
+```
+
+The job writes logs to
+`/mnt/new-pvc/senpai-conversation-logs/<run-slug>/` before deleting the tagged
+deployments, and starts a best-effort local mirror into `conversation_logs/`.
+
 <div align="center">
 
 <h1>InferenceBench: A Benchmark for Open-Ended LLM Inference Optimization by AI Agents</h1>

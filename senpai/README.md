@@ -78,3 +78,23 @@ source senpai/runtime_env.sh
 It exports CUDA pip-package include/library paths and pod-local JIT cache
 locations for vLLM, FlashInfer, Triton, and related backends. This is a
 process-local launch aid, not a benchmark harness change.
+
+## Cluster Cutoff And Conversation Logs
+
+Use `arm_cluster_cutoff.sh` when starting Kubernetes SENPAI runs. It waits for
+the expected pods, starts the wall-clock budget, harvests `/root/.claude` from
+each tagged pod to the PVC before shutdown, deletes the tagged SENPAI
+deployments/configmaps/secrets, and starts a best-effort local mirror into
+`conversation_logs/`.
+
+```bash
+senpai/arm_cluster_cutoff.sh \
+  --run-slug ib-YYYYMMDD-rerun \
+  --tags-csv ib-YYYYMMDD-r1,ib-YYYYMMDD-r2,ib-YYYYMMDD-r3,ib-YYYYMMDD-r4,ib-YYYYMMDD-r5 \
+  --expected-pods 10 \
+  --expected-deployments 10 \
+  --budget-hours 2 \
+  --harvest-lead-seconds 300 \
+  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image-pull-secret ghcr-morganmcg1-pull
+```

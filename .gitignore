@@ -5,6 +5,7 @@
 *.log
 logs/
 condor_logs/
+conversation_logs/
 
 # Editor/IDE
 .vscode/

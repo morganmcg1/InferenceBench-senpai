@@ -199,6 +199,12 @@ If it fails, treat baseline/request setup as the first research task; do not let
 students fabricate `speedup_over_pytorch` from public H100 ratios or report raw
 objectives as if they were speedups.
 
+For Kubernetes SENPAI launches, arm `senpai/arm_cluster_cutoff.sh` at startup
+instead of using a bare cleanup job. The cutoff job starts the 2 hour timer only
+after the expected pods are Ready, archives `/root/.claude` from every tagged
+advisor/student pod to the PVC shortly before shutdown, and then deletes the
+tagged SENPAI deployments/configmaps/secrets.
+
 If request generation is blocked by tokenizer/runtime drift, materialize
 deterministic request files once from the SENPAI helper instead of editing
 protected evaluator code:

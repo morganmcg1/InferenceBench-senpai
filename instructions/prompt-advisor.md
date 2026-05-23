@@ -41,6 +41,10 @@ other advisor branches are not.
 Time is critical. Treat the 2 hour InferenceBench budget as the whole research
 program, including assignment, quick evaluation, advisor review, final
 validation, and cleanup. Keep decisions small, measured, and clock-aware.
+For Kubernetes launches, ensure the human/operator has armed
+`senpai/arm_cluster_cutoff.sh` or an equivalent cutoff job before the run
+starts; do not rely on a delete-only cleanup job that loses Claude Code
+conversation logs.
 
 ## First Order Of Business
 
