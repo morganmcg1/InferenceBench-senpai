@@ -60,13 +60,31 @@ Listed for future advisor invocations once the Scenario C shakedown closes:
    launcher and confirm it survives the MMLU-Pro tau=0.95 cutoff before
    committing to it.
 
+## Round 1 timing snapshot (updated 2026-05-23 10:35 UTC)
+
+- **PR #24 (r5-frieren)**: Step 4 speed precompute running. 48/256 requests
+  done at ~4 req/min (sequential torch, concurrency=1). ETA for speed phase
+  end ~10:58 UTC. MMLU-Pro 500-question quality precompute follows
+  (`INFERENCE_BENCH_QUALITY_CONCURRENCY=1`); ~15-20 min. Projected SLOT-FREE
+  on PR #24: **~11:15-11:20 UTC**.
+- **PR #25 (r5-fern)**: Phase 1 launcher committed (2e5fa1b). After
+  SLOT-FREE on #24, quick-eval ~5-10 min + full eval ~20-30 min → projected
+  SLOT-FREE on #25: **~12:00 UTC** (at/near the 2h budget edge).
+- **PR #27 (r5-tanjiro)**: Phase 1 launcher committed (184c2ef). May get
+  squeezed past the budget; PR body authorizes quick-eval-only fallback with
+  explicit shakedown caveat. Container-def vLLM deps bug is a follow-up
+  tooling PR to file after the primary experiment lands.
+
 ## Open Risks
 
 - Torch baseline bootstrap on Scenario C may exceed 75 minutes on RTX PRO 6000;
-  if so we have to pivot to a cheaper bootstrap shape (smaller MMLU-Pro N,
-  fewer profiles) and re-issue assignments.
+  current pace of 48 reqs in 12 min indicates ~64 min for the full 256, plus
+  MMLU-Pro. We are inside the 75-min envelope but not by much.
 - FlashInfer JIT can stall on Blackwell on first use; tanjiro's launcher has a
   documented fallback to the default backend.
 - 2-hour budget is tight. Quick-eval-only fallback is allowed for the launcher
   PRs if full eval doesn't fit, but it must be flagged as shakedown evidence
   rather than a leaderboard claim.
+- vLLM container deps bug (uv install with `--no-deps` then `2>/dev/null || true`
+  on the resolving install) was hit and worked around locally by r5-tanjiro;
+  needs a hardening PR once the round closes.
