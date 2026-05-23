@@ -187,6 +187,7 @@ fi
 python "${preflight_args[@]}"
 
 if [[ -n "$EXPORT_DIR" ]]; then
+  mkdir -p "$EXPORT_DIR"
   python "${preflight_args[@]}" --json-output "$EXPORT_DIR/preflight.json"
   if [[ "$EXPORTED_ON_EXIT" == "0" ]]; then
     export_assets 0
