@@ -43,5 +43,6 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --max-num-batched-tokens 32768 \
     --enable-chunked-prefill \
     --enable-prefix-caching \
+    --async-scheduling \
     --trust-remote-code \
     --disable-log-stats
