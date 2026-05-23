@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **Last updated:** 2026-05-23 10:46 UTC (post round-1 slot-1 cut, baselines retransferred)
+- **Last updated:** 2026-05-23 11:09 UTC (post slot-1 cut reverted; r1-frieren back on baselines)
 - **Most recent research direction from human researcher team:** (none yet for
   this launch — boot only)
 - **Research tag:** `ib-20260523-rerun-r1`
@@ -39,38 +39,39 @@ improvement:
 - All terminal results must come from a clean relaunch + full `evaluate.py`
   run, not from the live training shell.
 
-## Round 1 assignments (revised after slot-1 cut at 10:46 UTC)
+## Round 1 assignments (post 11:09 UTC race-condition recovery)
 
-First triage at 10:11 UTC: PyTorch baseline metrics + MMLU-Pro registry
-absent, so PR #20 was repurposed from Sc C candidate to baseline tooling.
+First triage at 10:11 UTC: PyTorch baseline + MMLU-Pro registry absent,
+so PR #20 was repurposed from Sc C candidate to baseline tooling.
 
-Second triage at 10:46 UTC: r1-frieren went silent after `GPU-CLAIM` at
-10:17. r1-tanjiro confirmed GPU at 0 MiB at 10:31 (torch server never
-started). r1-frieren did not respond to a 10:30 status ping or a 10:39
-escalation with three unblocking options. The 10:43 UTC hard deadline
-passed without any progress signal, so the slot was cut and the baseline
-build transferred. Closed PR #20 as no-result.
+At 10:46 UTC the slot was cut over apparent silence past the 10:43 hard
+deadline. But r1-frieren posted a status update at 10:49:38 reporting
+the precompute was actively running (Sc A baseline at 24%); my close
+action at 10:49:54 landed 16 seconds later. Race condition. PR #20
+reopened at 11:09 UTC, r1-frieren's plan approved with a quality-registry
+timing correction (8-17 min, not 25). The redirect on PR #23 was
+reverted; r1-fern was instructed to stand down for round 1.
 
-- **r1-tanjiro PR #23 (slot 1) — redirected to baselines.** Run
-  `src.eval.inference.precompute_all_baselines --cache-quality-samples
-  --backends torch --scenarios B A` with `INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1`
-  (lets the script sample requests internally, skipping the tokenizer
-  roundtrip bug r1-frieren hit). Order is **B → A** so r1-fern unblocks
-  first. Soft cap 40 min from torch server load. Required minimum: Sc B
-  speed baseline + quality registry. Stretch: Sc A speed baseline. r1-tanjiro's
-  Sc A candidate launcher (FlashInfer + FP8 + bigbatch) is preserved on
-  the branch at `senpai/launchers/A/flashinfer-fp8-bigbatch/start_server.sh`
-  (commit `f3c452d`) for round 2.
-- **r1-fern PR #22 (slot 2) — unchanged hypothesis, holding.** vLLM
-  n-gram speculative decoding + FP8 KV on Scenario B. Waits for
-  r1-tanjiro's `SLOT-FREE` + Sc B baseline path. Time-budget contingency:
-  if SLOT-FREE lands with <20 min remaining, drop the `--speculative-config`
-  flag and run vLLM + FP8 KV only so we land a measurable speedup; if
-  <10 min, mark `terminal=false, status=blocked-on-time`.
-- **r1-frieren PR #20 — closed, no result.** Sc C aggressive batching
-  idea preserved in `research/RESEARCH_IDEAS_2026-05-23_round2.md`.
-- **Slot 3 dropped for round 1.** r1-tanjiro's original Sc A candidate
-  work is deferred to round 2.
+- **r1-frieren PR #20 (slot 1) — actively running.** Precompute on torch
+  backend, scenario A baseline at 24% as of 10:51 UTC. Plan: finish Sc A
+  baseline (~11:17), SIGTERM precompute parent (keep torch server alive),
+  run `precompute_quality_baseline` against orphan server (~8-17 min),
+  kill torch server, post `SLOT-FREE` at ~11:25-11:35. Sc B torch baseline
+  is dropped for this round (would consume the rest of the wall budget).
+  r1-frieren's senpai-only `robust_truncate_messages` patch in
+  `senpai/materialize_requests.py` is the canonical fix for the off-by-one
+  tokenizer roundtrip bug (was used to pre-materialize Sc A and B requests).
+- **r1-tanjiro PR #23 (slot 2) — unchanged hypothesis, holding.** vLLM
+  FlashInfer + FP8 KV + bigbatch on Sc A (launcher committed at
+  `senpai/launchers/A/flashinfer-fp8-bigbatch/start_server.sh`, commit
+  `f3c452d`). Workspace pre-staged at `/tmp/ib-A`. Waits for r1-frieren's
+  `SLOT-FREE` + Sc A baseline path. Expected GPU window: ~5-10 min on
+  vLLM with FlashInfer; cutoff for terminal start is ~11:38 UTC.
+- **r1-fern PR #22 — standing down for round 1.** Sc B torch baseline
+  unavailable in this window. Launcher (`senpai/launchers/B/ngram-spec-fp8-kv/`)
+  + workspace + dry-parse verification all committed. Will post
+  `terminal=false, status=blocked-on-missing-baseline` to close the round
+  cleanly. Carries over to round 2.
 
 GPU coordination protocol unchanged: each student posts `GPU-CLAIM: <slot>`
 before launching the server and `SLOT-FREE: <name> done with GPU` after
@@ -80,9 +81,12 @@ Round-2 hypothesis catalog: `research/RESEARCH_IDEAS_2026-05-23_round2.md`
 (12 ideas across all 4 scenarios — EAGLE-3 spec decode, SGLang RadixAttention,
 TGI tuned, TensorRT-LLM, AWQ / FP8-weights quantization, attention backend
 ablations, cross-scenario confirmation). Carryover from round 1 to round 2:
-r1-frieren's Sc C aggressive batching idea, r1-tanjiro's Sc A FlashInfer + FP8
-+ bigbatch launcher (already committed on branch `r1-tanjiro/scenario-a-flashinfer-fp8`).
-Top wave once baselines land: H2 (EAGLE-3 on Sc B) and H6 (Sc D chunked prefill).
+r1-frieren's Sc C aggressive batching idea; r1-tanjiro's Sc A launcher
+(continues into round 1 measurement); r1-fern's Sc B n-gram spec-decode
+launcher (committed but no Sc B baseline in round 1). First round-2 priority
+is the missing Sc B + Sc D + Sc C torch baselines. Tooling improvements
+also queued: fix `senpai/summarize_metrics.py::_baseline_primary_value` path
+mismatch flagged by r1-fern at 10:52 UTC.
 
 ## Potential next research directions
 
