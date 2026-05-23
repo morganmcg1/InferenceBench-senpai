@@ -133,6 +133,18 @@ Not applicable — this is round 1 of the launch. No measured baseline yet.
   Advisor posted a check-in comment. If no response in next 10 min,
   close PR and reassign a leaner hypothesis.
 
+## Round 1 progress (11:25 UTC, boot + 92 min) — First result merged
+
+**PR #32 (r3-fern, Sc. B) MERGED.** `1/tpot.p50 = 126.67 tok/s` (8-req partial). W&B run `qixqiu9x`. BASELINE.md updated. EXPERIMENTS_LOG.md created.
+
+**r3-tanjiro (PR #28)** grabbed Slot 1 at 11:12 after GPU cleared. Applied `--attention-backend FLASHINFER` CLI flag fix. Sc. C eval in progress — ~25 min budget window remains.
+
+**r3-frieren (PR #30)** at Slot 3, Phase 0 prep complete with FlashInfer CLI fix applied. Will take GPU when r3-tanjiro posts SLOT-FREE. Budget tight: ~25 min total including r3-tanjiro's eval.
+
+**r3-fern now idle.** Will assign round-2 experiment if budget permits, otherwise park for next session.
+
+---
+
 ## Round 1 progress (10:44 UTC, boot + 51 min) — GPU coordination breakdown
 
 ### What happened

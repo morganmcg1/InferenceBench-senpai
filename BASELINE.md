@@ -27,17 +27,39 @@ no CUDA graphs override.
 
 ## Current best per scenario
 
-No SENPAI launcher has been measured on this advisor branch yet. Current best
-is `vllm_running` defaults. The first terminal review-ready PR that beats
-PyTorch baseline on a scenario becomes the live current best for that scenario.
+Round 1 results use **raw scenario objectives** (no PyTorch baseline on this pod).
+See Round 1 policy section below.
 
-| Scenario | Primary metric | Current best `speedup_over_pytorch` | Launcher path | W&B run | Notes |
+| Scenario | Round-1 raw metric | Current best raw value | Launcher path | W&B run | Notes |
 |---|---|---:|---|---|---|
-| A: Input-heavy (`1/ttft.p50` burst) | `scenario/A/speedup_over_pytorch` | TBD (vLLM default) | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting first measured result on RTX PRO 6000 |
-| B: Output-heavy (`1/tpot.p50` burst) | `scenario/B/speedup_over_pytorch` | TBD (vLLM default) | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting first measured result on RTX PRO 6000 |
-| C: High-load (req/s geomean) | `scenario/C/speedup_over_pytorch` | TBD (vLLM default) | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting first measured result on RTX PRO 6000 |
-| D: General (geomean) | `scenario/D/speedup_over_pytorch` | TBD (vLLM default) | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting first measured result on RTX PRO 6000 |
-| Aggregate (cross-scenario confirmation) | `aggregate/geomean_speedup_over_pytorch` | TBD | — | — | Run only after a mature single-scenario winner. |
+| A: Input-heavy (`1/ttft.p50` burst) | `scenario/A/raw/inverse_ttft_p50` | TBD | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting r3-frieren result |
+| B: Output-heavy (`1/tpot.p50` burst) | `scenario/B/raw/inverse_tpot_p50` | **126.67 tok/s** (partial, 8 reqs) | `senpai/launchers/scenario_b/vllm-ngram-spec-fp8kv/start_server.sh` | `qixqiu9x` | PR #32 merged 2026-05-23 11:25 |
+| C: High-load (req/s geomean) | `scenario/C/raw/request_throughput_req_per_s_geomean` | TBD | `src/starting_points/vllm_running/start_server.sh` | — | Awaiting r3-tanjiro result |
+| D: General (geomean) | `scenario/D/raw/geomean_inverse_latency_throughput` | TBD | — | — | Awaiting r3-frieren/r3-tanjiro results |
+| Aggregate (cross-scenario confirmation) | `aggregate/geomean_speedup_over_pytorch` | TBD | — | — | Run only after a mature single-scenario winner |
+
+### Scenario B current best detail (PR #32)
+
+- **Launcher:** `senpai/launchers/scenario_b/vllm-ngram-spec-fp8kv/start_server.sh`
+- **Engine:** vLLM 0.21.0
+- **Flags:** `--max-num-seqs 8 --max-num-batched-tokens 4096 --kv-cache-dtype fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}' --gpu-memory-utilization 0.92 --trust-remote-code`
+- **Attention backend:** env-var-only (vLLM 0.21 may have defaulted to FlashAttn2; backend not confirmed from server.log yet)
+- **Measured:** partial full eval (8 reqs), `1/tpot.p50 = 126.67 tok/s`; quick=165.93; cold-relaunch-quick=201.37
+- **Success rate:** 100% across all eval passes
+- **VRAM peak:** 90123 MB (~88 GiB)
+- **Quality gate:** SKIPPED (quality registry absent on this pod — flagged as non-leaderboard)
+- **W&B run:** `qixqiu9x` (`r3-fern/vllm-ngram-spec-fp8kv`, group `ib-r3-scB-ngram-spec`)
+- **Reproduce:**
+  ```bash
+  cd "$PROBLEM_DIR"
+  source senpai/runtime_env.sh
+  python senpai/create_task_workspace.py --scenario B --output /tmp/inferencebench-scenario-b --starting-point vllm_running
+  cp senpai/launchers/scenario_b/vllm-ngram-spec-fp8kv/start_server.sh /tmp/inferencebench-scenario-b/start_server.sh
+  chmod +x /tmp/inferencebench-scenario-b/start_server.sh
+  cd /tmp/inferencebench-scenario-b
+  ./start_server.sh > agent/server.log 2>&1 &
+  ./test_server.sh && python evaluate.py --json-output-file metrics_full.json
+  ```
 
 ## Public reference snapshot (H100, 2026-05-21, do not treat as live)
 
@@ -78,3 +100,9 @@ generates the PyTorch baselines.
   unblock). r3-tanjiro patched a BPE round-trip drift in
   `senpai/materialize_requests.py`. Slot order reshuffled: tanjiro →
   fern → frieren (frieren still silent).
+- 2026-05-23 11:25: **Scenario B first measured launcher merged** (PR #32,
+  r3-fern). `1/tpot.p50 = 126.67 tok/s` (8-req partial), ngram speculative
+  (5 tokens) + FP8 KV + CUDA graphs. Two additional tokenizer-fix patches
+  landed in `senpai/materialize_requests.py`. Quality gate not verifiable
+  on this pod. W&B run `qixqiu9x`. Awaiting Sc. C (r3-tanjiro) and
+  Sc. A (r3-frieren).
