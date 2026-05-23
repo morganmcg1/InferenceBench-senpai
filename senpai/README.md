@@ -95,6 +95,10 @@ senpai/arm_cluster_cutoff.sh \
   --expected-deployments 10 \
   --budget-hours 2 \
   --harvest-lead-seconds 300 \
+  --start-gate-path /mnt/new-pvc/senpai-start-gates/ib-YYYYMMDD-rerun/start \
   --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
   --image-pull-secret ghcr-morganmcg1-pull
 ```
+
+Pass the same path to SENPAI's `k8s/launch.py` as `--start_gate_path` so the
+advisor and student pods wait for the cutoff job to open the run.

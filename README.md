@@ -77,6 +77,7 @@ senpai/arm_cluster_cutoff.sh \
   --expected-deployments 10 \
   --budget-hours 2 \
   --harvest-lead-seconds 300 \
+  --start-gate-path /mnt/new-pvc/senpai-start-gates/ib-YYYYMMDD-rerun/start \
   --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
   --image-pull-secret ghcr-morganmcg1-pull
 ```
@@ -84,6 +85,9 @@ senpai/arm_cluster_cutoff.sh \
 The job writes logs to
 `/mnt/new-pvc/senpai-conversation-logs/<run-slug>/` before deleting the tagged
 deployments, and starts a best-effort local mirror into `conversation_logs/`.
+Pass the same `--start_gate_path` value to `k8s/launch.py` so advisor and
+student pods wait until every expected pod is Ready before the 2 hour clock
+opens.
 
 <div align="center">
 
