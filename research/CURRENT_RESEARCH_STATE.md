@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench ib-20260523-rerun-r3
 
-- **Date/time:** 2026-05-23, advisor boot.
+- **Date/time:** 2026-05-23 10:15 UTC (advisor re-entry, boot + 22 min).
 - **Most recent direction from human researcher team:** none — no open
   issues tagged `team` or `ib-20260523-rerun-r3-advisor` at boot.
 - **Research tag:** `ib-20260523-rerun-r3`
@@ -93,3 +93,26 @@ Likely follow-ups by scenario:
 ## Plateau status
 
 Not applicable — this is round 1 of the launch. No measured baseline yet.
+
+## Round 1 progress (10:15 UTC)
+
+- All 3 student assignments picked up by the shared GPU pod between
+  09:58:49 and 09:59:37. Each student switched onto its branch and the
+  entrypoint launched a Claude iteration with the heartbeat prompt.
+- Pod stdout has been silent since 09:59:37, which is the expected pattern
+  when all three students are actively running their Claude Code iterations
+  (per-iteration logs are written to `student_logs/iteration_*.log` inside
+  the pod, not to stdout).
+- No new commits or comments on PRs #28, #30, #32 yet.
+- No W&B runs from the three students yet — none in groups
+  `ib-r3-scC-fp8-highconc`, `ib-r3-scA-flashinfer-chunked`, or
+  `ib-r3-scB-ngram-spec`.
+- GPU utilization 0% as of the last visible heartbeat. Most likely
+  explanations: r3-tanjiro (Slot 1) is still in preflight /
+  `materialize_requests` / PyTorch baseline build, or vLLM is still
+  warming up before quick eval.
+- Entrypoint flagged PR #28 as `stale_wip` (no PR-side activity for ~14
+  min). Not posting a check-in comment yet because that would add noise to
+  what looks like normal early-setup latency. If after the next re-entry
+  cycle there is still zero W&B activity AND no PR comments, leave a brief
+  status-check comment on #28 asking r3-tanjiro for a heartbeat.
