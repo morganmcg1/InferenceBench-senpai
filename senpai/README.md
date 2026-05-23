@@ -65,3 +65,16 @@ harness:
 python senpai/create_task_workspace.py --scenario A \
   --output /tmp/inferencebench-A --starting-point vllm_running
 ```
+
+## Runtime Environment
+
+In shared RTX PRO 6000 shakedown pods, source the runtime helper before
+launching serving backends:
+
+```bash
+source senpai/runtime_env.sh
+```
+
+It exports CUDA pip-package include/library paths and pod-local JIT cache
+locations for vLLM, FlashInfer, Triton, and related backends. This is a
+process-local launch aid, not a benchmark harness change.

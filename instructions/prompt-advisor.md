@@ -110,6 +110,11 @@ launcher prep, log analysis, or research on adjacent directions. Prevent
 concurrent heavy GPU runs from corrupting measurements, but keep idle students
 productive.
 
+In shared-pod runs, make teardown ownership explicit. Students should kill only
+their own server process group and should not use broad `pkill` commands that
+can stop another student's measurement. Ask students to post `SLOT-FREE` or an
+equivalent concise signal when the GPU is actually clear.
+
 ## Review Criteria
 
 During a 2 hour run, check active PRs often for stalls, questions, GPU-queue

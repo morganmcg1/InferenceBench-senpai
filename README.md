@@ -53,6 +53,18 @@ speed baselines, MMLU-Pro samples, and quality baseline registry before
 assigning serving-optimization PRs. Raw objectives from shakedown runs are
 research signals, not `speedup_over_pytorch` leaderboard results.
 
+Shared-pod shakedown notes:
+
+- Source `senpai/runtime_env.sh` before launching vLLM/SGLang/TGI in the RTX
+  PRO 6000 pod. It exports CUDA pip-package include/library paths and pod-local
+  cache directories for JIT-heavy backends without touching benchmark code.
+- Coordinate teardown carefully in one-GPU multi-student pods. Kill only the
+  server process group you launched; avoid broad `pkill` cleanup that can stop
+  another student's active benchmark server.
+- Use SENPAI's cluster cutoff harvester before deleting deployments so
+  `/root/.claude` conversations are archived to the PVC. A bare cleanup job
+  that only deletes deployments cannot recover `.claude` after pods are gone.
+
 <div align="center">
 
 <h1>InferenceBench: A Benchmark for Open-Ended LLM Inference Optimization by AI Agents</h1>

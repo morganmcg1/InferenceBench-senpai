@@ -222,6 +222,17 @@ The task workspace still uses the official `evaluate.py`, quality gate, request
 files, launcher contract, and supervised relaunch shape. The helper only stages
 those pieces in a predictable pod-local directory.
 
+For RTX PRO 6000 or other shared-pod shakedown runs, source the SENPAI runtime
+environment helper before starting vLLM/SGLang/TGI:
+
+```bash
+source "$PROBLEM_DIR/senpai/runtime_env.sh"
+```
+
+This sets CUDA pip-package include/library paths and pod-local JIT caches that
+avoid common Blackwell/FlashInfer/vLLM startup failures. It is launch
+environment setup only; it does not modify the evaluator or scoring contract.
+
 ## Running
 
 For local or pod-level exploration, start from a launcher recipe and copy it

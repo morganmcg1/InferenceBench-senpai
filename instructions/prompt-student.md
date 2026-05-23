@@ -67,6 +67,11 @@ the main heavy GPU workload, keep making progress through smoke tests,
 low-memory probes, launcher prep, log analysis, or research that can inform the
 next GPU slot.
 
+When releasing or debugging the GPU, kill only the server process or supervised
+process group you started. Do not use broad cleanup commands such as `pkill
+python`, `pkill vllm`, or port-wide process killing in a shared pod; those can
+terminate another student's active measurement.
+
 ## Running
 
 First check whether the advisor has posted a passing `senpai/preflight.py`
@@ -107,6 +112,7 @@ Inside an InferenceBench task workspace, use the benchmark-provided launcher and
 evaluator flow:
 
 ```bash
+source "$PROBLEM_DIR/senpai/runtime_env.sh"
 ./test_server.sh > agent/server.log 2>&1 &
 python evaluate.py --quick --json-output-file metrics_quick.json
 python evaluate.py --json-output-file metrics_full.json
