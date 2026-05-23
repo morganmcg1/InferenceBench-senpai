@@ -60,20 +60,21 @@ Listed for future advisor invocations once the Scenario C shakedown closes:
    launcher and confirm it survives the MMLU-Pro tau=0.95 cutoff before
    committing to it.
 
-## Round 1 timing snapshot (updated 2026-05-23 10:35 UTC)
+## Round 1 timing snapshot (updated 2026-05-23 11:07 UTC)
 
-- **PR #24 (r5-frieren)**: Step 4 speed precompute running. 48/256 requests
-  done at ~4 req/min (sequential torch, concurrency=1). ETA for speed phase
-  end ~10:58 UTC. MMLU-Pro 500-question quality precompute follows
-  (`INFERENCE_BENCH_QUALITY_CONCURRENCY=1`); ~15-20 min. Projected SLOT-FREE
-  on PR #24: **~11:15-11:20 UTC**.
-- **PR #25 (r5-fern)**: Phase 1 launcher committed (2e5fa1b). After
-  SLOT-FREE on #24, quick-eval ~5-10 min + full eval ~20-30 min → projected
-  SLOT-FREE on #25: **~12:00 UTC** (at/near the 2h budget edge).
-- **PR #27 (r5-tanjiro)**: Phase 1 launcher committed (184c2ef). May get
-  squeezed past the budget; PR body authorizes quick-eval-only fallback with
-  explicit shakedown caveat. Container-def vLLM deps bug is a follow-up
-  tooling PR to file after the primary experiment lands.
+- **PR #24 (r5-frieren)**: Step 4 speed precompute still running past its
+  10:58 ETA. Pod GPU at 93-94% util, 14909 MiB used, torch server alive —
+  confirmed via kubectl pod logs. Observed pace ~3.93 req/min. At that rate,
+  projected speed-phase end ~11:21 UTC, MMLU-Pro to follow, **SLOT-FREE
+  projected ~11:40 UTC**.
+- **PR #25 (r5-fern)**: Phase 1 launcher committed (2e5fa1b). Now advised to
+  run **quick-eval-only as the primary path** — full eval would likely
+  overrun the 12:00 UTC budget edge. Quick-eval ~5 min + SENPAI-RESULT with
+  shakedown caveat.
+- **PR #27 (r5-tanjiro)**: Phase 1 launcher committed (184c2ef). Slot is now
+  ~11:55-12:00 UTC, at/past the budget cutoff. Advised: quick-eval only if
+  any time remains; otherwise post a clear "squeeze, no GPU" comment so the
+  launcher recipe and container-def bug carry to the next round.
 
 ## Open Risks
 
