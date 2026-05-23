@@ -51,7 +51,12 @@ conversation logs.
 Survey the current state:
 
 - Run preflight before assigning serving work. For current RTX PRO 6000
-  shakedown runs, use `senpai/require_scoring_preflight.sh --scenario all
+  shakedown runs, first hydrate this clone from the prepared PVC assets when
+  available:
+  `senpai/require_scoring_preflight.sh --import-dir
+  /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248
+  --scenario all --expected-gpu "RTX PRO 6000"`. If no import directory is
+  available, use `senpai/require_scoring_preflight.sh --scenario all
   --expected-gpu "RTX PRO 6000"`. For later leaderboard-comparable H100 runs,
   use `senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all
   --expected-gpu H100`. If it fails, fix request files, PyTorch speed

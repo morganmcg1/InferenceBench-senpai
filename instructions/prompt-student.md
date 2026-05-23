@@ -81,6 +81,15 @@ speedup from the public README table. Report raw objectives only when the
 advisor explicitly asks for a partial research signal, and label them as
 non-leaderboard evidence.
 
+On current RTX PRO 6000 shakedown runs, the prepared scoring assets should be
+available at
+`/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248`. If your
+clone lacks baseline files and the advisor has not posted a passing preflight
+yet, run
+`senpai/require_scoring_preflight.sh --import-dir
+/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 --scenario
+all --expected-gpu "RTX PRO 6000"` before treating any result as a speedup.
+
 Prefer the official InferenceBench task workspace whenever available: it
 contains `evaluate.py`, `test_server.sh`, `timer.sh`, `scenario.json`, request
 files, and the task-local `./start_server.sh`. If SENPAI is running from the
