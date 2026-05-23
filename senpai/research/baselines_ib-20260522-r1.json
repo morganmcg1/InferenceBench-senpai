@@ -1,0 +1,65 @@
+{
+  "research_tag": "ib-20260522-r1",
+  "advisor_branch": "ib-20260522-r1-advisor",
+  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "hardware": "single NVIDIA RTX PRO 6000 Blackwell (CC 12.0), 97GB",
+  "backend": "vllm-default reference (from src/starting_points/vllm_running/start_server.sh + MAX_MODEL_LEN=32768)",
+  "produced_by": "r1-tanjiro / PR #4",
+  "notes": "Sc A and Sc B vllm-default reference runs FAILED with the runner.py _count_chat_tokens BatchEncoding bug (now fixed in 69b0c3d on advisor). Sc C reference produced with the senpai/research/build_requests_jsonl.py workaround that pre-tokenises LongBench-v2 samples via the correct API. Speedup anchor: pytorch_baseline_primary = vllm_default_primary / 48.69 (public Sc C reference speedup). r1-frieren and r1-fern: please use the Sc C anchor only; rerun Sc A/B vLLM-default on the rebased advisor branch.",
+  "scenarios": {
+    "A": {
+      "primary_metric": "TTFT p50 (lower is better)",
+      "vllm_default_primary": null,
+      "status": "BLOCKED \u2014 runner.py token-counting bug (fixed upstream after my run)",
+      "public_reference_speedup": 1.25
+    },
+    "B": {
+      "primary_metric": "TPOT p50 (lower is better)",
+      "vllm_default_primary": null,
+      "status": "BLOCKED \u2014 runner.py token-counting bug (fixed upstream after my run)",
+      "public_reference_speedup": 2.25
+    },
+    "C": {
+      "primary_metric": "request_throughput geomean across burst, poisson, constant (higher is better)",
+      "vllm_default_primary": 2.1224,
+      "vllm_default_profiles": {
+        "burst": 3.1799,
+        "poisson": 2.2447,
+        "constant": 1.3393
+      },
+      "vllm_default_vram_peak_mb": 88637.0,
+      "public_reference_speedup": 48.69,
+      "implied_pytorch_baseline_primary": 0.043589,
+      "status": "OK"
+    },
+    "D": {
+      "primary_metric": "geomean across A+B+C primaries (higher is better)",
+      "vllm_default_primary": null,
+      "status": "not measured"
+    }
+  },
+  "quality_baseline": {
+    "dataset": "mmlu_pro",
+    "seed": 248,
+    "n": 500,
+    "accuracy": 0.302,
+    "backend": "vllm",
+    "tau": 0.95,
+    "registry_file": "src/eval/inference/baselines/results/mistralai_Mistral-7B-Instruct-v0.3/quality_vllm.json",
+    "usage": "export INFERENCE_BENCH_QUALITY_BASELINE_BACKEND=vllm at eval time"
+  },
+  "vllm_default_launcher": "src/starting_points/vllm_running/start_server.sh with INFERENCE_BENCH_MAX_MODEL_LEN=32768 (default 131072 exceeds Mistral context)",
+  "request_pool_workaround": {
+    "tool": "senpai/research/build_requests_jsonl.py",
+    "out_dir": "src/eval/inference/baselines/speed/vllm/{A,B,C}/<model_safe>/requests.jsonl",
+    "needed_when": "runner.py is unpatched (BatchEncoding bug). After rebase onto 69b0c3d the runner regenerates requests live; this workaround becomes optional."
+  },
+  "env_workarounds": {
+    "VLLM_USE_FLASHINFER_SAMPLER": "0",
+    "note_VLLM_USE_FLASHINFER_SAMPLER": "FlashInfer JIT compile of sampling kernels needs curand.h which is not in CUDA-13.2-runtime on this pod (libcurand-dev-13-2 unavailable in apt). Disable + fall back to native PyTorch sampler.",
+    "INFERENCE_BENCH_ALLOW_HF_DOWNLOAD": "1",
+    "INFERENCE_BENCH_QUALITY_BASELINE_BACKEND": "vllm",
+    "INFERENCE_BENCH_DATASET_HARD_TRUNCATE": "0 (only needed pre-rebase)",
+    "INFERENCE_BENCH_MAX_MODEL_LEN": "32768 (Mistral's actual context)"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "format_version": 2,
+  "note": "",
+  "base_model": "mistralai/Mistral-7B-Instruct-v0.3",
+  "datasets": {
+    "mmlu_pro": [
+      {
+        "generated_at_unix": 1779491098,
+        "dataset": "mmlu_pro",
+        "seed": 248,
+        "n": 500,
+        "accuracy": 0.302,
+        "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+        "server_url": "http://127.0.0.1:8000",
+        "baseline_log_file": "src/eval/inference/baselines/results/mistralai_Mistral-7B-Instruct-v0.3/quality/vllm/mmlu_pro/248_500/baseline_generations.jsonl",
+        "baseline_metrics_file": "src/eval/inference/baselines/results/mistralai_Mistral-7B-Instruct-v0.3/quality/vllm/mmlu_pro/248_500/baseline_metrics.json"
+      }
+    ]
+  },
+  "backend": "vllm",
+  "kind": "quality"
+}
