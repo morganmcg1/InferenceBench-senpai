@@ -65,9 +65,33 @@ should not be directly compared to these numbers without an H100 rerun.
 | TGI default          |  3.30x | 1.14x |  1.37x | 41.94x | 1.80x |
 | PyTorch baseline     |  1.00x | 1.00x |  1.00x |  1.00x | 1.00x |
 
+## Runtime Constraints (RTX PRO 6000 pod, observed live)
+
+- **FLASHINFER is a failed path.** FlashInfer JIT fails on this Blackwell
+  toolkit/headers (human team note 16:29Z and 16:34Z). Use
+  `VLLM_ATTENTION_BACKEND=FLASH_ATTN` instead. `runtime_env.sh` now defaults
+  `VLLM_USE_FLASHINFER_SAMPLER=0` and `VLLM_DISABLE_FLASHINFER_PREFILL=1`.
+- **`--kv-cache-dtype fp8` is a failed path.** FlashAttention rejects fp8 KV
+  on this device. Use auto/default KV dtype.
+- **`--max-model-len 131072` is rejected by vLLM 0.11**; use ≤ 32768.
+  `runtime_env.sh` now defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768`.
+- **Mistral tokenizer needs `--tokenizer-mode mistral`** to avoid
+  `LlamaTokenizer has no attribute all_special_tokens_extended` on vLLM 0.11.
+- **vLLM 0.11.0 import deps** patched on the pod: `cbor2`, `pyzmq`,
+  `nvidia-cuda-runtime-cu12`, `nvidia-cublas-cu12`, `nvidia-cudnn-cu12`,
+  `transformers<5.0`. If your vLLM import fails, re-apply these.
+- Always `source "$PROBLEM_DIR/senpai/runtime_env.sh"` immediately before
+  launch so `LD_LIBRARY_PATH`, `CPATH`, and the FlashInfer-off env vars are
+  set on every fresh shell.
+
 ## Update History
 
 - 2026-05-24 — Initial creation. Preflight passes for all scenarios via
   imported scoring assets (`rtxpro6000-seed248`). No SENPAI-validated
   launcher yet; first round of student PRs initialized for A, B, C in
   parallel under shared-GPU slot coordination.
+- 2026-05-24 17:15Z — Recorded FLASHINFER, fp8 KV, max-model-len 131072, and
+  Mistral tokenizer-mode runtime constraints based on human team notes and
+  live PR feedback (#66, #67, #68). Sent PR #66 back to r3-frieren with
+  orphan-reap authorization; commented on #67 and #68 with the corrected
+  non-FLASHINFER, non-fp8 launcher recipes.
