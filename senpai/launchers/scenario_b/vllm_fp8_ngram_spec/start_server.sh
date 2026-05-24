@@ -39,13 +39,16 @@ echo "MODEL_ID=${MODEL_ID} HOST=${HOST} PORT=${PORT} MAX_MODEL_LEN=${MAX_MODEL_L
 echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND}"
 echo "VLLM_USE_FLASHINFER_SAMPLER=${VLLM_USE_FLASHINFER_SAMPLER} VLLM_DISABLE_FLASHINFER_PREFILL=${VLLM_DISABLE_FLASHINFER_PREFILL}"
 
+# Advisor finding (PR #46 frieren): --quantization fp8 (FP8 W8A8) fails MMLU-Pro quality gate
+# (0.282 vs baseline 0.298, ratio 0.946 < tau 0.95). Drop FP8 weight quant per fallback rule #2.
+# Keep --kv-cache-dtype fp8 (KV bytes halved per decode step) and n-gram speculative decoding
+# (the dominant lever at concurrency=1 on Scenario B).
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
     --host "${HOST}" \
     --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization 0.92 \
-    --quantization fp8 \
     --kv-cache-dtype fp8 \
     --max-num-seqs 32 \
     --max-num-batched-tokens 4096 \
