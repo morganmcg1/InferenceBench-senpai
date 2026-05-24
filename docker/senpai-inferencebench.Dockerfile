@@ -117,15 +117,48 @@ RUN uv pip install --system --no-cache \
         smac \
         tiktoken \
         tokenizers \
-        transformers \
+        "transformers>=4.55.2,<4.58" \
         trl \
         wandb \
         wheel
 
-RUN uv pip install --system --no-cache xformers || true && \
-    uv pip install --system --no-cache --no-deps "vllm==${VLLM_VERSION}" && \
-    uv pip install --system --no-cache "vllm==${VLLM_VERSION}" --torch-backend=auto || true && \
+RUN uv pip install --system --no-cache \
+        --index-url https://download.pytorch.org/whl/cu128 \
+        torch==2.8.0 \
+        torchvision==0.23.0 \
+        torchaudio==2.8.0 \
+        xformers==0.0.32.post1 && \
+    uv pip install --system --no-cache \
+        "vllm==${VLLM_VERSION}" \
+        python-multipart \
+        uvloop \
+        "transformers>=4.55.2,<4.58" && \
     uv pip install --system --no-cache --prerelease=allow flashinfer-python || true
+
+RUN export LD_LIBRARY_PATH="$(python - <<'PY'
+import site
+from pathlib import Path
+
+libs = []
+for root in site.getsitepackages() + [site.getusersitepackages()]:
+    base = Path(root) / "nvidia"
+    if base.exists():
+        libs.extend(str(path) for path in base.glob("*/lib") if path.is_dir())
+print(":".join(dict.fromkeys(libs)))
+PY
+)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" && \
+    python - <<'PY' && \
+    python -m vllm.entrypoints.openai.api_server --help >/tmp/vllm_api_server_help.txt
+import torch
+import transformers
+import vllm
+
+assert torch.__version__.startswith("2.8.0"), torch.__version__
+assert vllm.__version__ == "0.11.0", vllm.__version__
+print("torch", torch.__version__)
+print("transformers", transformers.__version__)
+print("vllm", vllm.__version__)
+PY
 
 RUN cd /opt && \
     git clone --depth=1 https://github.com/rank-and-file/filelock_workarounds.git

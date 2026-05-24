@@ -194,12 +194,15 @@ except Exception as exc:
 try:
     import vllm
     report["vllm_version"] = getattr(vllm, "__version__", "unknown")
+    from vllm.entrypoints.openai import api_server  # noqa: F401
+    report["vllm_openai_api_server"] = True
 except Exception as exc:
     report["vllm_error"] = str(exc)
     sys.exit(3)
 
 print(json.dumps(report, sort_keys=True))
 '''
+    env = runtime_import_env()
     try:
         result = subprocess.run(
             [sys.executable, "-c", code],
@@ -207,6 +210,7 @@ print(json.dumps(report, sort_keys=True))
             capture_output=True,
             check=False,
             timeout=45,
+            env=env,
         )
     except Exception as exc:
         status = "fail" if require_vllm else "warn"
@@ -219,6 +223,43 @@ print(json.dumps(report, sort_keys=True))
     status = "fail" if require_vllm else "warn"
     detail = stdout or result.stderr.strip() or f"runtime import check exited {result.returncode}"
     return Check("python_runtime", status, detail, data)
+
+
+def runtime_import_env() -> dict[str, str]:
+    env = os.environ.copy()
+    libs = nvidia_wheel_library_paths()
+    if libs:
+        env["LD_LIBRARY_PATH"] = ":".join(libs + ([env["LD_LIBRARY_PATH"]] if env.get("LD_LIBRARY_PATH") else []))
+    return env
+
+
+def nvidia_wheel_library_paths() -> list[str]:
+    code = r'''
+import json
+import site
+from pathlib import Path
+
+libs = []
+for root in site.getsitepackages() + [site.getusersitepackages()]:
+    base = Path(root) / "nvidia"
+    if base.exists():
+        libs.extend(str(path) for path in base.glob("*/lib") if path.is_dir())
+print(json.dumps(list(dict.fromkeys(libs))))
+'''
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        return []
+    try:
+        data = json.loads(result.stdout)
+    except Exception:
+        return []
+    return [item for item in data if isinstance(item, str)]
 
 
 def maybe_json(raw: str) -> dict[str, Any] | None:

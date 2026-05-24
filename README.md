@@ -23,12 +23,15 @@ What changed for SENPAI:
   multi-student, one-GPU runs. It records owner/PR/scenario/TTL and can wrap
   heavy evaluation commands without changing the official benchmark harness.
 - `senpai/preflight.py` now catches broken torch/vLLM runtime imports in the
-  target image before the 2 hour clock opens.
+  target image before the 2 hour clock opens, including the vLLM OpenAI API
+  server entrypoint used by launcher experiments.
 - The cutoff harvester archives Claude Code logs from `/root` and per-student
   homes under `/workspace/home-*`, plus SENPAI student logs, before deleting
   pods.
 - Added a combined SENPAI + InferenceBench container definition at
-  `docker/senpai-inferencebench.Dockerfile` and a GHCR build workflow.
+  `docker/senpai-inferencebench.Dockerfile` and a GHCR build workflow. The
+  image pins the vLLM-compatible CUDA 12.8 torch/xformers stack even when the
+  CoreWeave base image ships a newer torch.
 - Configured the expected W&B destination as
   `wandb-applied-ai-team/inferencebench-senpai`.
 - Kept reusable SENPAI launchers, research notes, scoring preflight, and W&B

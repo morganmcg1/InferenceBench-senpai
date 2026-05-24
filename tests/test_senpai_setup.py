@@ -69,6 +69,15 @@ def test_preflight_fails_without_tokenizer_or_requests(monkeypatch) -> None:
     assert "deterministic request files are incomplete" in check.detail
 
 
+def test_runtime_import_env_prepends_nvidia_wheel_libs(monkeypatch) -> None:
+    monkeypatch.setattr(preflight, "nvidia_wheel_library_paths", lambda: ["/site/nvidia/cuda_runtime/lib"])
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/existing")
+
+    env = preflight.runtime_import_env()
+
+    assert env["LD_LIBRARY_PATH"] == "/site/nvidia/cuda_runtime/lib:/existing"
+
+
 def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
     out = tmp_path / "workspace"
     # Exercise the script through its file operations without requiring a GPU.
