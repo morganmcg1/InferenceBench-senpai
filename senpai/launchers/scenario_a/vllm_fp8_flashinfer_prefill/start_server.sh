@@ -33,17 +33,19 @@ export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-TRITON_ATTN}"
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"
 
-echo "=== vLLM Scenario A launcher: FP8 W8A8 + FP8 KV + TRITON_ATTN + no chunked prefill ==="
+echo "=== vLLM Scenario A launcher: bf16 W + FP8 KV + TRITON_ATTN + no chunked prefill ==="
 echo "MODEL_ID=${MODEL_ID} HOST=${HOST} PORT=${PORT} MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND} FLASHINFER_SAMPLER=${VLLM_USE_FLASHINFER_SAMPLER} DISABLE_FLASHINFER_PREFILL=${VLLM_DISABLE_FLASHINFER_PREFILL}"
 
+# FP8 W8A8 dropped per advisor 2026-05-24 08:03 UTC: r4-frieren confirmed MMLU-Pro
+# observed 0.282 vs baseline 0.298 (ratio 0.946 < tau 0.95) on Mistral-7B with
+# --quantization fp8. Quality is a model-level property. FP8 KV cache retained.
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
     --host "${HOST}" \
     --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization 0.92 \
-    --quantization fp8 \
     --kv-cache-dtype fp8 \
     --max-num-seqs 16 \
     --max-num-batched-tokens 16384 \
