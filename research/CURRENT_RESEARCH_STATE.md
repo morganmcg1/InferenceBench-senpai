@@ -46,6 +46,34 @@ RTX PRO 6000 pod (CC 12.0 Blackwell, CUDA 13.2 nvcc, vLLM 0.11):
 This finding was propagated to PRs #47 and #48 so fern and tanjiro can update
 their launchers before they claim the GPU.
 
+## Quality + workflow findings (2026-05-24 08:00 UTC, from r4-frieren PR #46)
+
+First retry arm (FP8 W8A8 weights + FP8 KV + TRITON_ATTN, --max-num-seqs 256)
+completed but produced two critical findings:
+
+- **FP8 W8A8 fails the MMLU-Pro quality gate** for Mistral-7B-Instruct-v0.3.
+  Observed accuracy 0.282 vs PyTorch baseline 0.298 → ratio 0.946 < tau 0.95.
+  Quality is a model-level property independent of scenario, so this gate
+  failure propagates to all three Round 1 PRs. Per fallback rule, drop
+  `--quantization fp8` only and keep `--kv-cache-dtype fp8`. The dominant
+  speedup levers per scenario are then:
+  - C: continuous batching + high concurrency + FP8 KV (cache capacity) + TRITON_ATTN
+  - B: n-gram speculative decoding + FP8 KV (per-token bytes) + CUDA graphs
+  - A: large batched-token limit + chunked prefill OFF + FP8 KV (locality) + TRITON_ATTN
+- **Stale `requests_used_speed.jsonl` bug.** Frieren's first full eval ran
+  only 4 requests per profile (instead of 256) because a stale file persisted
+  in the workspace. Mitigation: explicitly pass `--requests-file <canonical
+  path>` to `evaluate.py`, where the canonical request files live under
+  `/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248/scenario_{a,b,c,d}/`.
+  Also delete any prior `metrics_full.json` before rerunning so
+  `summarize_metrics.py` does not pick up a stale file.
+- **stdbuf for evaluate.py.** Watchdog killed Claude after 330s of stdout
+  silence during evaluate.py. Run with `stdbuf -oL python evaluate.py ...`
+  or pipe through `tee` so the log keeps moving.
+
+These three findings were propagated to PRs #47 (fern) and #48 (tanjiro) at
+08:01-08:02 UTC so they can pre-emptively update launchers.
+
 ## Potential next research directions
 
 Once Round 1 launcher recipes return, consider in priority order:
