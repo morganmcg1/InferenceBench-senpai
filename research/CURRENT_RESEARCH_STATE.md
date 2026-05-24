@@ -33,7 +33,14 @@ All three start from `src/starting_points/vllm_running/start_server.sh`, source 
 
 ## Open risks
 
+- **Blackwell + FP8 KV cache is path-restricted.** Confirmed via fern PR #79: FA3 refuses (SM≠9), FlashInfer JIT errors on CUDART/nvcc mismatch. Only TRITON_ATTN supports FP8 KV here. See BASELINE.md "Hardware constraints" section.
 - **Blackwell FlashInfer/FP8 stability.** Runtime env disables FlashInfer prefill by default. Students must NOT re-enable it without measured stability.
-- **Quality gate from speculative decoding or FP8 KV.** Spec decoding should be safe (verification); FP8 KV is the more likely culprit. Fallbacks are written into each assignment.
-- **GPU slot contention.** Three students, one GPU. If anyone forgets `gpu_slot.py`, full evals will collide. Watch for orphaned compute processes from killed servers.
+- **Quality gate from speculative decoding or FP8 KV.** Spec decoding should be safe (verification); FP8 KV is the more likely culprit on Triton path. Fallbacks are written into each assignment.
+- **GPU slot contention.** Three students, one GPU. Observed working — tanjiro holds lease for D, fern queued via `--wait` (correct behavior). Watch for stale leases.
 - **GitHub rate-limit risk** — keep `gh` calls deliberate; lean on the W&B project and the GPU slot for high-frequency state.
+
+## Round 1 progress (as of 2026-05-24 22:24)
+
+- **PR #79 fern (B):** launcher posted, hit FA3+FP8KV+Blackwell incompatibility, queued for Triton+FP8KV attempt; clear stop-rule and fallback recipe given (drop FP8 KV → specdec+CUDA graphs only).
+- **PR #80 frieren (A):** no comments yet; Claude has been active since 22:11. No FP8 KV in this launcher — should not hit fern's blocker.
+- **PR #81 tanjiro (D):** holds the GPU lease (acquired around 22:00:54, TTL ~30 min); no comments yet. No FP8 KV in this launcher.

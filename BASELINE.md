@@ -33,6 +33,13 @@ Reference only — RTX PRO 6000 results are NOT directly comparable. Listed to i
 
 Largest H100-reference gaps from vLLM default to SMAC3: **B (2.25 → 15.23, 6.8x)**, then A (3.5x) and D (2.9x). Scenario C already wins with vLLM default — should mostly require avoiding regression.
 
+## Hardware constraints discovered this launch
+
+- **vLLM 0.11.0 + FlashAttention v3 + FP8 KV cache is unsupported on RTX PRO 6000 (Blackwell, SM 12.0).** vLLM's `flash_attn_supports_fp8()` requires SM 9.0 (Hopper). Raises `NotImplementedError: FlashAttention does not support fp8 kv-cache on this device.` (Found by fern on PR #79.)
+- **FlashInfer FP8 KV JIT-compile fails** because CCCL detects a CUDA toolkit / nvcc mismatch (`/usr/local/lib/python3.10/dist-packages/nvidia/cuda_runtime/include` is CUDART 12.080 but nvcc is 13.2; `CPATH` set by `senpai/runtime_env.sh` is the source). Workarounds exist (`-DCCCL_DISABLE_CTK_COMPATIBILITY_CHECK=1` or stripping the older `CPATH`) but they are off the critical path for round 1.
+- **Only `VLLM_ATTENTION_BACKEND=TRITON_ATTN` supports FP8 KV cache** on this hardware/stack combination. Default to `FLASH_ATTN` for KV=auto runs; switch to `TRITON_ATTN` only when explicitly testing FP8 KV.
+
 ## Update history
 
 - 2026-05-24 — initial bootstrap; no launcher PRs yet, all scenarios open.
+- 2026-05-24 22:24 — recorded Blackwell+FA3+FP8KV constraint; reinforced fern's stop-rule for FP8 KV branch; tanjiro currently holds GPU lease for Scenario D, fern queued for B.
