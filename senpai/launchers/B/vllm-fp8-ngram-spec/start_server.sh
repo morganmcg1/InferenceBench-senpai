@@ -53,11 +53,25 @@ unset _runtime_env_candidates _cand
 # Force integer device index — some nodes expose GPU UUIDs which vLLM cannot parse.
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-# runtime_env.sh appends pip-installed CUDA 12.9 headers to CPATH, which
-# conflicts with the system nvcc (CUDA 13.2) and trips flashinfer JIT
-# compilation. We only need LD_LIBRARY_PATH at runtime; nvcc finds its
-# headers via /usr/local/cuda/include automatically.
-unset CPATH
+# runtime_env.sh appends pip-installed CUDA 12.9 headers (cuda_runtime
+# brings cooperative_groups.h) to CPATH, which conflicts with the system
+# nvcc CUDA 13.2 CCCL headers and trips flashinfer JIT compilation. But
+# the system CUDA does not ship libcurand headers, so flashinfer needs
+# pip nvidia-curand on CPATH for curand.h. Whitelist only the pip nvidia
+# headers that don't conflict with the system toolchain.
+_NVIDIA_CPATH_WHITELIST=""
+for _site in /usr/local/lib/python3.10/dist-packages /usr/lib/python3/dist-packages; do
+    [ -d "$_site/nvidia" ] || continue
+    for _pkg in curand cublas cudnn cuda_nvrtc cuda_cupti; do
+        _inc="$_site/nvidia/$_pkg/include"
+        if [ -d "$_inc" ]; then
+            _NVIDIA_CPATH_WHITELIST="${_NVIDIA_CPATH_WHITELIST}:${_inc}"
+        fi
+    done
+done
+_NVIDIA_CPATH_WHITELIST="${_NVIDIA_CPATH_WHITELIST#:}"
+export CPATH="${_NVIDIA_CPATH_WHITELIST}"
+unset _NVIDIA_CPATH_WHITELIST _site _pkg _inc
 
 # Use FlashAttention backend on Blackwell for the decode-heavy single-stream path.
 export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
