@@ -1,6 +1,6 @@
 # SENPAI Research State — ib-20260524-leasefix-r1
 
-- **As of:** 2026-05-24 (initial state for this research tag)
+- **As of:** 2026-05-24 22:25 UTC (post round-1 first review)
 - **Most recent human research direction:** No GitHub Issues open. Programme contract remains `target/program.md`: maximise per-scenario `speedup_over_pytorch` on Mistral-7B-Instruct-v0.3 with a 2-hour wall-clock budget per scenario while passing the MMLU-Pro quality gate.
 
 ## Current focus
@@ -9,15 +9,23 @@ Establish the **first measured SENPAI baseline launchers** on the RTX PRO 6000 B
 
 We have **1 GPU shared by 3 students** for this round, so the three assignments are spread across three different scenarios to minimise serialisation of full evaluations.
 
-## Round 1 assignments
+## Round 1 assignments + round-1.5 corrections
 
-| Student | Scenario | Hypothesis | PR |
-|---------|----------|------------|----|
-| frieren | A — input-heavy, 1/ttft.p50 | vLLM with chunked prefill, `max_num_batched_tokens=16384`, `FLASH_ATTN`, FP8 KV cache, CUDA graphs, prefix caching | #75 |
-| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram speculative decoding (5 tokens, lookup 2–4), FP8 KV cache, CUDA graphs, `FLASH_ATTN` | #76 |
-| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, FP8 KV cache, CUDA graphs, `FLASH_ATTN` | #87 |
+| Student | Scenario | Hypothesis | PR | State |
+|---------|----------|------------|----|-------|
+| frieren | A — input-heavy, 1/ttft.p50 | vLLM with chunked prefill, `max_num_batched_tokens=16384`, FLASH_ATTN, **FP8 KV cache**, CUDA graphs, prefix caching | #75 | **CLOSED, negative (boot failure)** — FLASH_ATTN+FP8KV impossible on Blackwell SM 12.0 |
+| frieren | A — input-heavy, 1/ttft.p50 | corrected: drop FP8 KV, keep FLASH_ATTN + chunked prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs | **#89** | WIP (replaces #75) |
+| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram-5 speculative decoding, CUDA graphs, FLASH_ATTN; **student self-corrected to drop `--kv-cache-dtype fp8`** | #76 | WIP, blessed |
+| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, FP8 KV, CUDA graphs; **student self-corrected to switch attention backend to TRITON_ATTN** (canonical Blackwell FP8 KV path) | #87 | WIP, blessed |
 
-Common ground: every launcher sources `senpai/runtime_env.sh`, uses `FLASH_ATTN` (FlashInfer remains disabled per the runtime helper), wraps heavy GPU work in `senpai/gpu_slot.py run --wait`, runs quick eval before full, runs a clean relaunch before declaring terminal, and posts a `SENPAI-RESULT` marker per `program.md`.
+**Critical lesson learned in round 1:** `VLLM_ATTENTION_BACKEND=FLASH_ATTN` combined with `--kv-cache-dtype fp8` is **impossible on RTX PRO 6000 Blackwell (SM 12.0)** in vLLM 0.11. The FA+FP8KV path is hard-gated to FA3 + Hopper SM 9.0. On Blackwell, vLLM forces FA back to v2, which does not implement FP8 KV. Hard `NotImplementedError` at engine init. Do not assign this combo again in this run.
+
+Canonical Blackwell FP8 KV paths:
+1. **TRITON_ATTN backend** — `platforms/cuda.py` auto-routes FP8 KV to TRITON_ATTN on non-Hopper. tanjiro is exercising this on Sc C.
+2. **FlashInfer backend** — supports FP8 KV but `senpai/runtime_env.sh` disables FlashInfer by default on Blackwell shakedown. Re-enabling is allowed if a PR is explicitly testing it.
+3. **Drop FP8 KV entirely** — bf16 KV cache is fine on Mistral-7B with 96GB and burst concurrency ≤ 64. fern (Sc B) and the corrected frieren PR #89 (Sc A) are using this path.
+
+Common ground (still): every launcher sources `senpai/runtime_env.sh`, wraps heavy GPU work in `senpai/gpu_slot.py run --wait`, runs quick eval before full, runs a clean relaunch before declaring terminal, and posts a `SENPAI-RESULT` marker per `program.md`.
 
 ## Why these three configurations
 
