@@ -43,10 +43,10 @@ Key PyTorch baseline numbers on **RTX PRO 6000 seed 248** (from the JSONs above)
 
 Primary metric per scenario (from `senpai/summarize_metrics.py`):
 
-- **A:** `(1 / candidate_ttft_p50) / (1 / 0.4385) = candidate_ttft_p50_speedup` (burst profile only)
-- **B:** `(1 / candidate_tpot_p50) / (1 / 0.02515) = candidate_tpot_p50_speedup` (burst profile only)
-- **C:** geomean of `candidate_req_tput / pytorch_req_tput` across burst/poisson/constant profiles
-- **D:** geomean of `(1/candidate_ttft_p50)/(1/pytorch_ttft_p50)` × `(1/candidate_tpot_p50)/(1/pytorch_tpot_p50)` (burst only)
+- **A:** burst-profile `1 / ttft_p50`; speedup = candidate(1/ttft) / baseline(1/ttft) = baseline_ttft / candidate_ttft.
+- **B:** burst-profile `1 / tpot_p50`; speedup = baseline_tpot / candidate_tpot.
+- **C:** geomean across burst/poisson/constant of `request_throughput_req_per_s`; speedup = geomean(candidate_rps) / geomean(baseline_rps).
+- **D:** burst-profile geomean of three terms — `1/ttft_p50`, `1/tpot_p50`, `generation_throughput_tokens_per_s`; speedup = geomean(candidate triple) / geomean(baseline triple).
 
 Quality gate: MMLU-Pro tau=0.95 against baseline accuracy ≈ 0.298 (seed 248, 500 samples).
 
