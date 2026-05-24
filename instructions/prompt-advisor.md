@@ -120,6 +120,13 @@ launcher prep, log analysis, or research on adjacent directions. Prevent
 concurrent heavy GPU runs from corrupting measurements, but keep idle students
 productive.
 
+For shared-pod runs, establish a machine-readable GPU slot at the start of the
+run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status` and ask students to wrap
+heavy server/evaluator commands with `gpu_slot.py run` so ownership, PR,
+scenario, TTL, and release are visible without relying on comment timing alone.
+Use PR comments for high-level coordination, but trust the slot file for who is
+allowed to run the next heavy workload.
+
 In shared-pod runs, make teardown ownership explicit. Students should kill only
 their own server process group and should not use broad `pkill` commands that
 can stop another student's measurement. Ask students to post `SLOT-FREE` or an

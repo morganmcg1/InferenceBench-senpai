@@ -14,7 +14,19 @@ What changed for SENPAI:
   management, and LLM inference optimization scope.
 - Added `senpai/` helpers for SENPAI-only functionality:
   `preflight.py`, `materialize_requests.py`, `create_task_workspace.py`,
-  `summarize_metrics.py`, and `log_metrics_to_wandb.py`.
+  `gpu_slot.py`, `summarize_metrics.py`, and `log_metrics_to_wandb.py`.
+- Task workspaces created by `senpai/create_task_workspace.py` now include
+  `eval_env.sh` and `clean_eval_artifacts.sh` so students inherit the base
+  model, scenario, deterministic request file, PyTorch baseline metrics path,
+  quality registry, and runtime cache setup before evaluation.
+- `senpai/gpu_slot.py` provides a lightweight shared-pod GPU lease for
+  multi-student, one-GPU runs. It records owner/PR/scenario/TTL and can wrap
+  heavy evaluation commands without changing the official benchmark harness.
+- `senpai/preflight.py` now catches broken torch/vLLM runtime imports in the
+  target image before the 2 hour clock opens.
+- The cutoff harvester archives Claude Code logs from `/root` and per-student
+  homes under `/workspace/home-*`, plus SENPAI student logs, before deleting
+  pods.
 - Added a combined SENPAI + InferenceBench container definition at
   `docker/senpai-inferencebench.Dockerfile` and a GHCR build workflow.
 - Configured the expected W&B destination as
@@ -82,8 +94,9 @@ Shared-pod shakedown notes:
   server process group you launched; avoid broad `pkill` cleanup that can stop
   another student's active benchmark server.
 - Use SENPAI's cluster cutoff harvester before deleting deployments so
-  `/root/.claude` conversations are archived to the PVC. A bare cleanup job
-  that only deletes deployments cannot recover `.claude` after pods are gone.
+  root and per-student `.claude` conversations are archived to the PVC. A bare
+  cleanup job that only deletes deployments cannot recover `.claude` after pods
+  are gone.
 
 For five parallel 2 hour InferenceBench SENPAI replicates using one advisor pod
 and one shared-student pod per replicate, arm the cutoff/harvest job as part of

@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from senpai import create_task_workspace, materialize_requests, preflight
+from senpai import create_task_workspace, gpu_slot, materialize_requests, preflight, summarize_metrics
 
 
 def test_tokenized_length_handles_batchencoding_like_dict() -> None:
@@ -88,5 +88,64 @@ def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
         sys.argv = argv
 
     assert (out / "task" / "evaluate.py").is_file()
+    assert (out / "task" / "eval_env.sh").is_file()
+    assert (out / "task" / "clean_eval_artifacts.sh").is_file()
     assert (out / "task" / "scenario.json").is_file()
     assert (out / "inference_eval" / "runner.py").is_file()
+
+    env_text = (out / "task" / "eval_env.sh").read_text(encoding="utf-8")
+    assert "INFERENCE_BENCH_BASE_MODEL" in env_text
+    assert "INFERENCE_BENCH_SCENARIO" in env_text
+    assert "INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" in env_text
+
+
+def test_summarize_metrics_reads_wrapped_baseline(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics.json"
+    metrics.write_text(
+        '{"scenario":"A","profiles":{"burst":{"ttft":{"p50":2.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}},"quality_check":{"pass":true}}',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline_metrics.json"
+    baseline.write_text(
+        '{"baseline":{"profiles":{"burst":{"ttft":{"p50":4.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}}}}',
+        encoding="utf-8",
+    )
+
+    class Args:
+        metrics_json = str(metrics)
+        scenario = "A"
+        baseline_metrics_json = str(baseline)
+        baseline_primary = None
+        wandb_run_id = []
+        status = "complete"
+        terminal = True
+        pending_arms = False
+
+    result = summarize_metrics.build_result(Args())
+
+    assert result["primary_metric"]["name"] == "scenario/A/speedup_over_pytorch"
+    assert result["primary_metric"]["value"] == 2.0
+
+
+def test_gpu_slot_acquire_release(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "C"
+        purpose = "test"
+        ttl_s = 60
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+
+    lease = gpu_slot.acquire(path, Args())
+    assert lease["owner"] == "student-a"
+    assert gpu_slot.read_lease(path)["pr"] == "123"
+
+    assert gpu_slot.heartbeat(path, "student-a", pr="123", ttl_s=120) is True
+    assert gpu_slot.release(path, "student-a", pr="123") is True
+    assert gpu_slot.read_lease(path) is None

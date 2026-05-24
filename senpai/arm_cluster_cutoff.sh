@@ -2,10 +2,10 @@
 # Arm a cluster-side SENPAI cutoff job for InferenceBench runs.
 #
 # The job waits until the expected SENPAI pods are Ready, starts the wall-clock
-# budget, harvests Claude Code conversation logs from /root/.claude into the
-# shared PVC shortly before cutoff, then deletes the tagged SENPAI resources.
-# This keeps the shutdown and transcript archive independent of the operator's
-# laptop staying online.
+# budget, harvests Claude Code conversation logs from root and per-student homes
+# into the shared PVC shortly before cutoff, then deletes the tagged SENPAI
+# resources. This keeps the shutdown and transcript archive independent of the
+# operator's laptop staying online.
 
 set -euo pipefail
 
@@ -272,12 +272,21 @@ copy_one_pod() {
   kubectl -n "$NAMESPACE" logs "$pod" --tail=-1 > "${pod_dir}/pod.log" 2> "${pod_dir}/pod.log.err" || true
   log "Harvesting Claude Code logs from ${pod} (${tag})"
   if kubectl -n "$NAMESPACE" exec "$pod" -- sh -lc '
-      cd /root || exit 0
       set --
-      [ -d .claude/projects ] && set -- "$@" .claude/projects
-      [ -d .claude/todos ] && set -- "$@" .claude/todos
-      [ -f .claude.json ] && set -- "$@" .claude.json
+      for home in /root /workspace/home-* /workspace/senpai-*; do
+        [ -d "$home" ] || continue
+        rel="${home#/}"
+        [ -d "$home/.claude/projects" ] && set -- "$@" "$rel/.claude/projects"
+        [ -d "$home/.claude/todos" ] && set -- "$@" "$rel/.claude/todos"
+        [ -f "$home/.claude.json" ] && set -- "$@" "$rel/.claude.json"
+        [ -f "$home/.claude/settings.json" ] && set -- "$@" "$rel/.claude/settings.json"
+      done
+      for logs in /workspace/senpai-*/student_logs /workspace/student_logs /workspace/senpai-*/logs; do
+        [ -e "$logs" ] || continue
+        set -- "$@" "${logs#/}"
+      done
       [ "$#" -gt 0 ] || exit 0
+      cd /
       tar -czf - "$@"
     ' > "${pod_dir}/claude-code-logs.tgz" 2> "${pod_dir}/harvest.err"; then
     log "Harvested ${pod}"

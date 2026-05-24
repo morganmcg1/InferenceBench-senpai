@@ -260,6 +260,13 @@ This sets CUDA pip-package include/library paths and pod-local JIT caches that
 avoid common Blackwell/FlashInfer/vLLM startup failures. It is launch
 environment setup only; it does not modify the evaluator or scoring contract.
 
+In multi-student, one-GPU pods, coordinate heavy work with
+`senpai/gpu_slot.py`. This is only a lease file, not a benchmark runner: it
+records who owns the GPU, which PR/scenario they are testing, and when the
+lease expires. Students should still run the official task-local
+`./test_server.sh` and `evaluate.py`; the slot prevents accidental overlapping
+full workloads, stale port ownership, and broad cleanup commands.
+
 ## Running
 
 For local or pod-level exploration, start from a launcher recipe and copy it
@@ -270,15 +277,17 @@ task workspace contains `evaluate.py`, `test_server.sh`, `timer.sh`,
 Inside an active InferenceBench task workspace:
 
 ```bash
+source ./eval_env.sh
+./clean_eval_artifacts.sh
 ./test_server.sh > agent/server.log 2>&1 &
 python evaluate.py --quick --json-output-file metrics_quick.json
 python evaluate.py --json-output-file metrics_full.json
 python "$PROBLEM_DIR/senpai/summarize_metrics.py" metrics_full.json \
   --scenario A \
-  --baseline-metrics-json /path/to/pytorch_baseline_metrics.json
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS"
 python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_full.json \
   --scenario A \
-  --baseline-metrics-json /path/to/pytorch_baseline_metrics.json \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
   --name "$STUDENT_NAME/<short-description>" \
   --group "<hypothesis-or-pr>"
 ```

@@ -44,9 +44,11 @@ senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
 
 The check fails if deterministic requests, PyTorch speed baselines, MMLU-Pro
 quality samples, the PyTorch quality registry, W&B, or the requested hardware
-are missing. Fix those before assigning serving PRs. RTX PRO 6000 results are
-for orchestration and search-direction shakedown; repeat winners on H100 before
-claiming README leaderboard wins.
+are missing. It also imports torch and vLLM inside the target image so ABI or
+dependency drift is caught before the optimization clock starts. Fix those
+before assigning serving PRs. RTX PRO 6000 results are for orchestration and
+search-direction shakedown; repeat winners on H100 before claiming README
+leaderboard wins.
 
 To build the required scoring assets on the current RTX PRO 6000 cluster,
 outside the two-hour SENPAI optimization clock:
@@ -90,6 +92,12 @@ python senpai/create_task_workspace.py --scenario A \
   --output /tmp/inferencebench-A --starting-point vllm_running
 ```
 
+The workspace includes `task/eval_env.sh`,
+`task/clean_eval_artifacts.sh`, `task/test_server.sh`, and `task/evaluate.py`.
+Source `eval_env.sh` before manual commands; it pins the base model, scenario,
+request file, PyTorch baseline metrics path, quality registry, and runtime
+cache setup for the copied evaluator.
+
 ## Runtime Environment
 
 In shared RTX PRO 6000 shakedown pods, source the runtime helper before
@@ -103,13 +111,29 @@ It exports CUDA pip-package include/library paths and pod-local JIT cache
 locations for vLLM, FlashInfer, Triton, and related backends. This is a
 process-local launch aid, not a benchmark harness change.
 
+## Shared GPU Slot
+
+In one-GPU, multi-student pods, use `gpu_slot.py` to serialize heavy benchmark
+work without adding a separate runner:
+
+```bash
+python senpai/gpu_slot.py status
+python senpai/gpu_slot.py run --owner "$STUDENT_NAME" --pr 123 --scenario C -- \
+  bash -lc 'cd /tmp/inferencebench-C/task && source ./eval_env.sh && ./clean_eval_artifacts.sh && ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --json-output-file metrics_full.json'
+```
+
+The lease records owner, PR, scenario, command, timestamps, and expiry in
+`/tmp/inferencebench-gpu-slot.json` by default. It prevents accidental
+overlapping full workloads while preserving the official `test_server.sh` plus
+`evaluate.py` evaluation path.
+
 ## Cluster Cutoff And Conversation Logs
 
 Use `arm_cluster_cutoff.sh` when starting Kubernetes SENPAI runs. It waits for
-the expected pods, starts the wall-clock budget, harvests `/root/.claude` from
-each tagged pod to the PVC before shutdown, deletes the tagged SENPAI
-deployments/configmaps/secrets, and starts a best-effort local mirror into
-`conversation_logs/`.
+the expected pods, starts the wall-clock budget, harvests `.claude` from root
+and per-student homes plus SENPAI student logs from each tagged pod to the PVC
+before shutdown, deletes the tagged SENPAI deployments/configmaps/secrets, and
+starts a best-effort local mirror into `conversation_logs/`.
 
 ```bash
 senpai/arm_cluster_cutoff.sh \

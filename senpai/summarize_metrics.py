@@ -93,7 +93,20 @@ def quality_metric(metrics: dict[str, Any]) -> tuple[str, float | None, dict[str
 
 
 def _load_metrics(path: str) -> dict[str, Any]:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} did not contain a JSON object")
+    return data
+
+
+def _metrics_payload(data: dict[str, Any]) -> dict[str, Any]:
+    baseline = data.get("baseline")
+    if isinstance(baseline, dict) and isinstance(baseline.get("profiles"), dict):
+        return baseline
+    metrics = data.get("metrics")
+    if isinstance(metrics, dict) and isinstance(metrics.get("profiles"), dict):
+        return metrics
+    return data
 
 
 def _baseline_primary_value(args: argparse.Namespace, scenario: str) -> float | None:
@@ -102,14 +115,14 @@ def _baseline_primary_value(args: argparse.Namespace, scenario: str) -> float | 
             raise ValueError("--baseline-primary must be positive")
         return float(args.baseline_primary)
     if args.baseline_metrics_json:
-        baseline_metrics = _load_metrics(args.baseline_metrics_json)
+        baseline_metrics = _metrics_payload(_load_metrics(args.baseline_metrics_json))
         _, value = primary_metric(baseline_metrics, scenario)
         return value
     return None
 
 
 def build_result(args: argparse.Namespace) -> dict[str, Any]:
-    metrics = json.loads(Path(args.metrics_json).read_text(encoding="utf-8"))
+    metrics = _metrics_payload(_load_metrics(args.metrics_json))
     scenario = infer_scenario(metrics, args.scenario)
     primary_name, primary_value = primary_metric(metrics, scenario)
     baseline_primary = _baseline_primary_value(args, scenario)

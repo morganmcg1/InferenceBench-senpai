@@ -15,6 +15,9 @@ QUALITY_BACKEND="${INFERENCE_BENCH_QUALITY_BASELINE_BACKEND:-torch}"
 LEADERBOARD_MODE=0
 REQUIRE_WANDB=1
 IMPORT_DIR="${INFERENCE_BENCH_SCORING_ASSETS_DIR:-}"
+SKIP_RUNTIME_IMPORTS=0
+ALLOW_MISSING_VLLM=0
+SKIP_TOKENIZER=0
 
 usage() {
   cat <<'EOF'
@@ -30,6 +33,9 @@ Options:
   --leaderboard-mode           Require H100-class preflight checks
   --base-model MODEL           Base model id
   --import-dir DIR             Copy DIR/baselines into src/eval/inference/baselines first
+  --skip-runtime-imports       Do not import torch/vLLM during preflight
+  --allow-missing-vllm         Warn instead of fail when vLLM import is broken
+  --skip-tokenizer             Do not check tokenizer/request sampling
   --no-wandb                   Do not require WANDB_API_KEY
   -h, --help                   Show this help
 EOF
@@ -42,6 +48,9 @@ while (($#)); do
     --leaderboard-mode) LEADERBOARD_MODE=1; EXPECTED_GPU="H100"; shift ;;
     --base-model) BASE_MODEL="$2"; shift 2 ;;
     --import-dir) IMPORT_DIR="$2"; shift 2 ;;
+    --skip-runtime-imports) SKIP_RUNTIME_IMPORTS=1; shift ;;
+    --allow-missing-vllm) ALLOW_MISSING_VLLM=1; shift ;;
+    --skip-tokenizer) SKIP_TOKENIZER=1; shift ;;
     --no-wandb) REQUIRE_WANDB=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -75,6 +84,15 @@ if [[ "$LEADERBOARD_MODE" == "1" ]]; then
 fi
 if [[ "$REQUIRE_WANDB" == "1" ]]; then
   args+=(--require-wandb)
+fi
+if [[ "$SKIP_RUNTIME_IMPORTS" == "1" ]]; then
+  args+=(--skip-runtime-imports)
+fi
+if [[ "$ALLOW_MISSING_VLLM" == "1" ]]; then
+  args+=(--allow-missing-vllm)
+fi
+if [[ "$SKIP_TOKENIZER" == "1" ]]; then
+  args+=(--skip-tokenizer)
 fi
 
 python "${args[@]}"

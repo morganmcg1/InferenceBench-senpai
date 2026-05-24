@@ -67,6 +67,22 @@ the main heavy GPU workload, keep making progress through smoke tests,
 low-memory probes, launcher prep, log analysis, or research that can inform the
 next GPU slot.
 
+In a shared-pod run, check the slot before heavy GPU work:
+
+```bash
+python "$PROBLEM_DIR/senpai/gpu_slot.py" status
+```
+
+When you run a server/evaluator workload that can occupy most of the GPU, wrap
+the whole start/evaluate/cleanup block so the slot is released even if the run
+fails:
+
+```bash
+python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
+  --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
+  bash -lc 'source ./eval_env.sh; ./clean_eval_artifacts.sh; ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --json-output-file metrics_full.json'
+```
+
 When releasing or debugging the GPU, kill only the server process or supervised
 process group you started. Do not use broad cleanup commands such as `pkill
 python`, `pkill vllm`, or port-wide process killing in a shared pod; those can
@@ -117,26 +133,35 @@ python senpai/create_task_workspace.py --scenario <A|B|C|D> \
 
 For helper-created workspaces, copy your launcher recipe into
 `<workspace>/task/start_server.sh` and run evaluation from `<workspace>/task/`.
+Helper-created workspaces include `eval_env.sh`, `clean_eval_artifacts.sh`, and
+`INFERENCE_BENCH_PYTORCH_BASELINE_METRICS`; source `eval_env.sh` before manual
+commands. The generated `evaluate.py` also sets the base model, scenario,
+request file, and quality registry defaults so accidental `unknown_model`
+quality baselines do not become terminal results.
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and
 evaluator flow:
 
 ```bash
 source "$PROBLEM_DIR/senpai/runtime_env.sh"
+source ./eval_env.sh
+./clean_eval_artifacts.sh
 ./test_server.sh > agent/server.log 2>&1 &
 python evaluate.py --quick --json-output-file metrics_quick.json
 python evaluate.py --json-output-file metrics_full.json
 python "$PROBLEM_DIR/senpai/summarize_metrics.py" metrics_full.json \
   --scenario <A|B|C|D> \
-  --baseline-metrics-json /path/to/pytorch_baseline_metrics.json
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS"
 python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_full.json \
   --scenario <A|B|C|D> \
-  --baseline-metrics-json /path/to/pytorch_baseline_metrics.json \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
   --name "$STUDENT_NAME/<short-description>" \
   --group "<hypothesis-or-pr>"
 ```
 
 Use quick evaluation for smoke tests and full evaluation for terminal results.
+Quick launch probes may skip quality only when the PR/advisor allows it; final
+terminal results must run quality with the prepared baseline registry.
 Before reporting a winner, confirm that the final `start_server.sh` launches
 cleanly from a fresh shell or supervised `./test_server.sh` run.
 

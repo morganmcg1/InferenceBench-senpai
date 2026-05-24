@@ -176,6 +176,59 @@ def check_wandb(require_wandb: bool) -> Check:
     return Check("wandb", status, "missing " + ", ".join(missing))
 
 
+def check_runtime_imports(require_vllm: bool) -> Check:
+    code = r'''
+import json
+import sys
+
+report = {}
+try:
+    import torch
+    report["torch_version"] = getattr(torch, "__version__", "unknown")
+    report["torch_cuda"] = getattr(getattr(torch, "version", None), "cuda", None)
+    report["cuda_available"] = bool(torch.cuda.is_available())
+except Exception as exc:
+    print(json.dumps({"error": f"torch import failed: {exc}"}))
+    sys.exit(2)
+
+try:
+    import vllm
+    report["vllm_version"] = getattr(vllm, "__version__", "unknown")
+except Exception as exc:
+    report["vllm_error"] = str(exc)
+    sys.exit(3)
+
+print(json.dumps(report, sort_keys=True))
+'''
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=45,
+        )
+    except Exception as exc:
+        status = "fail" if require_vllm else "warn"
+        return Check("python_runtime", status, f"runtime import check failed to run: {exc}")
+
+    stdout = result.stdout.strip()
+    data = maybe_json(stdout)
+    if result.returncode == 0:
+        return Check("python_runtime", "pass", "torch and vLLM import cleanly", data)
+    status = "fail" if require_vllm else "warn"
+    detail = stdout or result.stderr.strip() or f"runtime import check exited {result.returncode}"
+    return Check("python_runtime", status, detail, data)
+
+
+def maybe_json(raw: str) -> dict[str, Any] | None:
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def check_tokenizer(model_id: str, request_files_ready: bool) -> Check:
     if request_files_ready:
         return Check(
@@ -421,6 +474,8 @@ def main() -> None:
     parser.add_argument("--leaderboard-mode", action="store_true", help="Require H100-class hardware and full scoring assets.")
     parser.add_argument("--require-wandb", action="store_true")
     parser.add_argument("--skip-gpu", action="store_true")
+    parser.add_argument("--skip-runtime-imports", action="store_true")
+    parser.add_argument("--allow-missing-vllm", action="store_true")
     parser.add_argument("--skip-tokenizer", action="store_true")
     parser.add_argument("--json-output", help="Optional JSON report path")
     args = parser.parse_args()
@@ -433,6 +488,8 @@ def main() -> None:
     if not args.skip_gpu:
         checks.append(check_hardware(args.expected_gpu, require_expected=args.leaderboard_mode))
     checks.append(check_wandb(require_wandb=args.require_wandb or args.leaderboard_mode))
+    if not args.skip_runtime_imports:
+        checks.append(check_runtime_imports(require_vllm=not args.allow_missing_vllm))
     speed_checks, requests_ready = check_speed_assets(root, scenarios, safe_model, args.speed_baseline_backend)
     checks.extend(speed_checks)
     checks.extend(check_quality_assets(root, safe_model, args.quality_baseline_backend, args.quality_seed, args.mmlupro_n))
