@@ -36,7 +36,11 @@ export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-TRITON_ATTN}"
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"
 
-echo "=== vLLM Scenario C launcher: FP8 W8A8 + FP8 KV + TRITON_ATTN (flashinfer disabled) ==="
+# Quality-gate fallback: prior arm with --quantization fp8 (W8A8) failed MMLU-Pro
+# tau=0.95 (observed 0.282 vs baseline 0.298, ratio 0.946). Per PR instructions
+# fallback rule, drop --quantization fp8 only and keep FP8 KV cache + TRITON_ATTN
+# + chunked prefill + prefix caching + max-num-seqs 256.
+echo "=== vLLM Scenario C launcher: FP16 weights + FP8 KV + TRITON_ATTN (flashinfer disabled, quality-gate fallback) ==="
 echo "MODEL_ID=${MODEL_ID} HOST=${HOST} PORT=${PORT} MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND} SAMPLER=${VLLM_USE_FLASHINFER_SAMPLER} PREFILL_DISABLE=${VLLM_DISABLE_FLASHINFER_PREFILL}"
 
@@ -46,7 +50,6 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization 0.92 \
-    --quantization fp8 \
     --kv-cache-dtype fp8 \
     --max-num-seqs 256 \
     --max-num-batched-tokens 16384 \
