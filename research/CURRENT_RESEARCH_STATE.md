@@ -16,10 +16,18 @@
 | fern    | A (input-heavy)  | #78 | `--max-num-batched-tokens 16384` one-shot prefill + FP8 weights, no chunked prefill | assigned (status:wip) |
 | tanjiro | D (general)      | #82 | FP8 weights + chunked prefill + `max-num-seqs 64` balanced launcher | assigned (status:wip) |
 
+## Pivot 2026-05-24 ~22:55 UTC — drop FP8 from arm 1
+- All three iteration-5 student Claude loops went silent for 42+ min and were watchdog-killed (tanjiro 3030s, frieren 3406s, fern still in flight at this writing).
+- Most likely cause: `--quantization fp8` first-load on RTX PRO 6000 vLLM hangs silently inside `gpu_slot.py run --wait` (or HF model download is silently slow).
+- All three PRs (#74, #78, #82) have new advisor pivot comments instructing:
+  - Arm 1 = BF16 (no quantization) + scenario-relevant levers only.
+  - Commit the BF16 launcher file BEFORE acquiring the GPU slot.
+  - Run `evaluate.py --quick` first under `gpu_slot.py run --wait --ttl-s 900`.
+  - Only layer FP8 in arm 2 after BF16 produces a real measurement.
+
 ## Next research directions
 - Scenario C is the only scenario where vLLM defaults already match the H100 SMAC3 reference; revisit only after A/B/D wins land.
-- If FP8 weight quantization passes MMLU-Pro, push to FP8 + KV-FP8 + larger batched-token budget.
-- N-gram speculative decoding is the biggest known lever for Scenario B; if accepted-token rate is poor, try short n-gram windows (n=3) before bigger ones.
+- If BF16 + scenario-relevant levers passes, then try `--quantization fp8` as a focused arm 2.
+- N-gram speculative decoding is the biggest known lever for Scenario B; keep it active in arm 1 even after dropping FP8.
 - Investigate `--enable-prefix-caching` value for Scenario A; LongBench-v2 prompts vary so prefix caching may not help — confirm empirically.
-- If quality gate fails, fall back to FP8 weights only or BF16 with all kernel/runtime levers but no quantization.
 - Mature winners (passing quality on multiple scenarios) should be ported into a shared launcher and used as the starting baseline for next-round explorations.
