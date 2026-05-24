@@ -1,27 +1,23 @@
 # SENPAI Research State
 
-- **Date/time:** 2026-05-24 07:32 UTC (~32 min into the 2 h SENPAI window)
+- **Date/time:** 2026-05-24 08:04 UTC (~100 min into the 2 h SENPAI window; ~20 min remaining)
 - **Run:** `ib-20260524-ready-r1`, advisor branch `ib-20260524-ready-r1-advisor`
 - **Hardware:** NVIDIA RTX PRO 6000 Blackwell (~96 GB), **shakedown evidence only**
 - **Model:** `mistralai/Mistral-7B-Instruct-v0.3`
-- **Most recent human-team directive:** none in GH Issues at boot. (Open Issue #17 is from
-  the 2026-05-22 R3 run; not for this advisor branch.)
+- **Most recent human-team directive:** none in GH Issues at boot or at 08:04 re-check.
 
-## Round-1 live state
+## Live state (round 1 → round 2 in flight)
 
-| PR | Student | Scenario | Status (UTC) |
+| PR | Student | Scenario | Status (UTC 08:04) |
 |---|---|---|---|
-| #39 | r1-frieren | C (throughput) | vLLM-FP8 server up (89.8 GiB), `evaluate.py --quick` running in iter 17 (started 07:05:33). Launcher in workspace; not yet pushed to branch. |
-| #41 | r1-fern    | B (output-heavy) | Launcher pushed (commits 9a17160→df36f21). Workspace built. Holding for `SLOT-FREE` from PR #39. |
-| #42 | r1-tanjiro | A (input-heavy)  | Launcher pushed (commit a9f0de7c). Workspace built, `bash -n` clean, HF cache symlinked. Holding for `SLOT-FREE` from PR #41. |
+| #39 | r1-frieren | C (throughput) | **MERGED at 07:54Z. 46.35x speedup over PyTorch** (geomean of burst 75.16x / poisson 47.84x / constant 27.69x). Quality PASS (0.9530, margin 0.003 above 0.95 floor). W&B `yiumffcc`. |
+| #41 | r1-fern    | B (output-heavy) | vLLM server up, **quick eval 4/4 PASS at 08:03:32Z: TPOT p50 = 3.93 ms ⇒ ~6.4x raw speedup** over PyTorch baseline of 25.15 ms. gen_throughput 210 tok/s. Full eval (64 reqs + 500 MMLU-Pro) running. Three CUDA-header bug-fix commits required (FlashInfer JIT CPATH clash with system CUDA 13). |
+| #42 | r1-tanjiro | A (input-heavy)  | Holding for window 3, prep intact (commit `a9f0de7c`). Idle-polling correctly since 07:49. Heartbeat posted at 08:04 with window-3 launch criteria and time-budget warning. |
+| #49 | r1-frieren | D (general/balanced) | New assignment opened at 07:58Z. Launcher `senpai/launchers/D/vllm-fp8-balanced/start_server.sh` pushed at 08:01 (`16eff92a`). Recipe matches brief: FP8 weights+KV + chunked prefill + ngram spec + FLASH_ATTN + pre-emptive CPATH fix. Waiting for window 4 (after r1-tanjiro). Time-budget tight; may not fit in remaining 20 min. |
 
-The pod's Claude watchdog (training-target heuristic that kills any Claude iteration
-with no `train.py` process AND a stale log) killed r1-fern's iter 19 once
-(code=124 at 07:21:02). An ADVISOR HEARTBEAT comment was posted to all 3 PRs at
-~07:25 telling students to commit early/often, take one small step per iteration,
-and never assume `/tmp/inferencebench-scenario-*/task/` survives a kill. Since then
-the round has stabilized: 4 clean iterations (code=0) and no further watchdog
-fires.
+The pod's Claude watchdog killed r1-fern's iter 19 once early in round 1 and again at iter 20
+at 07:43:14Z (834 s of idle polling). Both were self-recovered (work pushed before kill).
+Mid-round ADVISOR HEARTBEAT (07:25) telling students to commit early/often was effective.
 
 ## Current Research Focus
 
@@ -47,13 +43,14 @@ The reusable building blocks for this hardware are:
 2. **GPU window discipline.** 3 students share 1 GPU pod, so heavy serving runs must be strictly serialized via `SLOT-FREE: ib-20260524-ready-r1` comments. Order: r1-frieren → r1-fern → r1-tanjiro.
 3. **Quality gate is a hard pass/fail.** MMLU-Pro tau=0.95 against baseline accuracy ≈ 0.298 (seed 248, 500 samples). FP8 quantization should be safe but is the most likely quality risk.
 
-## Round 1 Assignments
+## Round 1 / Round 2 Assignments
 
-| PR | Student | Scenario | Recipe | GPU window |
-|---|---|---|---|---|
-| #39 | r1-frieren | C (throughput) | vLLM FP8 weights+KV + chunked prefill + `max-num-seqs 256`, FLASH_ATTN | window 1 |
-| #41 | r1-fern    | B (output-heavy) | vLLM FP8 weights+KV + n-gram spec decoding, FLASH_ATTN | window 2 |
-| #42 | r1-tanjiro | A (input-heavy) | vLLM FP8 weights+KV + no chunked prefill + `max-num-batched-tokens 16384`, FLASH_ATTN | window 3 |
+| PR | Student | Scenario | Recipe | GPU window | Status |
+|---|---|---|---|---|---|
+| #39 | r1-frieren | C (throughput) | vLLM FP8 weights+KV + chunked prefill + `max-num-seqs 256`, FLASH_ATTN | window 1 | **MERGED 46.35x** ✅ |
+| #41 | r1-fern    | B (output-heavy) | vLLM FP8 weights+KV + n-gram spec decoding, FLASH_ATTN | window 2 | quick 6.4x, full eval running |
+| #42 | r1-tanjiro | A (input-heavy) | vLLM FP8 weights+KV + no chunked prefill + `max-num-batched-tokens 16384`, FLASH_ATTN | window 3 | holding, prep ready |
+| #49 | r1-frieren | D (general/balanced) | vLLM FP8 weights+KV + chunked prefill + ngram spec (n=3) + `max-num-seqs 32`, FLASH_ATTN | window 4 | launcher pushed, holding |
 
 ## Potential Next Research Directions
 
