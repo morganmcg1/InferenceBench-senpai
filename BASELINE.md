@@ -49,7 +49,7 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
 |---|---|---:|---:|---|---|
 | A | `senpai/launchers/scenario_a/vllm-fastprefill/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-batched-tokens 16384`, `--max-num-seqs 8`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | `1/ttft.p50 = 2.840` | **1.246x** | `7dew56hp` | #83 |
 | B | (none yet) | — | — | — | — |
-| C | (none yet) | — | — | — | — |
+| C | `senpai/launchers/scenario_c/vllm-throughput/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-seqs 256`, `--max-num-batched-tokens 8192`, `--enable-chunked-prefill`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | geomean req/s = 0.3298 | **3.89x** (quick-only) | `8kxj9472` | #92 |
 | D | (none yet) | — | — | — | — |
 
 ### Scenario A details (PR #83 — frieren)
@@ -67,8 +67,30 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
   the no-chunked-prefill lever; it comes from FLASH_ATTN pinning, large
   `--max-num-batched-tokens`, CUDA graphs, and prefix-cache off.
 
+### Scenario C details (PR #92 — frieren, QUICK-ONLY)
+
+- **Quick eval only** (4 speed requests per profile, MMLU-Pro n=16).
+  Round-2 full eval pending at n=256 + MMLU n=500.
+- 12/12 speed requests successful, 0 failures, 0 empty outputs.
+- Per-profile req/s: burst (conc 64) 0.3202, poisson (32/s cap 32) 0.3344,
+  constant (16/s cap 16) 0.3349. Geomean = 0.3298 (PyTorch 0.0847 → **3.89x**).
+- Per-profile speedup: burst 3.79x, poisson 3.95x, constant 3.95x.
+- TPOT p50 ~0.020 s across all profiles; ITL p50 ~0.0117 s.
+- Burst TTFT p50 0.650 s elevated by n=4 simultaneous prefill serialization
+  against the 8 K chunked-prefill budget; expected to amortize at full n=256.
+- VRAM peak: 90 173 MB. KV cache memory at boot: 72.87 GiB.
+- Quality gate **FAIL** at n=16: observed 0.25 vs baseline 0.298, ratio 0.839,
+  tau 0.95. Std err at n=16 ≈ 0.114; observed is 0.4σ below baseline,
+  **consistent with noise** rather than a real regression. Round-2 full eval
+  required to confirm.
+- Cold-relaunch confirmed (supervised `launch_supervised_server.sh`).
+- GPU slot wall-clock for full quick: ~75 s (acquired 23:12:55Z → released 23:14Z).
+
 ## Update history
 
 - 2026-05-24: initialized live ledger from `rtxpro6000-seed248` PyTorch baselines.
 - 2026-05-24 23:05Z: PR #83 merged. Scenario A: PyTorch → **1.246x** (frieren,
   W&B `7dew56hp`).
+- 2026-05-24 23:18Z: PR #92 merged. Scenario C: PyTorch → **3.89x** quick-only
+  (frieren, W&B `8kxj9472`). Quality gate noisy fail at n=16; round-2 full
+  eval required.
