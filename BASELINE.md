@@ -16,7 +16,7 @@
 | A | input-heavy (8K in / 1K out, burst c=1, 128 reqs) | `ttft.p50=0.4385s` | _none_ | _pending_ | _pending_ | _pending_ | open |
 | B | output-heavy (1K in / 8K out, burst c=1, 64 reqs) | `tpot.p50=0.025153s` | _none_ | _pending_ | _pending_ | _pending_ | open |
 | C | high-load (1K/1K, 3 profiles, 256 each) | geomean req/s ≈ 0.0847 | _none_ | _pending_ | _pending_ | _pending_ | open |
-| D | balanced (4K in / 2K out, burst c=4, 96 reqs) | geomean of 1/ttft, 1/tpot, req/s | _none_ | _pending_ | _pending_ | _pending_ | open |
+| D | balanced (4K in / 2K out, burst c=4, 96 reqs) | geomean of 1/ttft, 1/tpot, req/s = 1.9298 | [#81](https://github.com/morganmcg1/InferenceBench-senpai/pull/81) | **1.708x** | MMLU-Pro 0.292 vs 0.298 (ratio 0.980, PASS) | [42ajz9lf](https://wandb.ai/wandb-applied-ai-team/inferencebench-senpai/runs/42ajz9lf) | tanjiro, chunked-prefill 8192 + n-gram specdec 3 tok + block_size 32 + max_num_seqs 64 + FLASH_ATTN |
 
 Starting launcher: `src/starting_points/vllm_running/start_server.sh` (vLLM defaults).
 Speedup metric: `candidate_raw_objective / pytorch_baseline_raw_objective`, higher is better.
@@ -43,3 +43,4 @@ Largest H100-reference gaps from vLLM default to SMAC3: **B (2.25 → 15.23, 6.8
 
 - 2026-05-24 — initial bootstrap; no launcher PRs yet, all scenarios open.
 - 2026-05-24 22:24 — recorded Blackwell+FA3+FP8KV constraint; reinforced fern's stop-rule for FP8 KV branch; tanjiro currently holds GPU lease for Scenario D, fern queued for B.
+- 2026-05-24 23:21 — **first round-1 winner merged: PR #81 tanjiro, Scenario D, 1.708x speedup** (geomean 3.297 vs PyTorch 1.930). Quality ratio 0.980 PASS. Compounding lever for D: `--enable-chunked-prefill --max-num-batched-tokens 8192 --max-num-seqs 64 --block-size 32 --enable-prefix-caching --speculative-config '{"method":"ngram","num_speculative_tokens":3,"prompt_lookup_max":4,"prompt_lookup_min":2}'` on FLASH_ATTN. Note: pod stdout silence from 22:11→23:17 was NOT a deadlock — tanjiro's Claude session was a long-running iteration that actually did the work. Issue #90 was a false positive.
