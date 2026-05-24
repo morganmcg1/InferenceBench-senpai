@@ -28,10 +28,20 @@ export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USE
 # Source SENPAI runtime helpers if PROBLEM_DIR is reachable. Best-effort so
 # the launcher remains usable from a clean container that supplies its own
 # CUDA paths.
-if [ -n "${PROBLEM_DIR:-}" ] && [ -f "${PROBLEM_DIR}/senpai/runtime_env.sh" ]; then
-    # shellcheck disable=SC1091
-    source "${PROBLEM_DIR}/senpai/runtime_env.sh"
-fi
+_runtime_env_candidates=(
+    "${PROBLEM_DIR:-}/senpai/runtime_env.sh"
+    "/workspace/senpai-r1-fern/target/senpai/runtime_env.sh"
+    "/home/agent/target/senpai/runtime_env.sh"
+    "/target/senpai/runtime_env.sh"
+)
+for _cand in "${_runtime_env_candidates[@]}"; do
+    if [ -n "${_cand}" ] && [ -f "${_cand}" ]; then
+        # shellcheck disable=SC1090
+        source "${_cand}"
+        break
+    fi
+done
+unset _runtime_env_candidates _cand
 
 # Force integer device index — some nodes expose GPU UUIDs which vLLM cannot parse.
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
