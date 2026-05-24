@@ -26,11 +26,16 @@ PY_USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/d
 export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USER_SITE:-}:${PYTHONPATH:-}"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASHINFER}"
+# Blackwell sm_120 (RTX PRO 6000): FlashInfer JIT does not build for sm_120 and
+# FA3 fp8 KV is Hopper-only. Default to TRITON_ATTN and keep vLLM off the
+# flashinfer path entirely (sampler + prefill). Per advisor 2026-05-24 07:42 UTC.
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-TRITON_ATTN}"
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+export VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"
 
-echo "=== vLLM Scenario A launcher: FP8 W8A8 + FlashInfer + no chunked prefill ==="
+echo "=== vLLM Scenario A launcher: FP8 W8A8 + FP8 KV + TRITON_ATTN + no chunked prefill ==="
 echo "MODEL_ID=${MODEL_ID} HOST=${HOST} PORT=${PORT} MAX_MODEL_LEN=${MAX_MODEL_LEN}"
-echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND}"
+echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND} FLASHINFER_SAMPLER=${VLLM_USE_FLASHINFER_SAMPLER} DISABLE_FLASHINFER_PREFILL=${VLLM_DISABLE_FLASHINFER_PREFILL}"
 
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
