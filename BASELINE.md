@@ -38,17 +38,21 @@ the row above on RTX PRO 6000.
 
 ## Current best valid launcher per scenario
 
-No valid launcher has been measured on this branch yet. Current best per
-scenario is the PyTorch baseline (1.00×) until a student posts a terminal
-`SENPAI-RESULT` with a clean relaunch.
-
 | Scenario | Current best speedup | PR | W&B run | Launcher path | Notes |
 |---|---:|---|---|---|---|
-| A | 1.00× | — | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
+| A | **1.889×** | #63 | f890wobr, h2ivavpf | `senpai/launchers/A/vllm-fp8-flashinfer-prefill-scA/start_server.sh` | FP8 weights + auto KV + FLASH_ATTN + chunked-prefill OFF; FlashInfer+FP8-KV broken on SM120f |
 | B | 1.00× | — | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
 | C | 1.00× | — | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
 | D | 1.00× | — | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
 
+## Known RTX PRO 6000 runtime constraints (SM120f, CUDA 13.2, vLLM 0.11)
+
+- **FlashInfer JIT broken**: `CPATH` set by `senpai/runtime_env.sh` mixes CUDA 12.8 pip headers with CUDA 13.2 nvcc; FlashInfer JIT fails. `runtime_env.sh` now exports `VLLM_USE_FLASHINFER_SAMPLER=0` and `VLLM_DISABLE_FLASHINFER_PREFILL=1`. Avoid `VLLM_ATTENTION_BACKEND=FLASHINFER` unless explicitly testing.
+- **FP8 KV cache broken**: `FLASH_ATTN` raises `NotImplementedError: FlashAttention does not support fp8 kv-cache on this device` on SM120f. Do not use `--kv-cache-dtype fp8` with the FLASH_ATTN backend.
+- **Max model len**: `INFERENCE_BENCH_MAX_MODEL_LEN` defaults to 32768 in `senpai/runtime_env.sh`; Mistral config caps at 32768. Use 16384 or 32768, not 131072.
+- **FP8 weights**: Safe and boots cleanly; not affected by the above constraints. Use `--quantization fp8` freely.
+
 ## Update history
 
-- 2026-05-24 — initialized live baseline for advisor branch `ib-20260524-hardened-r5`.
+- 2026-05-24 15:55 — initialized live baseline for advisor branch `ib-20260524-hardened-r5`.
+- 2026-05-24 17:45 — merged PR #63 (r5-fern): Scenario A 1.889× speedup (TTFT.p50 0.232s vs baseline 0.439s, MMLU-Pro 0.294, clean relaunch 0.13% drift). FP8 weights + FLASH_ATTN + chunked-prefill-OFF on RTX PRO 6000.
