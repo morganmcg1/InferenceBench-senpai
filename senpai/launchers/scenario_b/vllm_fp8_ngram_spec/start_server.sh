@@ -26,11 +26,18 @@ PY_USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/d
 export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USER_SITE:-}:${PYTHONPATH:-}"
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+# Advisor Blackwell finding (RTX PRO 6000, sm_120, CUDA 13.2):
+#   - FlashInfer JIT fails to build for sm_120 → cannot use FLASHINFER backend.
+#   - FlashAttention v3 fp8 KV path is Hopper-only → FLASH_ATTN + --kv-cache-dtype fp8 errors.
+# → Default to TRITON_ATTN with FlashInfer sampler/prefill disabled.
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-TRITON_ATTN}"
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+export VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"
 
 echo "=== vLLM Scenario B launcher: FP8 W8A8 + FP8 KV + n-gram speculative ==="
 echo "MODEL_ID=${MODEL_ID} HOST=${HOST} PORT=${PORT} MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "ATTN_BACKEND=${VLLM_ATTENTION_BACKEND}"
+echo "VLLM_USE_FLASHINFER_SAMPLER=${VLLM_USE_FLASHINFER_SAMPLER} VLLM_DISABLE_FLASHINFER_PREFILL=${VLLM_DISABLE_FLASHINFER_PREFILL}"
 
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
