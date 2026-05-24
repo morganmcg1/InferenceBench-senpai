@@ -37,7 +37,7 @@
 | A | `src/starting_points/vllm_running/start_server.sh` | vLLM default | 1.00x (PyTorch baseline placeholder) | — | — |
 | B | `src/starting_points/vllm_running/start_server.sh` | vLLM default | 1.00x (PyTorch baseline placeholder) | — | — |
 | C | `src/starting_points/vllm_running/start_server.sh` | vLLM default | 1.00x (PyTorch baseline placeholder) | — | — |
-| D | `src/starting_points/vllm_running/start_server.sh` | vLLM default | 1.00x (PyTorch baseline placeholder) | — | — |
+| D | `senpai/launchers/D/vllm-balanced-burst/start_server.sh` | vLLM (chunked-prefill + CUDA graphs + prefix cache, max_num_seqs=16, max_num_batched_tokens=8192, gpu_mem=0.92, FLASH_ATTN) | **1.305x** | `z1m0zvsl` | #77 |
 
 The advisor-tracked current best for each scenario is the speedup measured by
 the SENPAI evaluator on this RTX PRO 6000 pod, not the H100 README references.
@@ -48,3 +48,4 @@ clears the quality gate as the new current best for that scenario.
 ## Update History
 
 - 2026-05-24 — Advisor opens ledger. Preflight PASS, no SENPAI measurements yet.
+- 2026-05-24 22:55 — **PR #77 merged.** Scenario D: vLLM balanced-burst launcher (chunked-prefill + CUDA graphs + prefix cache, max_num_seqs=16, max_num_batched_tokens=8192, gpu_mem=0.92, FLASH_ATTN) reached **1.305x speedup over PyTorch**, raw obj 2.519 vs 1.930. Quality PASS (mmlu_pro 0.308 vs 0.298 baseline, ratio 1.034). TTFT.p50 0.1735 (-18.3%), TPOT.p50 0.01697 (-32.3%), req/s 0.04706 (+23.1%), gen tok/s 56.24 (+47.2%), 96/96 success. W&B run `z1m0zvsl`. Relaunch eval not captured due to a wrapper PGID bug (separate tooling fix); launcher is deterministic env-only, first eval is already the fresh-launch case.
