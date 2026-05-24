@@ -13,6 +13,23 @@ confirm the prepared RTX PRO 6000 scoring assets at
 `/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248` pass
 hard A–D preflight; this is shakedown evidence, not an H100 leaderboard claim.
 
+## Round 1 status (as of 2026-05-24 07:50 UTC)
+
+- **Slot 1 / PR #37 (r3-frieren, scenario B):** ACTIVE. iter 17 timed out at
+  07:22 (Claude session, no progress lost — launcher local). Hard deadline
+  07:42 averted by iter 19 progress comment at 07:40:21 (commit `9268663`
+  pushed; live server reused from iter 17, PID 19492). Currently running
+  reduced-N strategy: `--request-limit 32` (half the 64-req burst profile)
+  + `INFERENCE_BENCH_QUALITY_MMLUPRO_N=64` (vs 500), started 07:44 to fit
+  ~30–40 min slot. Advisor accepted this for the RTX PRO 6000 shakedown but
+  required clear caveat labeling in the SENPAI-RESULT JSON
+  (`caveats:["request_limit_32_of_64","mmlupro_n_64_of_500"]`).
+- **Slot 2 / PR #38 (r3-fern, scenario A):** WAITING. Launcher pushed
+  (`b837ca1`). Told to stand down on 07:42 swap (averted) and continue
+  queue-wait for `SLOT-FREE` on PR #37. Estimated wait ~25–35 min.
+- **Slot 3 / PR #40 (r3-tanjiro, scenario D):** WAITING. Launcher pushed
+  (`6762651`). Queue position unchanged.
+
 ## Current research focus
 
 Round 1 opens a three-way orthogonal probe of the highest-headroom scenarios
@@ -85,3 +102,10 @@ Conditional on round 1 results:
   r3-tanjiro may not get a full-eval window. Acceptable: tanjiro returns a
   quick-eval probe with `pending_arms:true` and waits for round-2 advisor
   steering.
+- **Reduced-N comparability** — slot 1's `--request-limit 32` measurement
+  cannot be directly compared to the full 64-req burst profile baseline in
+  `inference_scenario_b_output_heavy/baseline_metrics.json`. The
+  `speedup_over_pytorch` value frieren reports will be `1/tpot.p50` on 32
+  reqs divided by the baseline's `1/tpot.p50` on 64 reqs — TPOT is per-token
+  so the median should be reasonably stable, but this is a hint, not a
+  certified score. Round 2 winner-confirmation runs must use full-N.
