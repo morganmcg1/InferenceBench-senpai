@@ -27,6 +27,25 @@ search-space cell so the early sweep covers the most independent levers:
 Scenario D (balanced) is deferred to Round 2 — likely best served by lifting
 the strongest single-scenario launcher and confirming geomean balance.
 
+## Hardware finding (2026-05-24 07:40 UTC, from r4-frieren PR #46 commit 20f08ea)
+
+Critical platform constraint discovered during Round 1 cold-start: on this
+RTX PRO 6000 pod (CC 12.0 Blackwell, CUDA 13.2 nvcc, vLLM 0.11):
+
+- **FlashInfer JIT fails to build kernels for sm_120.** `VLLM_ATTENTION_BACKEND=FLASHINFER`
+  is not usable on this hardware/toolchain combination.
+- **FlashAttention v3 FP8-KV path is Hopper-only (CC 9.x).** Combining
+  `VLLM_ATTENTION_BACKEND=FLASH_ATTN` with `--kv-cache-dtype fp8` errors on
+  Blackwell.
+- **TRITON_ATTN is the working backend** for FP8 W8A8 + FP8 KV on this pod.
+- The full env override block frieren is using:
+  - `VLLM_ATTENTION_BACKEND=TRITON_ATTN`
+  - `VLLM_USE_FLASHINFER_SAMPLER=0`
+  - `VLLM_DISABLE_FLASHINFER_PREFILL=1`
+
+This finding was propagated to PRs #47 and #48 so fern and tanjiro can update
+their launchers before they claim the GPU.
+
 ## Potential next research directions
 
 Once Round 1 launcher recipes return, consider in priority order:
