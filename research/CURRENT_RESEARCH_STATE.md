@@ -39,17 +39,20 @@ All three start from `src/starting_points/vllm_running/start_server.sh`, source 
 - **GPU slot contention.** Three students, one GPU. Observed working — tanjiro holds lease for D, fern queued via `--wait` (correct behavior). Watch for stale leases.
 - **GitHub rate-limit risk** — keep `gh` calls deliberate; lean on the W&B project and the GPU slot for high-frequency state.
 
-## Round 1 progress (as of 2026-05-24 23:15)
+## Round 1 progress (as of 2026-05-24 23:27)
 
-- **PR #79 fern (B):** launcher posted, hit FA3+FP8KV+Blackwell incompatibility, queued for Triton+FP8KV attempt; clear stop-rule and fallback recipe given (drop FP8 KV → specdec+CUDA graphs only). No commits or new comments since 22:44.
-- **PR #80 frieren (A):** no commits or comments since 22:44.
-- **PR #81 tanjiro (D):** no commits or comments since 22:44.
+- **PR #81 tanjiro (D):** **MERGED 23:20:53 UTC.** 1.708x speedup, MMLU-Pro 0.980 PASS. W&B `42ajz9lf`. First round-1 winner. Recipe: chunked-prefill 8192 + specdec ngram 3 tok + max_num_seqs 64 + block_size 32 + FLASH_ATTN.
+- **PR #79 fern (B):** still draft/wip, no commits since 22:00:22, no comments since 22:44. fern's iteration 4 Claude session started 22:00:37 — possibly still running like tanjiro's was (his ran 4940s = 82 min before producing the winner).
+- **PR #80 frieren (A):** still draft/wip, no commits since 22:00:34, no comments since 22:44. frieren's iteration 6 Claude session started 22:11:25 — same uncertainty as fern.
+- **PR #96 tanjiro (D compound):** new assignment 23:26 UTC. Bump `num_speculative_tokens=5, prompt_lookup_max=6` on top of #81's winning recipe. Explicit instruction to not preempt #79/#80 leases and to skip full eval if start > 23:30 UTC.
 
-## Pod deadlock (open, escalated)
+## Lesson learned: pod stdout buffering vs deadlock
 
-- **Symptom:** pod `senpai-ib-20260524-leasefix-r2-group-1-...` stdout last advanced at 22:11:25 UTC (frieren iteration 6 heartbeat). No subsequent heartbeats from any of the 3 students for 60+ min.
-- **Diagnostic constraints:** advisor service account lacks `pods/exec` permission; `kubectl top` Metrics API not available. Cannot read `/tmp/inferencebench-gpu-slot.json` from outside the pod.
-- **Likely cause:** student Claude session hung while holding (or waiting on) the GPU slot lease. `gpu_slot.py run --wait` default `--wait-timeout-s` is None (unbounded), so a stuck inner command does not auto-release.
-- **Escalation:** Issue #90 opened to human team at 22:45 UTC, requesting `kubectl exec` intervention (dump slot file, nvidia-smi, kill stuck vLLM processes). 0 comments after 30 min.
-- **Budget at risk:** 2-hour launch window ends 23:53 UTC. Full eval needs ~30 min, so anything beyond ~23:23 UTC start is unlikely to produce a clean result.
-- **Advisor next-cycle threshold:** if deadlock persists and remaining budget < 25 min, close PRs #79/#80/#81 as "dead-end on Blackwell pod-deadlock; no W&B run produced for this launch" and end the launch with no merged winners.
+Earlier (22:11 → 23:23 UTC) the advisor mis-read pod stdout silence as a deadlock and opened Issue #90 to humans. It was wrong — Claude student sessions can run far longer than the typical 350s, and the entrypoint script's iteration heartbeats only print between iterations. tanjiro's iteration ran 4940s (82.3 min) doing real work the entire time. **Rule going forward:** treat the PR's commits/comments and the W&B project as authoritative for student activity. Do not assume pod-stdout silence means stuck — Claude sessions can legitimately run an hour or longer. Pod restart / Claude crash are visible as `Claude exited code=N` lines, so absence of those is evidence the session is still running.
+
+## Time remaining
+
+- Launch ends 23:53 UTC. As of 23:27 ≈ 26 min remaining.
+- Full eval requires ~30 min minimum (3-5 min cold start + ~25 min eval). Quick eval ~2-3 min.
+- If fern/frieren produce terminal results before budget end, merge winners best-first.
+- PR #96 tanjiro is unlikely to produce a full eval before budget end; quick eval may be possible if GPU lease frees up immediately.
