@@ -13,6 +13,7 @@ HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-12288}"
 STARTING_VENV_DIR="${INFERENCE_BENCH_STARTING_VENV_DIR:-}"
+KV_CACHE_DTYPE="${SENPAI_KV_CACHE_DTYPE:-fp8}"
 
 if [ -n "${STARTING_VENV_DIR}" ] && [ -x "${STARTING_VENV_DIR}/bin/python" ]; then
     export VIRTUAL_ENV="${STARTING_VENV_DIR}"
@@ -38,6 +39,41 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 # Must be exported BEFORE vLLM imports its attention backends.
 export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASHINFER}"
 
+# FlashInfer JIT compiles some .cu kernels at first use (e.g. sampling/curand).
+# nvcc's CUDA frontend ignores CPATH for device-side header lookups. The pod
+# ships nvcc 13.2 but the CUDA 13 toolkit no longer bundles curand/cublas/
+# cusolver headers — those live only in the nvidia/* python wheels (12.8).
+# We prepend -I for only the math-lib wheels so nvcc keeps its own
+# cuda_runtime headers (CUDART_VERSION 13.x matches nvcc, satisfying CCCL's
+# version check). Pulling nvidia/cuda_runtime in here would otherwise break
+# the build with "CUDA compiler and CUDA toolkit headers are incompatible".
+_math_lib_includes="$(python3 - <<'PYI'
+import site
+from pathlib import Path
+MATH_LIBS = {
+    "curand", "cublas", "cusolver", "cufft", "cusparse", "cusparselt",
+    "nccl", "nvtx", "nvjitlink", "cudnn", "cufile",
+}
+incs = []
+seen = set()
+for root in site.getsitepackages() + [site.getusersitepackages()]:
+    base = Path(root) / "nvidia"
+    if not base.exists():
+        continue
+    for pkg in MATH_LIBS:
+        inc = base / pkg / "include"
+        if inc.is_dir():
+            sinc = str(inc)
+            if sinc not in seen:
+                seen.add(sinc)
+                incs.append(sinc)
+print(" ".join(f"-I{i}" for i in incs))
+PYI
+)"
+if [ -n "${_math_lib_includes}" ]; then
+    export NVCC_PREPEND_FLAGS="${_math_lib_includes}${NVCC_PREPEND_FLAGS:+ ${NVCC_PREPEND_FLAGS}}"
+fi
+
 echo "=== vLLM scA FP8 + FlashInfer prefill launcher ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
@@ -51,7 +87,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --host "${HOST}" --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --quantization fp8 \
-    --kv-cache-dtype fp8 \
+    --kv-cache-dtype "${KV_CACHE_DTYPE}" \
     --max-num-seqs 16 \
     --max-num-batched-tokens 16384 \
     --gpu-memory-utilization 0.92 \
