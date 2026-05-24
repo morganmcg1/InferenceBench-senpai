@@ -13,22 +13,29 @@ confirm the prepared RTX PRO 6000 scoring assets at
 `/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248` pass
 hard A–D preflight; this is shakedown evidence, not an H100 leaderboard claim.
 
-## Round 1 status (as of 2026-05-24 07:50 UTC)
+## Round 1 status (as of 2026-05-24 08:26 UTC)
 
-- **Slot 1 / PR #37 (r3-frieren, scenario B):** ACTIVE. iter 17 timed out at
-  07:22 (Claude session, no progress lost — launcher local). Hard deadline
-  07:42 averted by iter 19 progress comment at 07:40:21 (commit `9268663`
-  pushed; live server reused from iter 17, PID 19492). Currently running
-  reduced-N strategy: `--request-limit 32` (half the 64-req burst profile)
-  + `INFERENCE_BENCH_QUALITY_MMLUPRO_N=64` (vs 500), started 07:44 to fit
-  ~30–40 min slot. Advisor accepted this for the RTX PRO 6000 shakedown but
-  required clear caveat labeling in the SENPAI-RESULT JSON
-  (`caveats:["request_limit_32_of_64","mmlupro_n_64_of_500"]`).
-- **Slot 2 / PR #38 (r3-fern, scenario A):** WAITING. Launcher pushed
-  (`b837ca1`). Told to stand down on 07:42 swap (averted) and continue
-  queue-wait for `SLOT-FREE` on PR #37. Estimated wait ~25–35 min.
-- **Slot 3 / PR #40 (r3-tanjiro, scenario D):** WAITING. Launcher pushed
-  (`6762651`). Queue position unchanged.
+- **Slot 1 / PR #37 (r3-frieren, scenario B):** CLOSED. Terminal SENPAI-RESULT
+  at 08:08: `scenario/B/speedup_over_pytorch = 1.568x` (reduced-N,
+  request_limit_8_of_64). **Quality gate FAILED: MMLU-Pro ratio 0.839 < tau 0.95**
+  (observed 0.250, baseline 0.298). Launcher disqualified. SLOT-FREE at 08:11:42.
+  Key finding: `--kv-cache-dtype fp8` degrades Mistral-7B-Instruct accuracy on
+  this hardware. Round-2 PR #50 assigned to r3-frieren (FP16 KV variant).
+  W&B run: `zm6tpgv4`.
+- **Slot 2 / PR #38 (r3-fern, scenario A):** ACTIVE. GPU at 96% util,
+  90347 MiB at 08:26 UTC. FP8 KV quality-risk alert posted on PR #38.
+  Hard SLOT-FREE deadline: **08:45 UTC**.
+- **Slot 3 / PR #40 (r3-tanjiro, scenario D):** WAITING. Queue-wait for
+  r3-fern's SLOT-FREE on PR #38. Slot window: ~08:45 to 09:05 UTC (20 min).
+  FP8 quality-risk alert posted.
+
+## Round 2 assignments (as of 08:26 UTC)
+
+- **PR #50 / r3-frieren (scenario B, round 2):** Single-lever change:
+  `--kv-cache-dtype auto` (FP16) vs round-1 `fp8`. Same TPOT scheduler levers.
+  Expected: quality recovers >=0.95 ratio, TPOT regresses slightly but launcher
+  is valid. Slot: queued as slot 4, after r3-tanjiro. May not run before
+  09:05 budget expiry — carries to next launch if needed.
 
 ## Current research focus
 
@@ -102,10 +109,11 @@ Conditional on round 1 results:
   r3-tanjiro may not get a full-eval window. Acceptable: tanjiro returns a
   quick-eval probe with `pending_arms:true` and waits for round-2 advisor
   steering.
-- **Reduced-N comparability** — slot 1's `--request-limit 32` measurement
-  cannot be directly compared to the full 64-req burst profile baseline in
-  `inference_scenario_b_output_heavy/baseline_metrics.json`. The
-  `speedup_over_pytorch` value frieren reports will be `1/tpot.p50` on 32
-  reqs divided by the baseline's `1/tpot.p50` on 64 reqs — TPOT is per-token
-  so the median should be reasonably stable, but this is a hint, not a
-  certified score. Round 2 winner-confirmation runs must use full-N.
+- **FP8 KV cache breaks quality on Mistral-7B.** PR #37 result (scenario B,
+  FP8 KV) failed quality gate at MMLU-Pro ratio 0.839. PRs #38 (scenario A,
+  FP8 KV) and #40 (scenario D, FP8 KV) face the same risk. If both fail,
+  all round-1 launchers are disqualified and round 2 pivots to FP16 KV.
+  Round-2 winner-confirmation runs should use full-N (64/128/96 requests).
+- **Reduced-N comparability** — slot 1's `--request-limit 8` measurement is
+  directional only (8-sample `tpot.p50`). Valid for round-2 steering but
+  not a leaderboard claim. Round 2 winner-confirmation runs must use full-N.
