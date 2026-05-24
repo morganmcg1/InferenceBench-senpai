@@ -34,8 +34,14 @@ echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND}"
-echo "speculative: ngram, num_speculative_tokens=5"
+echo "speculative: ngram, num_speculative_tokens=5 (via --speculative-config; vLLM 0.11.0)"
 echo "===================================================="
+
+# vLLM 0.11.0 dropped the separate --speculative-model / --num-speculative-tokens
+# flags in favour of a single JSON config passed via --speculative-config.
+# The vLLM SpeculativeConfig defaults prompt_lookup_min=prompt_lookup_max=5 when
+# both are unset, which matches the prose-length workload here.
+SPEC_CONFIG='{"method": "ngram", "num_speculative_tokens": 5}'
 
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
@@ -48,7 +54,6 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --no-enable-chunked-prefill \
     --no-enable-prefix-caching \
     --block-size 16 \
-    --speculative-model "[ngram]" \
-    --num-speculative-tokens 5 \
+    --speculative-config "${SPEC_CONFIG}" \
     --trust-remote-code \
     --disable-log-stats
