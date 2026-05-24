@@ -126,16 +126,27 @@ concurrent heavy GPU runs from corrupting measurements, but keep idle students
 productive.
 
 For shared-pod runs, establish a machine-readable GPU slot at the start of the
-run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status` and ask students to wrap
-heavy server/evaluator commands with `gpu_slot.py run` so ownership, PR,
-scenario, TTL, and release are visible without relying on comment timing alone.
+run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status --json` and ask students to
+wrap heavy server/evaluator commands with one `gpu_slot.py run --wait` command
+so ownership, PR, scenario, TTL, and release are visible without relying on
+comment timing alone. The helper now refuses to acquire a free-looking slot when
+`nvidia-smi` reports unleased GPU compute processes; treat that as an orphaned
+server/evaluator that needs cleanup before the next measurement.
+
 Use PR comments for high-level coordination, but trust the slot file for who is
-allowed to run the next heavy workload.
+allowed to run the next heavy workload. Do not force-release a lease merely
+because the PR thread looks quiet. First check `status --json`, `nvidia-smi`,
+and the owning student's logs; only clear stale state when there is no active
+server/evaluator or the owner has explicitly abandoned it.
 
 In shared-pod runs, make teardown ownership explicit. Students should kill only
 their own server process group and should not use broad `pkill` commands that
 can stop another student's measurement. Ask students to post `SLOT-FREE` or an
 equivalent concise signal when the GPU is actually clear.
+
+Avoid tight GitHub polling loops during the 2 hour window. The previous
+shakedown hit API rate limits, which blinded the advisor loop; use the GPU slot,
+W&B, and targeted PR checks, and back off when GitHub returns rate-limit errors.
 
 ## Review Criteria
 

@@ -96,6 +96,10 @@ Shared-pod shakedown notes:
   disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
   explicitly opts back in. This avoids current RTX PRO 6000 FlashInfer startup
   failures without touching benchmark code.
+- Wrap heavy server/evaluator work with `senpai/gpu_slot.py run --wait` rather
+  than ad hoc shell polling. The helper uses a unique lease, blocks when
+  `nvidia-smi` shows unleased GPU compute processes, heartbeats active runs, and
+  kills its command process group if the lease is lost.
 - Coordinate teardown carefully in one-GPU multi-student pods. Kill only the
   server process group you launched; avoid broad `pkill` cleanup that can stop
   another student's active benchmark server.

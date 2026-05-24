@@ -7,17 +7,20 @@ import argparse
 import fcntl
 import json
 import os
+import signal
 import socket
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 
 
 DEFAULT_SLOT_FILE = "/tmp/inferencebench-gpu-slot.json"
+LOST_LEASE_EXIT = 75
 
 
 def now() -> float:
@@ -54,6 +57,53 @@ def read_lease(path: Path) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
+def active_gpu_processes() -> list[dict[str, Any]]:
+    """Return active NVIDIA compute processes, or [] when nvidia-smi is absent."""
+
+    try:
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-compute-apps=pid,process_name,used_memory",
+                "--format=csv,noheader,nounits",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return []
+    if result.returncode != 0:
+        return []
+
+    processes: list[dict[str, Any]] = []
+    for raw in result.stdout.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        fields = [part.strip() for part in line.split(",", 2)]
+        if len(fields) < 3:
+            continue
+        pid_raw, name, memory_raw = fields
+        try:
+            pid: int | str = int(pid_raw)
+        except ValueError:
+            pid = pid_raw
+        try:
+            memory_mb: int | str = int(memory_raw)
+        except ValueError:
+            memory_mb = memory_raw
+        processes.append({"pid": pid, "process_name": name, "used_memory_mb": memory_mb})
+    return processes
+
+
+def gpu_process_summary(processes: list[dict[str, Any]]) -> str:
+    return ", ".join(
+        f"pid={proc.get('pid')} {proc.get('process_name')} {proc.get('used_memory_mb')}MiB" for proc in processes
+    )
+
+
 def write_lease(path: Path, lease: dict[str, Any]) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(lease, indent=2, sort_keys=True), encoding="utf-8")
@@ -70,6 +120,8 @@ def lease_is_stale(lease: dict[str, Any] | None) -> bool:
 def lease_summary(lease: dict[str, Any] | None) -> str:
     if not lease:
         return "GPU slot is free"
+    if lease.get("owner") == "unleased-gpu-process":
+        return "GPU slot has no lease but GPU is busy: " + gpu_process_summary(lease.get("active_gpu_processes") or [])
     stale = " stale" if lease_is_stale(lease) else ""
     owner = lease.get("owner", "unknown")
     pr = lease.get("pr") or "-"
@@ -82,6 +134,7 @@ def lease_summary(lease: dict[str, Any] | None) -> str:
 def build_lease(args: argparse.Namespace, command: list[str] | None = None) -> dict[str, Any]:
     started = now()
     return {
+        "lease_id": uuid.uuid4().hex,
         "owner": args.owner,
         "pr": args.pr,
         "scenario": args.scenario,
@@ -108,10 +161,25 @@ def acquire(path: Path, args: argparse.Namespace, command: list[str] | None = No
         with locked(path):
             lease = read_lease(path)
             if lease_is_stale(lease):
-                new_lease = build_lease(args, command)
-                write_lease(path, new_lease)
-                return new_lease
-            if lease and lease.get("owner") == args.owner and lease.get("pr") == args.pr:
+                active = [] if getattr(args, "ignore_active_gpu", False) else active_gpu_processes()
+                if not active:
+                    new_lease = build_lease(args, command)
+                    write_lease(path, new_lease)
+                    return new_lease
+                lease = {
+                    "owner": "unleased-gpu-process",
+                    "pr": "-",
+                    "scenario": "-",
+                    "purpose": "active GPU process without gpu_slot lease",
+                    "active_gpu_processes": active,
+                    "expires_at": now() + max(int(getattr(args, "poll_s", 15)), 1),
+                }
+            elif (
+                lease
+                and lease.get("owner") == args.owner
+                and lease.get("pr") == args.pr
+                and getattr(args, "replace_existing", False)
+            ):
                 new_lease = build_lease(args, command)
                 new_lease["replaced_previous_from_same_owner"] = lease
                 write_lease(path, new_lease)
@@ -123,25 +191,30 @@ def acquire(path: Path, args: argparse.Namespace, command: list[str] | None = No
         time.sleep(args.poll_s)
 
 
-def release(path: Path, owner: str, *, pr: str | None = None, force: bool = False) -> bool:
+def release(path: Path, owner: str, *, pr: str | None = None, force: bool = False, lease_id: str | None = None) -> bool:
     with locked(path):
         lease = read_lease(path)
         if not lease:
             return False
         owner_match = lease.get("owner") == owner
         pr_match = pr is None or lease.get("pr") == pr
+        lease_match = lease_id is None or lease.get("lease_id") == lease_id
+        if lease_id is not None and not lease_match:
+            return False
         if not force and not (owner_match and pr_match):
             raise SystemExit(f"refusing to release someone else's lease: {lease_summary(lease)}")
         path.unlink(missing_ok=True)
         return True
 
 
-def heartbeat(path: Path, owner: str, *, pr: str | None, ttl_s: int) -> bool:
+def heartbeat(path: Path, owner: str, *, pr: str | None, ttl_s: int, lease_id: str | None = None) -> bool:
     with locked(path):
         lease = read_lease(path)
         if not lease:
             return False
         if lease.get("owner") != owner or (pr is not None and lease.get("pr") != pr):
+            return False
+        if lease_id is not None and lease.get("lease_id") != lease_id:
             return False
         ts = now()
         lease["updated_at"] = ts
@@ -153,18 +226,61 @@ def heartbeat(path: Path, owner: str, *, pr: str | None, ttl_s: int) -> bool:
         return True
 
 
-def heartbeat_loop(path: Path, owner: str, pr: str | None, ttl_s: int, stop: threading.Event) -> None:
+def heartbeat_loop(
+    path: Path,
+    owner: str,
+    pr: str | None,
+    ttl_s: int,
+    lease_id: str | None,
+    stop: threading.Event,
+    lost: threading.Event,
+) -> None:
     while not stop.wait(min(max(ttl_s // 4, 15), 120)):
-        heartbeat(path, owner, pr=pr, ttl_s=ttl_s)
+        if not heartbeat(path, owner, pr=pr, ttl_s=ttl_s, lease_id=lease_id):
+            lost.set()
+            stop.set()
+            return
+
+
+def terminate_process_group(pgid: int, proc: subprocess.Popen[Any] | None = None, *, grace_s: float = 5.0) -> None:
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        return
+
+    deadline = time.monotonic() + grace_s
+    while proc is not None and proc.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.1)
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    except PermissionError:
+        return
 
 
 def cmd_status(args: argparse.Namespace) -> int:
     path = slot_path(args.slot_file)
     lease = read_lease(path)
+    gpu_processes = active_gpu_processes()
     if args.json:
-        print(json.dumps({"slot_file": str(path), "lease": lease, "stale": lease_is_stale(lease)}, sort_keys=True))
+        print(
+            json.dumps(
+                {
+                    "slot_file": str(path),
+                    "lease": lease,
+                    "stale": lease_is_stale(lease),
+                    "active_gpu_processes": gpu_processes,
+                },
+                sort_keys=True,
+            )
+        )
     else:
         print(lease_summary(lease))
+        if gpu_processes:
+            print(f"active_gpu_processes={gpu_process_summary(gpu_processes)}")
         print(f"slot_file={path}")
     return 0
 
@@ -193,16 +309,61 @@ def cmd_heartbeat(args: argparse.Namespace) -> int:
 def cmd_run(args: argparse.Namespace) -> int:
     path = slot_path(args.slot_file)
     lease = acquire(path, args, command=args.command)
+    lease_id = lease.get("lease_id")
     print(f"acquired GPU slot: {lease_summary(lease)}", flush=True)
     stop = threading.Event()
-    beat = threading.Thread(target=heartbeat_loop, args=(path, args.owner, args.pr, args.ttl_s, stop), daemon=True)
+    lost = threading.Event()
+    beat = threading.Thread(
+        target=heartbeat_loop,
+        args=(path, args.owner, args.pr, args.ttl_s, lease_id, stop, lost),
+        daemon=True,
+    )
     beat.start()
+    child_env = os.environ.copy()
+    if isinstance(lease_id, str):
+        child_env["INFERENCE_BENCH_GPU_SLOT_LEASE_ID"] = lease_id
+    child_env["INFERENCE_BENCH_GPU_SLOT_OWNER"] = args.owner
+    if args.pr:
+        child_env["INFERENCE_BENCH_GPU_SLOT_PR"] = args.pr
+    if args.scenario:
+        child_env["INFERENCE_BENCH_GPU_SLOT_SCENARIO"] = args.scenario
+
+    proc: subprocess.Popen[Any] | None = None
+    previous_handlers: dict[int, Any] = {}
+
+    def handle_signal(signum: int, _frame: Any) -> None:
+        if proc is not None:
+            terminate_process_group(proc.pid, proc, grace_s=5)
+        raise SystemExit(128 + signum)
+
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        previous_handlers[signum] = signal.getsignal(signum)
+        signal.signal(signum, handle_signal)
+
     try:
-        return subprocess.run(args.command, check=False).returncode
+        proc = subprocess.Popen(args.command, env=child_env, start_new_session=True)
+        while proc.poll() is None:
+            if lost.is_set():
+                print("lost GPU slot lease; terminating command process group", file=sys.stderr, flush=True)
+                terminate_process_group(proc.pid, proc, grace_s=5)
+                return LOST_LEASE_EXIT
+            time.sleep(1)
+        return int(proc.returncode)
     finally:
+        for signum, handler in previous_handlers.items():
+            signal.signal(signum, handler)
         stop.set()
-        release(path, args.owner, pr=args.pr, force=False)
-        print("released GPU slot", flush=True)
+        beat.join(timeout=2)
+        if proc is not None:
+            terminate_process_group(proc.pid, proc, grace_s=2)
+        released = release(
+            path,
+            args.owner,
+            pr=args.pr,
+            force=False,
+            lease_id=lease_id if isinstance(lease_id, str) else None,
+        )
+        print("released GPU slot" if released else "GPU slot lease already changed; not released", flush=True)
 
 
 def add_common(parser: argparse.ArgumentParser) -> None:
@@ -215,7 +376,17 @@ def add_owner_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pr", help="PR number or branch for this lease")
     parser.add_argument("--scenario", help="Scenario A, B, C, or D")
     parser.add_argument("--purpose", default="benchmark", help="Short purpose shown in status")
-    parser.add_argument("--ttl-s", type=int, default=7200, help="Lease TTL refreshed by heartbeat/run")
+    parser.add_argument("--ttl-s", type=int, default=1800, help="Lease TTL refreshed by heartbeat/run")
+    parser.add_argument(
+        "--ignore-active-gpu",
+        action="store_true",
+        help="Acquire even when nvidia-smi reports unleased compute processes",
+    )
+    parser.add_argument(
+        "--replace-existing",
+        action="store_true",
+        help="Replace an active lease from the same owner and PR",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -245,7 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(heartbeat_parser)
     heartbeat_parser.add_argument("--owner", required=True)
     heartbeat_parser.add_argument("--pr")
-    heartbeat_parser.add_argument("--ttl-s", type=int, default=7200)
+    heartbeat_parser.add_argument("--ttl-s", type=int, default=1800)
     heartbeat_parser.set_defaults(func=cmd_heartbeat)
 
     run_parser = sub.add_parser("run", help="Run a command while holding the GPU slot")

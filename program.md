@@ -264,15 +264,18 @@ explicitly opts back in. It is launch environment setup only; it does not modify
 the evaluator or scoring contract.
 
 In multi-student, one-GPU pods, coordinate heavy work with
-`senpai/gpu_slot.py`. This is only a lease file, not a benchmark runner: it
-records who owns the GPU, which PR/scenario they are testing, and when the
-lease expires. Students should still run the official task-local
-`./test_server.sh` and `evaluate.py`; the slot prevents accidental overlapping
-full workloads, stale port ownership, and broad cleanup commands.
+`senpai/gpu_slot.py`. This is only a process supervisor and lease file, not a
+benchmark runner: it records who owns the GPU, which PR/scenario they are
+testing, the unique lease ID, and when the lease expires. Students should still
+run the official task-local `./test_server.sh` and `evaluate.py`; the slot
+prevents accidental overlapping full workloads, stale port ownership, and broad
+cleanup commands.
 
 Students should use `gpu_slot.py run --wait ...` for queued GPU work. Do not
 write shell loops that depend on the exact text printed by `gpu_slot.py status`;
-that output is for human debugging, not a stable machine interface.
+that output is for human debugging, not a stable machine interface. If
+`status --json` reports active GPU compute processes without a matching lease,
+resolve the orphan before starting a new full workload.
 
 ## Running
 

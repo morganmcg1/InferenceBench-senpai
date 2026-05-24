@@ -70,22 +70,46 @@ next GPU slot.
 In a shared-pod run, check the slot before heavy GPU work:
 
 ```bash
-python "$PROBLEM_DIR/senpai/gpu_slot.py" status
+python "$PROBLEM_DIR/senpai/gpu_slot.py" status --json
 ```
 
 When you run a server/evaluator workload that can occupy most of the GPU, wrap
-the whole start/evaluate/cleanup block so the slot is released even if the run
-fails:
+the whole start/evaluate/cleanup block in exactly one `gpu_slot.py run --wait`
+command. The helper owns a unique lease, heartbeats it, blocks if unleased GPU
+compute processes already exist, and terminates the command process group if the
+lease is lost. Do not launch a second wrapper for the same PR while the first is
+running, and do not background or disown a server outside the wrapper.
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
+  --wait --ttl-s 1800 \
   --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
-  bash -lc 'source ./eval_env.sh; ./clean_eval_artifacts.sh; ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --json-output-file metrics_full.json'
+  bash -lc '
+    set -euo pipefail
+    source "$PROBLEM_DIR/senpai/runtime_env.sh"
+    source ./eval_env.sh
+    ./clean_eval_artifacts.sh
+    ./test_server.sh > agent/server.log 2>&1 &
+    server_pid=$!
+    trap "kill -- -$server_pid 2>/dev/null || kill $server_pid 2>/dev/null || true" EXIT
+    for i in $(seq 1 240); do
+      curl -sf http://127.0.0.1:8000/v1/models >/dev/null && break
+      kill -0 "$server_pid" 2>/dev/null || { tail -120 agent/server.log; exit 11; }
+      sleep 2
+    done
+    python evaluate.py --quick --json-output-file metrics_quick.json
+    python evaluate.py --json-output-file metrics_full.json
+  '
 ```
 
 If the slot is currently occupied, use `gpu_slot.py run --wait ...` rather than
 shell loops that parse the exact `status` text. Status output is for humans;
 the `run --wait` path is the coordination contract.
+
+If `status --json` shows `active_gpu_processes` while the lease is empty or
+stale, do not start a new benchmark run. Ask the advisor to resolve the orphaned
+server/evaluator first, or wait for the owning `gpu_slot.py run` process to
+clean it up.
 
 When releasing or debugging the GPU, kill only the server process or supervised
 process group you started. Do not use broad cleanup commands such as `pkill

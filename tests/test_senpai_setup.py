@@ -1,6 +1,8 @@
 from pathlib import Path
 import sys
 
+import pytest
+
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -165,4 +167,82 @@ def test_gpu_slot_acquire_release(tmp_path: Path) -> None:
 
     assert gpu_slot.heartbeat(path, "student-a", pr="123", ttl_s=120) is True
     assert gpu_slot.release(path, "student-a", pr="123") is True
+    assert gpu_slot.read_lease(path) is None
+
+
+def test_gpu_slot_same_owner_pr_does_not_replace_without_flag(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "C"
+        purpose = "test"
+        ttl_s = 60
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+        ignore_active_gpu = False
+        replace_existing = False
+
+    first = gpu_slot.acquire(path, Args())
+
+    with pytest.raises(SystemExit) as exc:
+        gpu_slot.acquire(path, Args())
+
+    assert "GPU slot held" in str(exc.value)
+    assert gpu_slot.read_lease(path)["lease_id"] == first["lease_id"]
+
+
+def test_gpu_slot_old_runner_cannot_release_replaced_lease(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "C"
+        purpose = "test"
+        ttl_s = 60
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+        ignore_active_gpu = False
+        replace_existing = False
+
+    class ReplaceArgs(Args):
+        replace_existing = True
+
+    old = gpu_slot.acquire(path, Args())
+    new = gpu_slot.acquire(path, ReplaceArgs())
+
+    assert gpu_slot.release(path, "student-a", pr="123", lease_id=old["lease_id"]) is False
+    assert gpu_slot.read_lease(path)["lease_id"] == new["lease_id"]
+    assert gpu_slot.release(path, "student-a", pr="123", lease_id=new["lease_id"]) is True
+
+
+def test_gpu_slot_refuses_unleased_active_gpu(monkeypatch, tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "C"
+        purpose = "test"
+        ttl_s = 60
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+        ignore_active_gpu = False
+        replace_existing = False
+
+    monkeypatch.setattr(
+        gpu_slot,
+        "active_gpu_processes",
+        lambda: [{"pid": 4242, "process_name": "VLLM::EngineCore", "used_memory_mb": 90000}],
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        gpu_slot.acquire(path, Args())
+
+    assert "GPU slot has no lease but GPU is busy" in str(exc.value)
     assert gpu_slot.read_lease(path) is None
