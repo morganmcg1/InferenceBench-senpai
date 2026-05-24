@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Scenario B (output-heavy, conc=1) launcher — Arm 2a.
+# vLLM with FP8 KV cache + n-gram speculative decoding, BF16 weights (no FP8
+# weight quantization). Tests whether FP8 weight quantization was the MMLU-Pro
+# quality regression source in Arm 1 (5.31x speed but quality_ratio 0.933 < 0.95).
+# FP8 KV halves KV-bandwidth at conc=1, n-gram drafts 3-7 tokens/decode.
+
+MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-8000}"
+_MISTRAL_NATIVE_CTX=32768
+_REQUESTED_MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-${_MISTRAL_NATIVE_CTX}}"
+if [ "${_REQUESTED_MAX_MODEL_LEN}" -gt "${_MISTRAL_NATIVE_CTX}" ]; then
+    MAX_MODEL_LEN="${_MISTRAL_NATIVE_CTX}"
+else
+    MAX_MODEL_LEN="${_REQUESTED_MAX_MODEL_LEN}"
+fi
+unset _MISTRAL_NATIVE_CTX _REQUESTED_MAX_MODEL_LEN
+STARTING_VENV_DIR="${INFERENCE_BENCH_STARTING_VENV_DIR:-}"
+
+if [ -n "${STARTING_VENV_DIR}" ] && [ -x "${STARTING_VENV_DIR}/bin/python" ]; then
+    export VIRTUAL_ENV="${STARTING_VENV_DIR}"
+    export PATH="${STARTING_VENV_DIR}/bin:${PATH}"
+fi
+
+export HF_HOME="${HF_HOME:-${HF_HOME_NEW:-${HOME}/hf_cache}}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
+export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-${HF_HOME}/hub}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
+
+PY_USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
+export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USER_SITE:-}:${PYTHONPATH:-}"
+
+_runtime_env_candidates=(
+    "${PROBLEM_DIR:-}/senpai/runtime_env.sh"
+    "/workspace/senpai-r1-fern/target/senpai/runtime_env.sh"
+    "/home/agent/target/senpai/runtime_env.sh"
+    "/target/senpai/runtime_env.sh"
+)
+for _cand in "${_runtime_env_candidates[@]}"; do
+    if [ -n "${_cand}" ] && [ -f "${_cand}" ]; then
+        # shellcheck disable=SC1090
+        source "${_cand}"
+        break
+    fi
+done
+unset _runtime_env_candidates _cand
+
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+
+_NVIDIA_CPATH_WHITELIST=""
+for _site in /usr/local/lib/python3.10/dist-packages /usr/lib/python3/dist-packages; do
+    [ -d "$_site/nvidia" ] || continue
+    for _pkg in curand cublas cudnn cuda_nvrtc cuda_cupti; do
+        _inc="$_site/nvidia/$_pkg/include"
+        if [ -d "$_inc" ]; then
+            _NVIDIA_CPATH_WHITELIST="${_NVIDIA_CPATH_WHITELIST}:${_inc}"
+        fi
+    done
+done
+_NVIDIA_CPATH_WHITELIST="${_NVIDIA_CPATH_WHITELIST#:}"
+export CPATH="${_NVIDIA_CPATH_WHITELIST}"
+unset _NVIDIA_CPATH_WHITELIST _site _pkg _inc
+
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+
+SPEC_CFG='{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}'
+
+echo "=== vLLM Scenario B: FP8 KV + n-gram speculative decoding (BF16 weights, Arm 2a) ==="
+echo "MODEL_ID=${MODEL_ID}"
+echo "HOST=${HOST} PORT=${PORT}"
+echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
+echo "HF_HOME=${HF_HOME}"
+echo "VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND}"
+echo "SPEC_CFG=${SPEC_CFG}"
+echo "===================================================================="
+
+exec python3 -m vllm.entrypoints.openai.api_server \
+    --model "${MODEL_ID}" \
+    --host "${HOST}" \
+    --port "${PORT}" \
+    --max-model-len "${MAX_MODEL_LEN}" \
+    --gpu-memory-utilization 0.90 \
+    --kv-cache-dtype fp8 \
+    --max-num-seqs 8 \
+    --max-num-batched-tokens 8192 \
+    --block-size 16 \
+    --speculative-config "${SPEC_CFG}" \
+    --trust-remote-code \
+    --disable-log-stats
