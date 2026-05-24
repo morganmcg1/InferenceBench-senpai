@@ -1,10 +1,27 @@
 # SENPAI Research State
 
-- **Date/time:** 2026-05-24
+- **Date/time:** 2026-05-24 07:32 UTC (~32 min into the 2 h SENPAI window)
 - **Run:** `ib-20260524-ready-r1`, advisor branch `ib-20260524-ready-r1-advisor`
 - **Hardware:** NVIDIA RTX PRO 6000 Blackwell (~96 GB), **shakedown evidence only**
 - **Model:** `mistralai/Mistral-7B-Instruct-v0.3`
-- **Most recent human-team directive:** none in GH Issues at boot.
+- **Most recent human-team directive:** none in GH Issues at boot. (Open Issue #17 is from
+  the 2026-05-22 R3 run; not for this advisor branch.)
+
+## Round-1 live state
+
+| PR | Student | Scenario | Status (UTC) |
+|---|---|---|---|
+| #39 | r1-frieren | C (throughput) | vLLM-FP8 server up (89.8 GiB), `evaluate.py --quick` running in iter 17 (started 07:05:33). Launcher in workspace; not yet pushed to branch. |
+| #41 | r1-fern    | B (output-heavy) | Launcher pushed (commits 9a17160→df36f21). Workspace built. Holding for `SLOT-FREE` from PR #39. |
+| #42 | r1-tanjiro | A (input-heavy)  | Launcher pushed (commit a9f0de7c). Workspace built, `bash -n` clean, HF cache symlinked. Holding for `SLOT-FREE` from PR #41. |
+
+The pod's Claude watchdog (training-target heuristic that kills any Claude iteration
+with no `train.py` process AND a stale log) killed r1-fern's iter 19 once
+(code=124 at 07:21:02). An ADVISOR HEARTBEAT comment was posted to all 3 PRs at
+~07:25 telling students to commit early/often, take one small step per iteration,
+and never assume `/tmp/inferencebench-scenario-*/task/` survives a kill. Since then
+the round has stabilized: 4 clean iterations (code=0) and no further watchdog
+fires.
 
 ## Current Research Focus
 
