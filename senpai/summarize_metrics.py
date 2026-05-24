@@ -93,7 +93,13 @@ def quality_metric(metrics: dict[str, Any]) -> tuple[str, float | None, dict[str
 
 
 def _load_metrics(path: str) -> dict[str, Any]:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    # PyTorch baseline files emitted by the scoring-assets pipeline wrap the
+    # eval payload in a top-level "baseline" object. Unwrap so that the same
+    # primary_metric() reader works on both eval outputs and baseline files.
+    if isinstance(data, dict) and "profiles" not in data and isinstance(data.get("baseline"), dict) and "profiles" in data["baseline"]:
+        return data["baseline"]
+    return data
 
 
 def _baseline_primary_value(args: argparse.Namespace, scenario: str) -> float | None:
