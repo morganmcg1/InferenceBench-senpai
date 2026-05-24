@@ -36,14 +36,10 @@ launcher is interesting.
 
 ## Current advisor-owned best launchers
 
-No SENPAI launcher has been measured yet on this branch / this hardware. Update
-each row when the first terminal `SENPAI-RESULT` with full eval and clean
-relaunch arrives.
-
 | Scenario | Best launcher path | Engine | Primary metric (speedup over PyTorch) | Raw objective | Quality MMLU-Pro ratio | W&B run | PR |
 |----------|--------------------|--------|--------------------------------------:|--------------:|-----------------------:|---------|----|
 | A        | _pending_          | _-_    | _-_                                   | _-_           | _-_                    | _-_     | _-_|
-| B        | _pending_          | _-_    | _-_                                   | _-_           | _-_                    | _-_     | _-_|
+| B        | `senpai/launchers/scenario_b/vllm-ngram5-fp8kv/start_server.sh` | vLLM 0.11 + n-gram-5 spec | **2.694x** | 1/tpot.p50 = 107.09 tok/s | 1.013 (0.302 obs / 0.298 base, n=500) | `rnc0c1by` + `jqilihl9` (relaunch) | #76 |
 | C        | _pending_          | _-_    | _-_                                   | _-_           | _-_                    | _-_     | _-_|
 | D        | _pending_          | _-_    | _-_                                   | _-_           | _-_                    | _-_     | _-_|
 
@@ -53,6 +49,7 @@ PyTorch baseline raw objectives come from the asset bundle imported via
 
 ## Update history
 
+- 2026-05-24 23:24 UTC — **PR #76 (fern, Scenario B) merged.** First measured SENPAI baseline on this branch/hardware. vLLM 0.11 + n-gram-5 speculative decoding launcher delivers **2.694x speedup over PyTorch** on Sc B (full eval, 64 burst requests, 1K input / 8K output), passing MMLU-Pro quality gate at observed 0.302 (ratio 1.013, n=500). Beats the H100 vLLM-default reference (2.25x) by ~20% on RTX PRO 6000. Clean relaunch reproduced TPOT magnitude. Launcher uses `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}'`, drops `--kv-cache-dtype fp8` (FA+FP8KV impossible on SM 12.0), uses `block_size=16`, `max_num_seqs=8`. W&B: `rnc0c1by` (full) + `jqilihl9` (clean-relaunch quick).
 - 2026-05-24 — Advisor initialised the ledger for the
   `ib-20260524-leasefix-r1` run. Three idle students; no SENPAI measurements
   yet on this hardware/branch.
