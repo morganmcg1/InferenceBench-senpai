@@ -39,8 +39,17 @@ All three start from `src/starting_points/vllm_running/start_server.sh`, source 
 - **GPU slot contention.** Three students, one GPU. Observed working — tanjiro holds lease for D, fern queued via `--wait` (correct behavior). Watch for stale leases.
 - **GitHub rate-limit risk** — keep `gh` calls deliberate; lean on the W&B project and the GPU slot for high-frequency state.
 
-## Round 1 progress (as of 2026-05-24 22:24)
+## Round 1 progress (as of 2026-05-24 23:15)
 
-- **PR #79 fern (B):** launcher posted, hit FA3+FP8KV+Blackwell incompatibility, queued for Triton+FP8KV attempt; clear stop-rule and fallback recipe given (drop FP8 KV → specdec+CUDA graphs only).
-- **PR #80 frieren (A):** no comments yet; Claude has been active since 22:11. No FP8 KV in this launcher — should not hit fern's blocker.
-- **PR #81 tanjiro (D):** holds the GPU lease (acquired around 22:00:54, TTL ~30 min); no comments yet. No FP8 KV in this launcher.
+- **PR #79 fern (B):** launcher posted, hit FA3+FP8KV+Blackwell incompatibility, queued for Triton+FP8KV attempt; clear stop-rule and fallback recipe given (drop FP8 KV → specdec+CUDA graphs only). No commits or new comments since 22:44.
+- **PR #80 frieren (A):** no commits or comments since 22:44.
+- **PR #81 tanjiro (D):** no commits or comments since 22:44.
+
+## Pod deadlock (open, escalated)
+
+- **Symptom:** pod `senpai-ib-20260524-leasefix-r2-group-1-...` stdout last advanced at 22:11:25 UTC (frieren iteration 6 heartbeat). No subsequent heartbeats from any of the 3 students for 60+ min.
+- **Diagnostic constraints:** advisor service account lacks `pods/exec` permission; `kubectl top` Metrics API not available. Cannot read `/tmp/inferencebench-gpu-slot.json` from outside the pod.
+- **Likely cause:** student Claude session hung while holding (or waiting on) the GPU slot lease. `gpu_slot.py run --wait` default `--wait-timeout-s` is None (unbounded), so a stuck inner command does not auto-release.
+- **Escalation:** Issue #90 opened to human team at 22:45 UTC, requesting `kubectl exec` intervention (dump slot file, nvidia-smi, kill stuck vLLM processes). 0 comments after 30 min.
+- **Budget at risk:** 2-hour launch window ends 23:53 UTC. Full eval needs ~30 min, so anything beyond ~23:23 UTC start is unlikely to produce a clean result.
+- **Advisor next-cycle threshold:** if deadlock persists and remaining budget < 25 min, close PRs #79/#80/#81 as "dead-end on Blackwell pod-deadlock; no W&B run produced for this launch" and end the launch with no merged winners.
