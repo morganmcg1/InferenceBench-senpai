@@ -159,6 +159,12 @@ python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_full.json \
   --group "<hypothesis-or-pr>"
 ```
 
+For current RTX PRO 6000 shakedown pods, `runtime_env.sh` disables vLLM's
+implicit FlashInfer sampler/prefill path and defaults max model length to
+32768. Do not re-enable FlashInfer or FP8 KV cache unless your assignment
+explicitly asks for that hardware-specific experiment and you prove the server
+boots on this pod.
+
 Use quick evaluation for smoke tests and full evaluation for terminal results.
 Quick launch probes may skip quality only when the PR/advisor allows it; final
 terminal results must run quality with the prepared baseline registry.

@@ -257,8 +257,11 @@ source "$PROBLEM_DIR/senpai/runtime_env.sh"
 ```
 
 This sets CUDA pip-package include/library paths and pod-local JIT caches that
-avoid common Blackwell/FlashInfer/vLLM startup failures. It is launch
-environment setup only; it does not modify the evaluator or scoring contract.
+avoid common Blackwell/vLLM startup failures. On the current RTX PRO 6000
+shakedown hardware it also defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768` and
+disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
+explicitly opts back in. It is launch environment setup only; it does not modify
+the evaluator or scoring contract.
 
 In multi-student, one-GPU pods, coordinate heavy work with
 `senpai/gpu_slot.py`. This is only a lease file, not a benchmark runner: it

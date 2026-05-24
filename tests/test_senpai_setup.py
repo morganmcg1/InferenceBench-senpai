@@ -78,6 +78,14 @@ def test_runtime_import_env_prepends_nvidia_wheel_libs(monkeypatch) -> None:
     assert env["LD_LIBRARY_PATH"] == "/site/nvidia/cuda_runtime/lib:/existing"
 
 
+def test_runtime_env_disables_implicit_flashinfer_for_shakedown() -> None:
+    text = Path("senpai/runtime_env.sh").read_text(encoding="utf-8")
+
+    assert 'INFERENCE_BENCH_MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-32768}"' in text
+    assert 'VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"' in text
+    assert 'VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"' in text
+
+
 def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
     out = tmp_path / "workspace"
     # Exercise the script through its file operations without requiring a GPU.

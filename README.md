@@ -92,7 +92,10 @@ Shared-pod shakedown notes:
 
 - Source `senpai/runtime_env.sh` before launching vLLM/SGLang/TGI in the RTX
   PRO 6000 pod. It exports CUDA pip-package include/library paths and pod-local
-  cache directories for JIT-heavy backends without touching benchmark code.
+  cache directories, defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768`, and
+  disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
+  explicitly opts back in. This avoids current RTX PRO 6000 FlashInfer startup
+  failures without touching benchmark code.
 - Coordinate teardown carefully in one-GPU multi-student pods. Kill only the
   server process group you launched; avoid broad `pkill` cleanup that can stop
   another student's active benchmark server.

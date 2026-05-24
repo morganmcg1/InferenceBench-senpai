@@ -63,6 +63,11 @@ Survey the current state:
   baselines, quality samples, quality registry, W&B, or hardware mismatch
   before assigning serving work. Do not accept raw objectives or
   public-reference extrapolations as `speedup_over_pytorch`.
+- On current RTX PRO 6000 shakedown pods, tell students to source
+  `senpai/runtime_env.sh` and avoid re-enabling FlashInfer or FP8 KV cache
+  unless the PR is explicitly testing that hardware-specific path and the
+  server boots cleanly. The helper disables vLLM's implicit FlashInfer
+  sampler/prefill path by default without changing the evaluator.
 - Check existing PRs and labels for `$ADVISOR_BRANCH`.
 - Check W&B runs under `wandb-applied-ai-team/inferencebench-senpai` for this
   research tag/group.

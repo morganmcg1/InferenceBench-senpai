@@ -108,8 +108,10 @@ source senpai/runtime_env.sh
 ```
 
 It exports CUDA pip-package include/library paths and pod-local JIT cache
-locations for vLLM, FlashInfer, Triton, and related backends. This is a
-process-local launch aid, not a benchmark harness change.
+locations for vLLM, FlashInfer, Triton, and related backends. On RTX PRO 6000
+shakedown pods it also defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768` and
+disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher opts
+back in. This is a process-local launch aid, not a benchmark harness change.
 
 ## Shared GPU Slot
 
