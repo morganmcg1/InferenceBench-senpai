@@ -4,6 +4,37 @@ Log of reviewed experiments on this advisor branch. Append a new section every t
 
 ---
 
+## 2026-05-24 23:24 — PR #76: Sc B vLLM + n-gram-5 spec decoding (no FP8 KV) — **MERGED, WINNER**
+
+- Branch: `fern/scB-vllm-ngram5-fp8kv` (merged squash)
+- Hypothesis: vLLM Sc B launcher with n-gram-5 speculative decoding to amplify per-token decode throughput on the concurrency-1 long-output workload. Originally specified `--kv-cache-dtype fp8`; student self-corrected to drop FP8 KV after diagnosing the FA+FP8KV-on-Blackwell incompatibility (advisor-blessed).
+- Result table:
+
+| Metric | Full eval (rnc0c1by, 64 burst) | Quick relaunch (jqilihl9, 4 burst) |
+|---|---:|---:|
+| **scenario/B/speedup_over_pytorch** | **2.6937x** | 3.5134x |
+| 1/tpot.p50 (tok/s) | 107.09 | 139.68 |
+| tpot.p50 (ms) | 9.338 | 7.159 |
+| ttft.p50 (s) | 0.0641 | 0.0641 |
+| generation_throughput (tok/s) | 103.68 | 128.30 |
+| success / failure / empty | 64/0/0 | 4/0/0 |
+| VRAM peak (MB) | 87,725 | 87,615 |
+| Quality MMLU-Pro (n=500) | observed 0.302 / baseline 0.298 / ratio 1.013 / **PASS** | — |
+
+- Conclusion: clear win. The n-gram-5 speculative decoding hypothesis is validated on this scenario/hardware; the corrected (no-FP8-KV) launcher beats vLLM-default's H100 public reference (2.25x) by ~20% even on the slower RTX PRO 6000 shakedown hardware. Clean relaunch reproduced the TPOT magnitude (within small-sample variance), and the quality gate passed convincingly at the authoritative n=500 sample size.
+- Notable mechanics observed:
+  - vLLM 0.11 V1 engine internally **forces `chunked_prefill_enabled=True` when speculative decoding is on**, regardless of `--no-enable-chunked-prefill`. This is a vLLM hard constraint, not a launcher bug; the TPOT win arrived anyway.
+  - `--disable-log-stats` suppresses vLLM's periodic spec-decode stats, so n-gram acceptance rate is not directly logged. Back-of-envelope from 107 tok/s vs ~60 tok/s naïve suggests ~30–50% acceptance. Removing `--disable-log-stats` is a clean follow-up.
+  - The 124-timeout pattern observed mid-iteration was the orchestrating Claude shell hitting `SENPAI_TIMEOUT_MINUTES`; the detached `gpu_slot.py` + vLLM server + `evaluate.py` continued and produced the headline result. Important operational lesson: the eval pipeline is independent of the Claude controller.
+- Action: squash-merged at 23:24 UTC, `BASELINE.md` updated. Sc B current best: 2.694x.
+- Suggested follow-ups (queued for round 2 — do NOT all in this round):
+  - n-gram-7 (and n-gram-3) sweep on the same launcher — cheap, direct extension.
+  - Capture explicit accept rate by removing `--disable-log-stats`.
+  - TRITON_ATTN variant — does not have the FA+FP8KV gating, so FP8 KV becomes viable again as a memory-headroom helper for higher concurrency variants.
+  - Medusa or EAGLE draft-model speculative decoding — larger lift toward the SMAC3 15.23x H100 stretch.
+
+---
+
 ## 2026-05-24 22:11 — PR #75: Sc A vLLM prefill + FP8 KV (FLASH_ATTN) — CLOSED, negative (boot failure)
 
 - Branch: `frieren/scA-vllm-prefill-fp8kv`
