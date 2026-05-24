@@ -16,7 +16,7 @@ set -euo pipefail
 MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
-MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-131072}"
+MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-32768}"
 STARTING_VENV_DIR="${INFERENCE_BENCH_STARTING_VENV_DIR:-}"
 
 if [ -n "${STARTING_VENV_DIR}" ] && [ -x "${STARTING_VENV_DIR}/bin/python" ]; then
@@ -34,16 +34,26 @@ export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USE
 
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-# Attention backend. FLASHINFER is the target; FLASH_ATTN is an overrideable
-# fallback if FlashInfer fails to import/build on the active GPU.
-export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASHINFER}"
+# Attention backend. FLASHINFER is the original target; on this Blackwell pod
+# FlashInfer's bundled CUDA 12 headers conflict with system CUDA 13 nvcc, so
+# FLASH_ATTN is the override path used in practice. FLASH_ATTN on Blackwell does
+# not support fp8 kv-cache, so the KV dtype is overrideable too.
+export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 
-echo "=== vLLM Inference Server (Scenario A: FlashInfer + FP8 KV) ==="
+# Disable FlashInfer sampler — vLLM auto-enables it when flashinfer is importable
+# but its sampling kernel JIT-build fails on this CUDA 13 / Blackwell pod
+# (curand.h missing in /usr/local/cuda/include). PyTorch sampler is fine for
+# concurrency-1 input-heavy workloads where sampling is not the bottleneck.
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+
+echo "=== vLLM Inference Server (Scenario A: tuned prefill batch) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "HF_HOME=${HF_HOME}"
 echo "VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND}"
+echo "KV_CACHE_DTYPE=${KV_CACHE_DTYPE}"
 echo "================================================"
 
 exec python3 -m vllm.entrypoints.openai.api_server \
@@ -52,7 +62,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \
     --port "${PORT}" \
     --max-model-len "${MAX_MODEL_LEN}" \
     --gpu-memory-utilization 0.92 \
-    --kv-cache-dtype fp8 \
+    --kv-cache-dtype "${KV_CACHE_DTYPE}" \
     --max-num-seqs 16 \
     --max-num-batched-tokens 16384 \
     --no-enable-chunked-prefill \
