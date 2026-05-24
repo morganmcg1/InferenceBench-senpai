@@ -64,7 +64,7 @@ beats it on the target scenario.
 |---|---|---:|---|---|---|
 | A: Input-heavy   | `scenario/A/speedup_over_pytorch` | — (no measured candidate yet) | starting vLLM default | — | — |
 | B: Output-heavy  | `scenario/B/speedup_over_pytorch` | — (no measured candidate yet) | starting vLLM default | — | — |
-| C: High-load     | `scenario/C/speedup_over_pytorch` | — (no measured candidate yet) | starting vLLM default | — | — |
+| C: High-load     | `scenario/C/speedup_over_pytorch` | **46.35x** ✅ | `senpai/launchers/C/vllm-fp8-batch/start_server.sh` — vLLM 0.21 + FP8 weights+KV + chunked prefill + max-num-seqs 256 + max-num-batched-tokens 8192 + FLASH_ATTN + gpu-memory-utilization 0.92 | `yiumffcc` | #39 |
 | D: General       | `scenario/D/speedup_over_pytorch` | — (no measured candidate yet) | starting vLLM default | — | — |
 
 Public H100 reference snapshot (2026-05-21, **not on this hardware**, **do not
@@ -74,5 +74,11 @@ above are what every PR must beat.
 
 ## Update History
 
+- 2026-05-24 07:54Z — PR #39 (r1-frieren, Scenario C) merged. First measured
+  candidate on RTX PRO 6000 seed 248. **46.35x** speedup over PyTorch.
+  Quality gate PASS: MMLU-Pro ratio 0.9530 (margin 0.0030 above 0.95 floor).
+  Per-profile: burst 75.16x / poisson 47.84x / constant 27.69x.
+  VRAM peak 90,775 MiB (94 %), cold relaunch healthy in ~38 s.
+  W&B run: `yiumffcc`. Launcher: `senpai/launchers/C/vllm-fp8-batch/start_server.sh`.
 - 2026-05-24 — ledger created. Preflight passed for RTX PRO 6000 seed 248.
   Three idle students; no measured candidates yet.
