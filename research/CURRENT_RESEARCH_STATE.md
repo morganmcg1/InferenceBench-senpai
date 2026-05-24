@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- 2026-05-24 23:10 UTC
+- 2026-05-24 23:25 UTC
 - No human research team directives yet on this run.
 
 ## Research focus
@@ -20,9 +20,13 @@
 ## Current portfolio
 | Student | Scenario | PR | Hypothesis | Status |
 |---|---|---|---|---|
-| frieren | B (output-heavy) | #74 | N-gram speculative decoding (k=5) + FP8 weights, FlashAttention backend | assigned (status:wip) |
-| fern    | A (input-heavy)  | #78 | `--max-num-batched-tokens 16384` one-shot prefill + FP8 weights, no chunked prefill | assigned (status:wip) |
-| tanjiro | D (general)      | #82 → follow-up | bigger-batch follow-up: `--max-num-seqs 128 --max-num-batched-tokens 16384` + FP8 + chunked prefill | to assign next |
+| fern    | A (input-heavy)  | #78 | `--max-num-batched-tokens 16384` one-shot prefill + FP8 weights, no chunked prefill | **holds slot** (lease through ~23:52Z); GitHub-stale since 23:05Z but pod log shows iterations exit 0; status nudge posted 23:25Z |
+| frieren | B (output-heavy) | #74 | N-gram speculative decoding (k=5) + FP8 weights, FlashAttention backend | queued behind fern (wrapper PID 31185 alive since 23:01Z, launcher 6c8d82b committed) |
+| tanjiro | D (general)      | #93 | bigger prefill chunk: `--max-num-batched-tokens 8192 → 16384` on the merged Sc. D launcher | queued behind fern (launcher e786f59 committed, single-flag delta vs PR #82) |
+
+## GPU queue (1 shared RTX PRO 6000, budget ends ~23:52 UTC)
+1. fern (running) → 2. frieren (queued) → 3. tanjiro (queued)
+Budget runs out essentially at fern's lease expiry. Frieren and tanjiro likely only get one slot total after fern releases; if fern uses the full lease, neither runs this window.
 
 ## Diagnosis — 2026-05-24 ~23:00 UTC (supersedes earlier pivot note)
 - Earlier "FP8 cold-start hang" hypothesis is **disproven** by PR #82: FP8 + chunked prefill came up cleanly in ~78 s and produced a 1.5015x Sc. D measurement with MMLU-Pro PASS.
@@ -31,7 +35,8 @@
 - Operational mitigations recommended to students: keep a background heartbeat (`echo tick >> /tmp/<name>_tick.log`) running during the eval so the Claude log stays live, and bundle server launch + quick + full eval inside a single `gpu_slot.py run --wait` block rather than separate wrappers.
 
 ## Next research directions
-- **Scenario D Arm 3** (tanjiro follow-up): `--max-num-seqs 128 --max-num-batched-tokens 16384` + FP8 + chunked prefill. Same launcher family that just won, pushing batch envelope. Watch VRAM (already 91 GB peak at the smaller config).
+- **Scenario D bigger prefill chunk** (tanjiro PR #93, queued): one-flag delta from the merged 1.5015x winner; should narrow TTFT distribution by absorbing the 4×4096 prompt burst in a single prefill step. VRAM headroom safe (KV bound by `max-num-seqs × max-model-len`, unchanged).
+- **Scenario D Arm 3+** (after the bigchunk arm): `--max-num-seqs 128` + `--max-num-batched-tokens 16384` if VRAM allows, then explore `--max-num-batched-tokens 12288` as a middle ground. Decode-side is dominant (`tpot.p50≈17ms`) so speculative decoding on Sc. D is another candidate — but defer to avoid duplicating frieren's PR #74 lever.
 - **Scenario B** is the biggest known headroom — n-gram speculative decoding stays in PR #74's plan; results will tell us whether speculative decoding is the right lever on this hardware.
 - **Scenario A** waiting on PR #78: one-shot prefill (`--max-num-batched-tokens 16384`) should help TTFT-bound profile; pair with `--enable-prefix-caching` only after confirming LongBench-v2 prompt overlap empirically.
 - **Scenario C** is the only scenario where vLLM defaults already track the H100 SMAC3 reference closely; revisit only after A/B/D wins land.
