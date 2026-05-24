@@ -79,16 +79,16 @@ RUN curl -fsSL https://claude.ai/install.sh | bash || true && \
     (sed -i "s/const INACTIVITY_TIMEOUT_MS = 10 \\* 60 \\* 1_000;/const INACTIVITY_TIMEOUT_MS = 12 * 60 * 60 * 1_000;/" \
       "$(npm root -g)/weave-claude-plugin/dist/daemon.js" || true) && \
     mkdir -p /root/.weave_claude_plugin/logs && \
-    cat > /root/.weave_claude_plugin/settings.json <<'EOF'
-{
-  "log_file": "/root/.weave_claude_plugin/logs/daemon.log",
-  "weave_project": null,
-  "wandb_api_key": null,
-  "debug": false,
-  "version": "0.1.0",
-  "daemon_socket": "/root/.weave_claude_plugin/daemon.sock"
-}
-EOF
+    printf '%s\n' \
+      '{' \
+      '  "log_file": "/root/.weave_claude_plugin/logs/daemon.log",' \
+      '  "weave_project": null,' \
+      '  "wandb_api_key": null,' \
+      '  "debug": false,' \
+      '  "version": "0.1.0",' \
+      '  "daemon_socket": "/root/.weave_claude_plugin/daemon.sock"' \
+      '}' \
+      > /root/.weave_claude_plugin/settings.json
 
 RUN uv pip install --system --no-cache \
         accelerate \
