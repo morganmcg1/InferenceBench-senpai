@@ -1,19 +1,19 @@
 # SENPAI Research State
 
-- **Date/time:** 2026-05-24 08:04 UTC (~100 min into the 2 h SENPAI window; ~20 min remaining)
+- **Date/time:** 2026-05-24 08:29 UTC (5 min past 2 h whole-program clock; **harvest mode**)
 - **Run:** `ib-20260524-ready-r1`, advisor branch `ib-20260524-ready-r1-advisor`
 - **Hardware:** NVIDIA RTX PRO 6000 Blackwell (~96 GB), **shakedown evidence only**
 - **Model:** `mistralai/Mistral-7B-Instruct-v0.3`
-- **Most recent human-team directive:** none in GH Issues at boot or at 08:04 re-check.
+- **Most recent human-team directive:** none in GH Issues at boot, 08:04, or 08:14 re-checks.
 
-## Live state (round 1 → round 2 in flight)
+## Live state (harvest mode — 2 h clock expired 08:24Z)
 
-| PR | Student | Scenario | Status (UTC 08:04) |
+| PR | Student | Scenario | Status (UTC 08:29) |
 |---|---|---|---|
 | #39 | r1-frieren | C (throughput) | **MERGED at 07:54Z. 46.35x speedup over PyTorch** (geomean of burst 75.16x / poisson 47.84x / constant 27.69x). Quality PASS (0.9530, margin 0.003 above 0.95 floor). W&B `yiumffcc`. |
-| #41 | r1-fern    | B (output-heavy) | vLLM server up, **quick eval 4/4 PASS at 08:03:32Z: TPOT p50 = 3.93 ms ⇒ ~6.4x raw speedup** over PyTorch baseline of 25.15 ms. gen_throughput 210 tok/s. Full eval (64 reqs + 500 MMLU-Pro) running. Three CUDA-header bug-fix commits required (FlashInfer JIT CPATH clash with system CUDA 13). |
-| #42 | r1-tanjiro | A (input-heavy)  | Holding for window 3, prep intact (commit `a9f0de7c`). Idle-polling correctly since 07:49. Heartbeat posted at 08:04 with window-3 launch criteria and time-budget warning. |
-| #49 | r1-frieren | D (general/balanced) | New assignment opened at 07:58Z. Launcher `senpai/launchers/D/vllm-fp8-balanced/start_server.sh` pushed at 08:01 (`16eff92a`). Recipe matches brief: FP8 weights+KV + chunked prefill + ngram spec + FLASH_ATTN + pre-emptive CPATH fix. Waiting for window 4 (after r1-tanjiro). Time-budget tight; may not fit in remaining 20 min. |
+| #41 | r1-fern    | B (output-heavy) | vLLM server still running per r1-tanjiro GPU obs at 08:25Z (87965 MiB / 84 % util / 28.5 min elapsed). Quick eval 4/4 PASS at 08:03:32Z: **TPOT p50 = 3.93 ms ⇒ ~6.4x raw speedup**. Full eval (64 reqs × 8192 output tokens conc=1 burst + 500 MMLU-Pro) in progress. Expected terminal SENPAI-RESULT ~08:40-08:50Z. **No r1-fern W&B run today** in `wandb-applied-ai-team/inferencebench-senpai` (InferenceBench eval script doesn't auto-init W&B for local burst runs — metrics still being collected to JSON). |
+| #42 | r1-tanjiro | A (input-heavy)  | Holding for window 3, prep intact (`a9f0de7c`). Helper scripts (`launch_server.sh`, `run_quick_eval.sh`, `run_full_eval.sh`) staged under `/tmp/inferencebench-scenario-a/`. Monitor armed for GPU-idle and PR41 SLOT-FREE. Will launch instantly on signal. Scenario A 1×8K/1K burst eval ≈ 14-18 min; window 3 should fit if r1-fern finishes by ~08:40Z. |
+| #49 | r1-frieren | D (general/balanced) | Launcher `senpai/launchers/D/vllm-fp8-balanced/start_server.sh` pushed at 08:01 (`16eff92a`). Recipe verified end-to-end. **Window 4 will not happen this run** — launcher carries forward as zero-rework asset for next research window. r1-frieren acknowledged at 08:21Z and is winding down to idle polling. |
 
 The pod's Claude watchdog killed r1-fern's iter 19 once early in round 1 and again at iter 20
 at 07:43:14Z (834 s of idle polling). Both were self-recovered (work pushed before kill).
