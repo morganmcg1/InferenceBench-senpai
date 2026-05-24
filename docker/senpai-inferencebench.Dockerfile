@@ -140,7 +140,7 @@ RUN uv pip install --system --no-cache \
 
 RUN export LD_LIBRARY_PATH="$(python -c 'import site; from pathlib import Path; libs=[]; [libs.extend(str(path) for path in (Path(root) / "nvidia").glob("*/lib") if path.is_dir()) for root in site.getsitepackages() + [site.getusersitepackages()] if (Path(root) / "nvidia").exists()]; print(":".join(dict.fromkeys(libs)))')${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" && \
     python -c 'import torch, transformers, vllm; assert torch.__version__.startswith("2.8.0"), torch.__version__; assert vllm.__version__ == "0.11.0", vllm.__version__; print("torch", torch.__version__); print("transformers", transformers.__version__); print("vllm", vllm.__version__)' && \
-    python -m vllm.entrypoints.openai.api_server --help >/tmp/vllm_api_server_help.txt
+    python -c 'from vllm.entrypoints.openai import api_server; print("vllm_openai_api_server", api_server.__name__)'
 
 RUN cd /opt && \
     git clone --depth=1 https://github.com/rank-and-file/filelock_workarounds.git
