@@ -198,6 +198,7 @@ try:
     report["vllm_openai_api_server"] = True
 except Exception as exc:
     report["vllm_error"] = str(exc)
+    print(json.dumps(report, sort_keys=True))
     sys.exit(3)
 
 print(json.dumps(report, sort_keys=True))

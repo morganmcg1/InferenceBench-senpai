@@ -132,6 +132,7 @@ RUN uv pip install --system --no-cache \
         "vllm==${VLLM_VERSION}" \
         nvidia-curand-cu12 \
         nvidia-cuda-nvcc-cu12 \
+        prometheus-client \
         python-multipart \
         uvloop \
         "transformers>=4.55.2,<4.58" && \
