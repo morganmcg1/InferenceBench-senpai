@@ -42,7 +42,22 @@ These are queued as follow-ups based on the round-1 results. Do not assign until
 
 We are nominally at round 1, so there is no plateau yet. After three rounds of <5% improvement on the same scenario, escalate per the Plateau Protocol in `CLAUDE.md` (change strategy tier; investigate the worst-performing profile; consider non-vLLM engines or kernel-level work).
 
+## Round 2 candidate hypotheses (from researcher-agent)
+
+`research/RESEARCH_IDEAS_2026-05-24_advisor.md` ranks 8 hypotheses. Highest-impact follow-ups not in round 1:
+
+1. **FlashInfer attention backend on Scenario A** — explicitly override `runtime_env.sh` to set `VLLM_ATTENTION_BACKEND=FLASHINFER` + `VLLM_USE_FLASHINFER_SAMPLER=1` + `VLLM_DISABLE_FLASHINFER_PREFILL=0`. Expected 1.3–1.8× TTFT over the FLASH_ATTN baseline. Risk: Blackwell sm_100 PTX support depends on the installed FlashInfer version; must smoke-test boot first.
+2. **SGLang FP8 weights + RadixAttention on Scenario C** — `--quantization fp8 --schedule-policy lpm`. SGLang's H100 default already beats vLLM's default on throughput; FP8 weights + RadixAttention give ~7 GB free for KV cache. Risk: quality gate with per-tensor FP8 scaling on Mistral GQA; CLI compatibility of `--quantization fp8` on the installed SGLang build.
+3. **n-gram speculative decoding sweep on Scenario B** — the researcher recommends 7 tokens instead of 5 once fern's PR #76 returns a baseline. Round-1's 5-token choice is the conservative starting point; the sweep is a natural follow-up.
+4. **SGLang FlashInfer + CUDA graphs on Scenario D** — compound winner once round-1 baselines exist.
+
+Open uncertainties flagged by the researcher:
+- Installed FlashInfer version's Blackwell sm_100 support.
+- SGLang `--quantization fp8` CLI accepted by the installed build.
+- n-gram acceptance rate on LongBench-v2 prompts.
+
+These will be resolved by round-1 results before being assigned.
+
 ## Open external context
 
-- The `researcher-agent` was launched in parallel to generate fresh launcher hypotheses and will write to `/research/RESEARCH_IDEAS_2026-05-24_advisor.md`. Round-2 assignments will be informed by that note.
-- The headline reference numbers in `program.md` are H100; current results are RTX PRO 6000 shakedown only and **not** leaderboard-comparable.
+- Reference numbers in `program.md` are H100; current results are RTX PRO 6000 shakedown only and **not** leaderboard-comparable.
