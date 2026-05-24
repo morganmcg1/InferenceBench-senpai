@@ -45,16 +45,30 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
 
 ## Current live baseline (this tag, RTX PRO 6000)
 
-Until a student PR establishes a measured vLLM-default-on-this-hardware
-result, the current live baseline is the PyTorch baseline above.
-
 | Scenario | Best valid launcher | Best raw objective | Speedup over PyTorch | W&B run | PR |
 |---|---|---:|---:|---|---|
-| A | (none yet) | — | — | — | — |
+| A | `senpai/launchers/scenario_a/vllm-fastprefill/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-batched-tokens 16384`, `--max-num-seqs 8`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | `1/ttft.p50 = 2.840` | **1.246x** | `7dew56hp` | #83 |
 | B | (none yet) | — | — | — | — |
 | C | (none yet) | — | — | — | — |
 | D | (none yet) | — | — | — | — |
 
+### Scenario A details (PR #83 — frieren)
+
+- Full eval: 128/128 burst success, 0 failures.
+- TTFT: p50 0.3521 s (PyTorch 0.4385 s, −19.7%); p90 0.3972 s; p99 0.4065 s.
+- TPOT p50: 0.01708 s (PyTorch 0.02576 s, −33.7%).
+- Request throughput: 0.0909 req/s (PyTorch 0.0709, +28.2%).
+- Quality gate **PASS**: mmlu_pro observed = baseline = 0.298 (ratio 1.000, n=500).
+- VRAM peak: 92 109 MB.
+- Cold-relaunch confirmed.
+- **Caveat (open scientific question):** vLLM 0.11.0 V1 engine silently
+  force-enables chunked prefill regardless of `--no-enable-chunked-prefill`
+  (`vllm/engine/arg_utils.py:1548`). The win is therefore not attributable to
+  the no-chunked-prefill lever; it comes from FLASH_ATTN pinning, large
+  `--max-num-batched-tokens`, CUDA graphs, and prefix-cache off.
+
 ## Update history
 
 - 2026-05-24: initialized live ledger from `rtxpro6000-seed248` PyTorch baselines.
+- 2026-05-24 23:05Z: PR #83 merged. Scenario A: PyTorch → **1.246x** (frieren,
+  W&B `7dew56hp`).
