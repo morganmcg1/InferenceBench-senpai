@@ -1,7 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROBLEM_DIR="${PROBLEM_DIR:-/workspace/senpai/target}"
+# Some pods inject PROBLEM_DIR=target/ via the launch harness; that relative
+# stub breaks the source below. Probe known absolute roots when the current
+# value does not point at a real runtime_env.sh.
+if [ -z "${PROBLEM_DIR:-}" ] || [ ! -f "${PROBLEM_DIR}/senpai/runtime_env.sh" ]; then
+    for _candidate in \
+        /workspace/senpai-fern/target \
+        /workspace/senpai/target \
+        ; do
+        if [ -f "${_candidate}/senpai/runtime_env.sh" ]; then
+            PROBLEM_DIR="${_candidate}"
+            break
+        fi
+    done
+fi
 # shellcheck disable=SC1091
 source "$PROBLEM_DIR/senpai/runtime_env.sh"
 
