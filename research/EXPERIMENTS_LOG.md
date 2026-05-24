@@ -45,3 +45,50 @@
 2. Explicit `cuda-graph-capture-sizes` pinned to `{1,2,4,8}` for tighter TPOT capture.
 3. Smaller `max_model_len` (e.g. 8192) to free KV slots for higher real concurrency.
 4. Marlin / W8A16 quantization as the next TPOT lever.
+
+## 2026-05-24 23:43 — PR #88: Scenario B vLLM n-gram speculative decoding (num_spec=5)
+
+- **Student:** fern
+- **Branch:** `fern/vllm-ngram-spec-decode-B` (merged, squash commit `c3ca8ef`)
+- **Hypothesis:** Scenario B is the most extreme decode-latency case (concurrency=1, 8192-token outputs). TPOT dominates and the GPU is bandwidth-bound. vLLM's native n-gram speculative decoding (no draft model required) should amortize autoregressive cost on Mistral-Instruct outputs that contain repeated n-grams. `num_speculative_tokens=5` plus `prompt_lookup_min=2`, `prompt_lookup_max=4`, FLASH_ATTN, no chunked-prefill, no prefix caching, `max_num_seqs=8`, `block_size=16`. Original PR also requested `--kv-cache-dtype fp8` but the student found vLLM 0.11.0 FLASH_ATTN backend rejects fp8 KV on Blackwell (FA3+SM90-only), so fp8 KV was dropped — concurrency=1 + 96 GB VRAM means memory headroom was not needed anyway.
+- **Winning launcher:** `senpai/launchers/scenario_b/vllm-ngram5-fp8kv/start_server.sh`
+
+### Results
+
+| Metric | PyTorch | vLLM n-gram spec=5 | Δ |
+|---|---:|---:|---:|
+| `scenario/B/speedup_over_pytorch` | 1.000x | **2.694x** | +169.4% |
+| Raw obj (1/tpot.p50) | 39.76 | 107.09 | +169.4% |
+| `quality/mmlu_pro_observed_accuracy` | 0.298 | **0.302** | +0.4pp |
+| `quality/mmlu_pro_ratio` (τ=0.95) | — | 1.013 | PASS |
+| `ttft.p50` (s) | 0.0709 | 0.0641 | -9.6% |
+| `ttft.p90` (s) | — | 0.0655 | — |
+| `ttft.p99` (s) | — | 0.5517 | first-batch warmup |
+| `tpot.p50` (s) | 0.0252 | **0.00934** | **-62.9%** |
+| `tpot.p90` (s) | — | 0.01247 | — |
+| `tpot.p99` (s) | — | 0.0836 | spec-reject batch |
+| `itl.p50` (s) | — | 0.01309 | — |
+| `request_throughput_req_per_s` | 0.01334 | 0.02187 | +63.9% |
+| `generation_throughput_tokens_per_s` | 39.19 | **103.68** | +164.6% |
+| success / failure | 64 / 0 | 64 / 0 | — |
+| VRAM peak (MB) | — | 87,725 | — |
+
+**W&B run:** `wandb-applied-ai-team/inferencebench-senpai/runs/rnc0c1by`
+
+### Analysis
+
+- TPOT.p50 collapsed from 25.2 ms → 9.34 ms — a **2.69x decode speedup** on a single autoregressive request. That matches the speculative-decoding hypothesis: drafted n-grams accepted with high enough rate to amortize the verification pass.
+- Generation throughput rose 2.65x (39 → 104 tok/s) and request throughput 1.64x as a direct consequence of the TPOT win at concurrency=1.
+- Quality is essentially identical (0.302 vs 0.298, +0.4pp; ratio 1.013) — spec decoding is verifiable, so accepted tokens are bit-identical to greedy without speculation, and rejected drafts fall back to vanilla decode.
+- The H100 reference shows default vLLM at 2.25x on B and SMAC3 best at 15.23x. Our 2.694x already exceeds the H100 default and is in the "n-gram-as-cheap-baseline" tier; reaching the 15x range would need a draft model (Eagle/Medusa) which is a Round 3 lever.
+
+### Caveats
+
+- The 0.5517 s p99 TTFT and the 0.0836 s p99 TPOT are first-batch warmup and spec-reject outliers respectively. Median behavior is what counts for raw obj = 1/tpot.p50.
+- The PR contains two committed launchers: `B/vllm-ngram-spec/start_server.sh` (parameterized template, NOT the run that produced the W&B result) and `scenario_b/vllm-ngram5-fp8kv/start_server.sh` (the actual run config). BASELINE.md tracks the latter as the current best for B.
+
+### Suggested follow-ups
+
+1. Draft-model speculation (Eagle, Medusa) — much higher acceptance rate on free-form text.
+2. Sweep `num_speculative_tokens` ∈ {3, 7, 8} now that 5 is confirmed.
+3. Combine ngram spec + chunked-prefill (the PR disabled chunked-prefill; on B concurrency=1 this may not matter but worth testing).
