@@ -103,6 +103,8 @@ def _baseline_primary_value(args: argparse.Namespace, scenario: str) -> float | 
         return float(args.baseline_primary)
     if args.baseline_metrics_json:
         baseline_metrics = _load_metrics(args.baseline_metrics_json)
+        if "profiles" not in baseline_metrics and isinstance(baseline_metrics.get("baseline"), dict):
+            baseline_metrics = baseline_metrics["baseline"]
         _, value = primary_metric(baseline_metrics, scenario)
         return value
     return None
