@@ -19,7 +19,7 @@ entry.
 |---|---|---:|---:|---|---|---|---|
 | A: input-heavy | `scenario/A/speedup_over_pytorch` | `1/ttft.p50 = 2.281 /s` (ttft.p50=0.4385s) | — | none yet | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
 | B: output-heavy | `scenario/B/speedup_over_pytorch` | `1/tpot.p50 = 39.76 /s` (tpot.p50=0.02515s) | — | none yet | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
-| C: high-load | `scenario/C/speedup_over_pytorch` | geomean req/s burst+poisson+constant ≈ 0.0847 req/s | — | none yet | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
+| C: high-load | `scenario/C/speedup_over_pytorch` | geomean req/s burst+poisson+constant ≈ 0.0847 req/s | **24.40x** | `senpai/launchers/scenario_c/vllm_fp8_flashinfer/start_server.sh` | [90r5jlvl](https://wandb.ai/wandb-applied-ai-team/inferencebench-senpai/runs/90r5jlvl) | #46 | FP8 KV + TRITON_ATTN + 256-seq + chunked-prefill + prefix-caching; geomean 2.0669 req/s; MMLU-Pro 0.288 (ratio 0.966) |
 | D: general | `scenario/D/speedup_over_pytorch` | geomean(1/ttft.p50, 1/tpot.p50, req/s) of burst ≈ 0.836 | — | none yet | — | — | starting point: `src/starting_points/vllm_running/start_server.sh` |
 
 ## Public reference snapshot (H100 80GB, 2h, Mistral-7B-Instruct-v0.3)
@@ -41,3 +41,15 @@ leaderboard-comparable until repeated on H100.
   preflighted at `/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248`
   for all four scenarios. No SENPAI launcher results yet; starting from vLLM
   default.
+
+## 2026-05-24 08:24 — PR #46: Scenario C vLLM FP8 KV + TRITON_ATTN
+
+- **Student:** r4-frieren
+- **Config:** `--kv-cache-dtype fp8 --max-num-seqs 256 --max-num-batched-tokens 16384 --enable-chunked-prefill --enable-prefix-caching --gpu-memory-utilization 0.92 VLLM_ATTENTION_BACKEND=TRITON_ATTN VLLM_USE_FLASHINFER_SAMPLER=0 VLLM_DISABLE_FLASHINFER_PREFILL=1`
+- **Fallbacks fired:** (1) FlashInfer → TRITON_ATTN (sm_120/CUDA 13.2 JIT failure); (2) dropped `--quantization fp8` (W8A8 arm failed MMLU-Pro at 0.946)
+- **scenario/C/speedup_over_pytorch:** 24.40x
+- **Geomean req/s:** 2.0669 (burst 3.187, poisson 2.201, constant 1.259)
+- **MMLU-Pro:** 0.288 / baseline 0.298 / ratio 0.966 / tau 0.95 → PASS
+- **VRAM peak:** 91,689 MB; cold-start: ~24 s
+- **W&B run:** [90r5jlvl](https://wandb.ai/wandb-applied-ai-team/inferencebench-senpai/runs/90r5jlvl)
+- **Reproduce:** `cd target/ && cp senpai/launchers/scenario_c/vllm_fp8_flashinfer/start_server.sh /tmp/scenario-c/start_server.sh && cd /tmp/scenario-c && ./test_server.sh &amp; python evaluate.py --json-output-file metrics_full.json`
