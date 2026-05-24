@@ -30,6 +30,26 @@ src/eval/inference/baselines/speed/torch/<inference_scenario_*>/mistralai_Mistra
 after hydrating from the PVC import dir above. By definition the PyTorch
 baseline `speedup_over_pytorch = 1.00x` for every scenario.
 
+Key PyTorch baseline numbers on **RTX PRO 6000 seed 248** (from the JSONs above):
+
+| Scenario | Profile | TTFT p50 (s) | TPOT p50 (s) | Gen tput (tok/s) | Req tput (r/s) |
+|---|---|---:|---:|---:|---:|
+| A burst | conc=1, 8K/1K  | 0.4385 | 0.02576 | 35.65 | 0.0709 |
+| B burst | conc=1, 1K/8K  | 0.0709 | 0.02515 | 39.19 | 0.0133 |
+| C burst | conc=64, 1K/1K | 0.0702 | 0.02368 | 39.19 | 0.0845 |
+| C poiss | rate=32 r/s    | 0.0702 | 0.02398 | 38.39 | 0.0847 |
+| C const | rate=16 r/s    | 0.0704 | 0.02412 | 38.62 | 0.0849 |
+| D burst | conc=4, 4K/2K  | 0.2123 | 0.02506 | 38.21 | 0.0382 |
+
+Primary metric per scenario (from `senpai/summarize_metrics.py`):
+
+- **A:** `(1 / candidate_ttft_p50) / (1 / 0.4385) = candidate_ttft_p50_speedup` (burst profile only)
+- **B:** `(1 / candidate_tpot_p50) / (1 / 0.02515) = candidate_tpot_p50_speedup` (burst profile only)
+- **C:** geomean of `candidate_req_tput / pytorch_req_tput` across burst/poisson/constant profiles
+- **D:** geomean of `(1/candidate_ttft_p50)/(1/pytorch_ttft_p50)` × `(1/candidate_tpot_p50)/(1/pytorch_tpot_p50)` (burst only)
+
+Quality gate: MMLU-Pro tau=0.95 against baseline accuracy ≈ 0.298 (seed 248, 500 samples).
+
 ## Starting Launcher
 
 `src/starting_points/vllm_running/start_server.sh` — vLLM default with
