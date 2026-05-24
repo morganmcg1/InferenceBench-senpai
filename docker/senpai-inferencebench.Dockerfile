@@ -130,6 +130,8 @@ RUN uv pip install --system --no-cache \
         xformers==0.0.32.post1 && \
     uv pip install --system --no-cache \
         "vllm==${VLLM_VERSION}" \
+        nvidia-curand-cu12 \
+        nvidia-cuda-nvcc-cu12 \
         python-multipart \
         uvloop \
         "transformers>=4.55.2,<4.58" && \
