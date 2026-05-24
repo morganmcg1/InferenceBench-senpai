@@ -37,19 +37,30 @@ default 4.05x aggregate (A 1.25x, B 2.25x, C 48.69x, D 1.96x).
 
 | Scenario | Status | Best speedup_over_pytorch | Launcher | PR | W&B run |
 |---|---|---|---|---|---|
-| A | open | — (no candidate) | PyTorch torch backend baseline | — | — |
+| A | **winner merged** | **1.261x** (TTFT p50 0.348 s) | `senpai/launchers/A/vllm-prefill-a/start_server.sh` | #61 | `aucwenw1` |
 | B | open | — (no candidate) | PyTorch torch backend baseline | — | — |
 | C | open | — (no candidate) | PyTorch torch backend baseline | — | — |
 | D | open | — (no candidate) | PyTorch torch backend baseline | — | — |
 
-The starting reference launcher we hand to students is
-`src/starting_points/vllm_running/start_server.sh` (default vLLM with
-`--gpu-memory-utilization 0.90` and no other tuning). On H100 vLLM default
-already gives 4.05x aggregate over PyTorch, so the first non-trivial vLLM
-launcher per scenario is expected to beat 1.00x easily; the real bar is the
-SMAC3 snapshot above.
+**Scenario A winner recipe (merged PR #61):**
+vLLM 0.11.0, `--gpu-memory-utilization 0.90`, `--max-num-seqs 16`,
+`--max-num-batched-tokens 16384`, `--enable-chunked-prefill`,
+`--enable-prefix-caching`, `--kv-cache-dtype auto` (FP8 KV rejected by
+FlashAttention on this Blackwell hardware), `VLLM_ATTENTION_BACKEND=FLASH_ATTN`.
+Quality: MMLU-Pro 0.296 / 0.298 baseline, ratio 0.9933 (pass).
+
+**Known hardware constraints (RTX PRO 6000 Blackwell, this pod):**
+- `--kv-cache-dtype fp8`: REJECTED by FlashAttention on this device.
+- `VLLM_ATTENTION_BACKEND=FLASHINFER`: JIT fails (CUDA toolkit header mismatch).
+- `--max-model-len 131072`: REJECTED by vLLM 0.11 (Mistral config is 32768).
+- Safe choices: `--kv-cache-dtype auto`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`
+  (or omit env var), `INFERENCE_BENCH_MAX_MODEL_LEN=32768` (set by runtime_env.sh).
+
+The reference point to beat per scenario is the SMAC3 H100 snapshot from program.md.
 
 ## Update history
 
-- 2026-05-24: ledger created. No SENPAI candidates yet on this tag. PyTorch
-  baselines and request files imported from PVC; preflight passed.
+- 2026-05-24 16:52: PR #61 merged (r4-fern, Scenario A, vLLM prefill launcher).
+  New best for Scenario A: 1.261x (TTFT p50 0.348 s, quality pass).
+- 2026-05-24: ledger created. PyTorch baselines and request files imported from
+  PVC; preflight passed.

@@ -1,55 +1,62 @@
 # SENPAI Research State
 
-- **Now:** 2026-05-24, start of `ib-20260524-hardened-r4` SENPAI window
-- **Latest human directive:** none yet for this tag (no open GitHub issues for the team).
+- **Updated:** 2026-05-24 ~16:55
+- **Latest human directive:** Infrastructure hotfixes — FlashInfer JIT and FP8 KV
+  are **confirmed broken** on RTX PRO 6000 Blackwell in this pod. All launchers
+  must avoid `--kv-cache-dtype fp8` and `VLLM_ATTENTION_BACKEND=FLASHINFER`.
+  `runtime_env.sh` patched with `VLLM_USE_FLASHINFER_SAMPLER=0`,
+  `VLLM_DISABLE_FLASHINFER_PREFILL=1`, `INFERENCE_BENCH_MAX_MODEL_LEN=32768`.
 - **Research focus:** LLM inference-serving optimization on InferenceBench.
   Per-scenario speedup over the PyTorch baseline (Mistral-7B-Instruct-v0.3) is
   the paper-facing metric. Quality (MMLU-Pro tau=0.95) is a hard gate.
-- **Hardware context:** RTX PRO 6000 Blackwell, 96 GB VRAM, seed 248 — this is a
-  shakedown launch. H100 results are required before any leaderboard claim.
-  Preflight passed via PVC-imported scoring assets.
-- **Pod packing:** 3 students share 1 GPU. Coordination through
-  `senpai/gpu_slot.py`. Order in round 1: PR #59 (tanjiro/C) → #61 (fern/A) →
-  #62 (frieren/B).
+- **Hardware context:** RTX PRO 6000 Blackwell, 96 GB VRAM, seed 248 (shakedown,
+  not leaderboard-comparable). H100 repeat required for leaderboard claims.
+- **Pod packing:** 3 students share 1 GPU. Coordination via `senpai/gpu_slot.py`
+  with `--wait` flag.
 
-## Active round 1 hypotheses
+## Active hypotheses
 
-- **#59 r4-tanjiro — Scenario C (high-load throughput).** vLLM with
+- **#59 r4-tanjiro — Scenario C (high-load throughput).** WIP. vLLM with
   `--max-num-seqs 256`, `--max-num-batched-tokens 8192`,
-  `--enable-prefix-caching`, `--kv-cache-dtype fp8`, chunked prefill.
-- **#61 r4-fern — Scenario A (input-heavy / TTFT).** vLLM with large
-  `--max-num-batched-tokens 16384`, chunked prefill ON, prefix caching ON,
-  FlashAttention, FP8 KV.
-- **#62 r4-frieren — Scenario B (output-heavy / TPOT).** vLLM with
-  n-gram speculative decoding (5 spec tokens, prompt lookup 2-4) + FP8 KV +
-  CUDA graphs.
+  `--enable-prefix-caching`, chunked prefill. **FP8 KV removed per infra fix
+  (advisor correction posted).** GPU queue: next up after frieren finishes or
+  when slot clears.
+- **#62 r4-frieren — Scenario B (output-heavy / TPOT).** WIP. vLLM n-gram
+  speculative decoding (5 spec tokens, lookup 2-4) with `--kv-cache-dtype auto`.
+  **Corrected launcher posted** — FP8 KV removed. Currently attempting eval.
+- **#69 r4-fern — Scenario A, FP8 weight quantization.** Round 2. Extends
+  merged winner (#61, 1.261x) by adding `--quantization fp8` (weight quant,
+  not KV). Must beat 1.261x and pass quality. FP8 weights are untested on this
+  Blackwell; rescue arm is removing quantization entirely.
 
-## Next potential directions (round 2+)
+## Merged winners
 
-If round-1 winners merge, push the same lever harder or compose:
+- **#61 r4-fern Scenario A:** 1.261x (TTFT p50 0.348 s). vLLM, BF16 weights,
+  auto KV, max-seqs 16, batched-tokens 16384, chunked prefill + prefix caching.
 
-- **Scenario A (prefill):** test FlashInfer backend on Blackwell, try
-  `--max-num-batched-tokens 32768` to absorb the whole 8k prompt in one
-  scheduling tick, try AWQ/GPTQ INT4 weights for faster prefill matmuls,
-  measure how much CUDA-graph warmup is hurting first-request TTFT.
-- **Scenario B (decode):** if n-gram speculative gives a real win, try EAGLE-
-  or MTP-style decoding with a draft head if one is available for Mistral-7B;
-  otherwise scan `num_speculative_tokens` 3/5/7 and `prompt_lookup_min`
-  2 vs 3. If FP8 weights pass quality, try `--quantization fp8` for ~2x
-  decode matmul speed.
-- **Scenario C (throughput):** push `--max-num-seqs` to 384/512 with the 96 GB
-  VRAM Blackwell card, try `--block-size 32`, try SGLang as a different
-  scheduler family.
-- **Scenario D (balanced):** held for cross-scenario confirmation of a mature
-  winner from A/B/C, or for a balanced launcher that wins all 4.
+## Next potential directions (round 3+)
 
-## Backlog of bolder ideas
+Given confirmed constraints (no FP8 KV, no FlashInfer on this pod):
 
-- TensorRT-LLM build for Mistral-7B (could unlock biggest decode speedup but
-  build time may exceed remaining 2 h budget).
-- Custom OpenAI-compatible server wrapping vLLM with request batching
-  heuristics tuned to LongBench-v2 length distribution.
-- Speculative decoding with a small draft model (e.g., a distilled Mistral 1B
-  if available, otherwise n-gram is the only no-extra-checkpoint option).
-- Aggressive prefix-caching tuning + admission control for Scenario C's
-  poisson and constant profiles.
+- **Scenario A (prefill):** If FP8 weights (#69) work → solid win. If not →
+  try SGLang with Triton attention (avoids FlashAttention/FlashInfer entirely,
+  Triton radix-tree prefix cache). Or try `--no-enable-chunked-prefill` (remove
+  chunking overhead at conc=1 for a monolithic 8k prefill pass).
+- **Scenario B (decode):** n-gram speculative (#62) must survive quality gate;
+  acceptance rate on LongBench-v2 creative text is uncertain. If it fails →
+  try FP8 weight quantization for Scenario B. Or push `--max-num-seqs 32` and
+  decode concurrency for slightly higher GPU utilization even at burst conc=1.
+- **Scenario C (throughput):** vLLM with max-seqs 256 + prefix caching (#59).
+  Already near-optimal at H100-default range (48.69x). Main gain from larger
+  batch + bigger KV pool on 96 GB Blackwell.
+- **Scenario D (balanced):** Assign to idle student after #59 or #62 land.
+  Use whichever engine/flags proved best across A/B/C.
+- **SGLang exploration:** Triton attention is Blackwell-compatible; avoids the
+  broken CUDA-JIT FlashInfer path. Worth trying when a student is next idle.
+
+## Hardware constraint summary (RTX PRO 6000 Blackwell, this pod)
+
+- **BROKEN:** `--kv-cache-dtype fp8`, `VLLM_ATTENTION_BACKEND=FLASHINFER`
+- **SAFE:** `--kv-cache-dtype auto`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`
+- **UNTESTED:** `--quantization fp8` (weight quant), `--quantization awq`
+- **MAX_MODEL_LEN:** 32768 (set by runtime_env.sh)
