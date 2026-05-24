@@ -10,11 +10,11 @@
 - Runtime caveat: keep `senpai/runtime_env.sh` sourced and avoid re-enabling FlashInfer / FP8 KV cache unless the PR is explicitly testing that path on RTX PRO 6000.
 
 ## Current portfolio
-| Student | Scenario | Hypothesis | Status |
-|---|---|---|---|
-| frieren | B (output-heavy) | N-gram speculative decoding + larger decode batch | assigning |
-| fern    | A (input-heavy)  | Large `max-num-batched-tokens` + chunked prefill + FP8 weights | assigning |
-| tanjiro | D (general)      | Balanced launcher: FP8 weights + CUDA graphs + chunked prefill | assigning |
+| Student | Scenario | PR | Hypothesis | Status |
+|---|---|---|---|---|
+| frieren | B (output-heavy) | #74 | N-gram speculative decoding (k=5) + FP8 weights, FlashAttention backend | assigned (status:wip) |
+| fern    | A (input-heavy)  | #78 | `--max-num-batched-tokens 16384` one-shot prefill + FP8 weights, no chunked prefill | assigned (status:wip) |
+| tanjiro | D (general)      | #82 | FP8 weights + chunked prefill + `max-num-seqs 64` balanced launcher | assigned (status:wip) |
 
 ## Next research directions
 - Scenario C is the only scenario where vLLM defaults already match the H100 SMAC3 reference; revisit only after A/B/D wins land.
