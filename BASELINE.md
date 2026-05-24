@@ -48,7 +48,7 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
 | Scenario | Best valid launcher | Best raw objective | Speedup over PyTorch | W&B run | PR |
 |---|---|---:|---:|---|---|
 | A | `senpai/launchers/scenario_a/vllm-fastprefill/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-batched-tokens 16384`, `--max-num-seqs 8`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | `1/ttft.p50 = 2.840` | **1.246x** | `7dew56hp` | #83 |
-| B | (none yet) | — | — | — | — |
+| B | `senpai/launchers/scenario_b/vllm-decode/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-seqs 4`, `--max-num-batched-tokens 4096`, `--no-enable-chunked-prefill`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | `1/tpot.p50 = 57.46` | **1.445x** (quick-only) | `fazlcf9d` | #84 |
 | C | `senpai/launchers/scenario_c/vllm-throughput/start_server.sh` (vLLM 0.11.0 V1 + FLASH_ATTN + `--max-num-seqs 256`, `--max-num-batched-tokens 8192`, `--enable-chunked-prefill`, no prefix cache, CUDA graphs, `--gpu-memory-utilization 0.92`) | geomean req/s = 0.3298 | **3.89x** (quick-only) | `8kxj9472` | #92 |
 | D | (none yet) | — | — | — | — |
 
@@ -86,6 +86,27 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
 - Cold-relaunch confirmed (supervised `launch_supervised_server.sh`).
 - GPU slot wall-clock for full quick: ~75 s (acquired 23:12:55Z → released 23:14Z).
 
+### Scenario B details (PR #84 — fern, QUICK-ONLY)
+
+- **Quick eval only** (4 speed requests burst, MMLU-Pro n=16).
+  Round-2 full eval + speculative decoding exploration pending.
+- Burst (conc 1): 4/4 requests successful, 0 failures.
+- TPOT p50: 0.01740 s (PyTorch 0.02515 s, −30.8%).
+  → raw `1/tpot.p50` = 57.46 (PyTorch 39.76). **1.445x speedup.**
+- TTFT p50: 0.0651 s (PyTorch 0.0709 s, −8.2%).
+- Request throughput: 0.01241 req/s vs PyTorch 0.01332 (−6.8% — expected,
+  single-stream, throughput determined by output length not dispatch).
+- Generation throughput: 54.04 tok/s vs PyTorch baseline 39.19 tok/s (+38%).
+- VRAM peak: 90 001 MB.
+- Quality gate **FAIL** at n=16: observed 0.25 vs baseline 0.298, ratio 0.839,
+  tau 0.95. Std err at n=16 ≈ 0.114; observed is ~0.4σ below baseline,
+  **consistent with noise**. Full eval at n=500 required.
+- Key note: request throughput (0.93× PyTorch) is misleading — Scenario B's
+  primary metric is `1/tpot.p50`, not req/s; single-stream req/s is dominated
+  by generation length.
+- Round-2 priorities: speculative decoding (n-gram, direct TPOT target),
+  FP8 KV cache (decode bandwidth-bound), full-eval quality confirmation.
+
 ## Update history
 
 - 2026-05-24: initialized live ledger from `rtxpro6000-seed248` PyTorch baselines.
@@ -94,3 +115,7 @@ These are H100 SMAC3 search results from public InferenceBench leaderboard
 - 2026-05-24 23:18Z: PR #92 merged. Scenario C: PyTorch → **3.89x** quick-only
   (frieren, W&B `8kxj9472`). Quality gate noisy fail at n=16; round-2 full
   eval required.
+- 2026-05-24 23:36Z: PR #84 merged. Scenario B: PyTorch → **1.445x** quick-only
+  (fern, W&B `fazlcf9d`). TPOT p50 0.01740 s vs PyTorch 0.02515 s (−30.8%).
+  Quality gate noisy fail at n=16; round-2 full eval + spec-decoding
+  exploration pending.
