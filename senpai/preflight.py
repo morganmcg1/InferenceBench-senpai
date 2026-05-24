@@ -177,6 +177,13 @@ def check_wandb(require_wandb: bool) -> Check:
 
 
 def check_tokenizer(model_id: str, request_files_ready: bool) -> Check:
+    if request_files_ready:
+        return Check(
+            "tokenizer_request_sampling",
+            "pass",
+            "pre-materialized request files are present; tokenizer download is not required for request sampling",
+        )
+
     root = repo_root()
     sys.path.insert(0, str(root))
     try:
@@ -188,8 +195,9 @@ def check_tokenizer(model_id: str, request_files_ready: bool) -> Check:
     if tok is None:
         return Check(
             "tokenizer_request_sampling",
-            "warn",
-            "tokenizer unavailable locally; set INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 or pre-materialize request files",
+            "fail",
+            "tokenizer unavailable locally and deterministic request files are incomplete; "
+            "set INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 or pre-materialize request files",
         )
 
     messages = [{"role": "user", "content": "hello " * 256}]

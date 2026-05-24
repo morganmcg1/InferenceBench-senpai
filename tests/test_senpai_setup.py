@@ -47,6 +47,28 @@ def test_preflight_rejects_partial_speed_baseline(tmp_path: Path) -> None:
     assert "success_count=3 < request_count=4" in baseline_check.detail
 
 
+def test_preflight_does_not_require_tokenizer_when_requests_ready(monkeypatch) -> None:
+    from src.eval.inference import runner
+
+    monkeypatch.setattr(runner, "_get_tokenizer", lambda _model_id: None)
+
+    check = preflight.check_tokenizer("org/model", request_files_ready=True)
+
+    assert check.status == "pass"
+    assert "pre-materialized request files are present" in check.detail
+
+
+def test_preflight_fails_without_tokenizer_or_requests(monkeypatch) -> None:
+    from src.eval.inference import runner
+
+    monkeypatch.setattr(runner, "_get_tokenizer", lambda _model_id: None)
+
+    check = preflight.check_tokenizer("org/model", request_files_ready=False)
+
+    assert check.status == "fail"
+    assert "deterministic request files are incomplete" in check.detail
+
+
 def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
     out = tmp_path / "workspace"
     # Exercise the script through its file operations without requiring a GPU.
