@@ -1,76 +1,66 @@
 # SENPAI Research State
 
-- **Date/time:** 2026-05-24 (first advisor invocation for ib-20260524-hardened-r2)
-- **Human research team directives:** None received yet. Check GitHub Issues regularly.
+- **Date/time:** 2026-05-24 ~17:30 UTC (round 2 of advisor invocations)
+- **Human research team directives:** None received. Infrastructure hotfixes applied by morganmcg1 to live pods.
+
+## Critical Infrastructure Constraints (MUST READ for all assignments)
+
+Discovered and confirmed during round 1. Every launcher recipe MUST obey:
+- ❌ NO `VLLM_ATTENTION_BACKEND=FLASHINFER` — FlashInfer JIT fails on RTX PRO 6000 sm_120
+- ❌ NO `--kv-cache-dtype fp8` with FlashAttention backend
+- ✅ `--kv-cache-dtype fp8` works with TRITON_ATTN (no explicit backend env var needed)
+- ✅ `source senpai/runtime_env.sh` sets VLLM_USE_FLASHINFER_SAMPLER=0, VLLM_DISABLE_FLASHINFER_PREFILL=1, INFERENCE_BENCH_MAX_MODEL_LEN=32768
+- ✅ n-gram speculative decoding works (pure Python config, unrelated to FlashInfer)
+- ❌ NO weight FP8 quantization (`--quantization fp8`) — quality gate margin too thin (ratio=0.953 on Sc D)
 
 ## Current Research Focus
 
-First round of serving optimization for InferenceBench on RTX PRO 6000 Blackwell
-(~96 GB VRAM), 1 GPU shared by 3 students, 2-hour total program budget. The
-starting point is vLLM defaults. We have measured PyTorch baselines for all 4
-scenarios (A/B/C/D). We have NOT yet measured vLLM defaults on this hardware.
+Baseline measurement phase on RTX PRO 6000. One scenario measured (D).
+Key question now: can we get clean measurements across A, B, C before time expires?
 
-**Key context:**
-- Base model: `mistralai/Mistral-7B-Instruct-v0.3`
-- Hardware: 1× RTX PRO 6000 (shakedown, NOT leaderboard-comparable)
-- Budget: ~2 hours total including this advisor invocation
-- Public H100 references: SMAC3 15.23× (Sc B), 4.37× (Sc A), 46.70× (Sc C), 5.69× (Sc D) vs PyTorch
+**Active assignments:**
 
-**Current assignments (all round 1):**
-| Student | PR | Scenario | Hypothesis | GPU slot order |
-|---|---|---|---|---|
-| r2-frieren | #54 | B (output-heavy) | n-gram speculative decoding + FP8 KV cache | 1st |
-| r2-fern | #58 | A (input-heavy) | chunked prefill + FlashInfer backend | 2nd |
-| r2-tanjiro | #64 | D (balanced) | FP8 KV + chunked prefill + FlashInfer | 3rd |
+| Student | PR | Scenario | Status |
+|---|---|---|---|
+| r2-frieren | #54 | B (output-heavy, TPOT) | WIP — waiting for GPU slot; updated launcher guidance posted |
+| r2-fern | #58 | A (input-heavy, TTFT) | WIP — holds GPU slot ~17:29+; eval in progress |
+| r2-tanjiro | #71 | C (high-load throughput) | NEW — prepare launcher now, takes slot after r2-fern + r2-frieren |
 
-Scenario C (high-load throughput) is intentionally deferred: public reference
-shows vLLM default already achieves 48.69× vs PyTorch (even exceeding SMAC3
-46.70×). We will investigate C only if a GPU slot opens after D, or if the
-students' B/A/D runs finish faster than expected.
+**Completed:**
 
-## Active Research Themes
+| Student | PR | Scenario | Result |
+|---|---|---|---|
+| r2-tanjiro | #64 (merged) | D (balanced) | 1.284× speedup, quality=0.953 PASS |
 
-1. **Decode acceleration (Scenario B):** n-gram speculative decoding is the
-   most promising single lever for single-concurrency output-heavy workloads.
-   If it lands 5-10×, Scenario B becomes a strong anchor result.
+## Per-Scenario State
 
-2. **Prefill efficiency (Scenario A):** chunked prefill + FlashInfer is the
-   primary axis. The 8K input means the full prefill kernel is the bottleneck.
-   FlashInfer's paged attention is especially tuned for this.
+| Scenario | Best speedup | Recipe | Status |
+|---|---:|---|---|
+| A | unmeasured | — | r2-fern running |
+| B | unmeasured | — | r2-frieren waiting (updated launcher ready) |
+| C | unmeasured | — | r2-tanjiro assigned (PR #71) |
+| D | **1.284×** | TRITON_ATTN + FP8 KV + chunked prefill | merged |
 
-3. **Balanced serving (Scenario D):** FP8 KV + FlashInfer + chunked prefill
-   bundle. Scenario D is the aggregate leaderboard signal — winning here with a
-   clean recipe that works across scenarios is high-value.
+## Proven Working Recipe (use as template for all new launchers)
 
-4. **GPU slot coordination:** Critical constraint this run. Students must
-   serialize heavy eval through `gpu_slot.py`. Idle-GPU waste must be minimized
-   by having students prepare launchers and workspaces BEFORE waiting for the
-   slot.
+```bash
+exec python3 -m vllm.entrypoints.openai.api_server \
+    --model "${MODEL_ID}" --host "${HOST}" --port "${PORT}" \
+    --max-model-len "${INFERENCE_BENCH_MAX_MODEL_LEN:-32768}" \
+    --gpu-memory-utilization 0.92 \
+    --trust-remote-code --disable-log-stats \
+    --kv-cache-dtype fp8 \
+    --enable-chunked-prefill \
+    [scenario-specific: --max-num-batched-tokens X --max-num-seqs Y]
+```
+- Do NOT set `VLLM_ATTENTION_BACKEND=FLASHINFER`
+- Always `source senpai/runtime_env.sh` first
 
-## Next Research Directions (after round 1 results)
+## Potential Next Research Directions (post round 2)
 
-1. **Scenario C throughput tuning:** if time allows after D, try high
-   concurrency settings (`--max-num-seqs 256`, FP8 KV, prefix caching) for
-   Scenario C's burst-64 throughput workload.
-
-2. **Cross-scenario winner (round 2):** once we have a best-per-scenario
-   launcher, compose the best settings into a single config and run A-D
-   confirmation sweep.
-
-3. **FP8 weight quantization:** if FP8 KV alone is strong, try full FP8 weight
-   quant via `--quantization fp8` (supported on Blackwell). Risk: quality gate
-   regression. Requires a clean relaunch and full quality eval.
-
-4. **Speculative decoding for Scenario D:** if r2-tanjiro's bundle works well,
-   add n-gram speculation (5 tokens) to the D launcher in round 2 — the
-   concurrency=4 burst profile may still benefit.
-
-5. **SGLang as alternative engine:** if vLLM consistently underperforms on
-   prefill-heavy scenarios, try SGLang which has different scheduler and prefill
-   primitives. The public reference shows SGLang default is competitive
-   (3.92× vs vLLM 4.05× aggregate).
-
-6. **Prefix caching (`--enable-prefix-caching`):** the LongBench-v2 requests
-   within a scenario share the same system prompt. Enabling prefix caching could
-   cut TTFT significantly on repeated requests — investigate if Scenario A or D
-   has shared prefix structure.
+1. **Sc D: prefix caching follow-up** — single-lever `--enable-prefix-caching` on proven recipe
+2. **Sc D: n-gram speculative decoding** — add 5-token n-gram to 2K output at concurrency=4
+3. **Sc B: n-gram speculative decoding** (primary hypothesis still untested) — if r2-frieren succeeds
+4. **Cross-scenario confirmation** — if A/B/C all have results, run A-D sweep to get aggregate geomean
+5. **SGLang exploration** — if vLLM plateau, try SGLang with TRITON attention (different scheduler, may handle high-concurrency differently)
+6. **Larger max-model-len** — if any scenario benefits from 64K context (would need VLLM_ALLOW_LONG_MAX_MODEL_LEN=1)
