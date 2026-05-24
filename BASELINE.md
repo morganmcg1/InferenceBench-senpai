@@ -28,10 +28,32 @@ review-ready PR becomes the new current best for its scenario.
 
 | Scenario | Best launcher | Speedup vs PyTorch | Quality pass | PR | W&B run | Notes |
 |---|---|---:|---|---|---|---|
-| A | _none yet_ | `1.00x` | n/a | — | — | first round |
+| A | `senpai/launchers/scA/vllm-fp8-flashinfer-prefill/` | **1.884x** | PASS (ratio 1.000) | #57 | v051l94c | FLASH_ATTN + FP16 KV + FP8 weights. FlashInfer/FP8 KV blocked on Blackwell RTX 6000. |
 | B | _none yet_ | `1.00x` | n/a | — | — | first round |
 | C | _none yet_ | `1.00x` | n/a | — | — | first round |
 | D | _none yet_ | `1.00x` | n/a | — | — | first round |
+
+### Scenario A best — detail (2026-05-24, PR #57)
+
+- **Launcher:** `senpai/launchers/scA/vllm-fp8-flashinfer-prefill/start_server.sh`
+- **Effective flags:** `--quantization fp8 --kv-cache-dtype auto --max-num-seqs 16 --max-num-batched-tokens 16384 --gpu-memory-utilization 0.92 --block-size 16 --no-enable-chunked-prefill --enable-prefix-caching`; `VLLM_ATTENTION_BACKEND=FLASH_ATTN` (env); `VLLM_USE_FLASHINFER_SAMPLER=0`; `VLLM_DISABLE_FLASHINFER_PREFILL=1`
+- **Key metrics:**
+  - `scenario/A/speedup_over_pytorch` = **1.884x**
+  - `ttft.p50` = 0.233 s (was 0.4385 s), `ttft.p90/p99` = 0.262 / 0.271 s
+  - `tpot.p50` = 0.01792 s (1.44x faster than baseline)
+  - `request_throughput` = 0.0889 req/s
+  - `quality/mmlu_pro_observed_accuracy` = 0.298 (ratio 1.000 — **PASS**)
+  - `failure_count` = 0 / 128; `vram_peak_mb` = 92,771
+- **W&B run:** [v051l94c](https://wandb.ai/wandb-applied-ai-team/inferencebench-senpai/runs/v051l94c) group `scA-round1`
+- **Reproduce:**
+  ```bash
+  python senpai/create_task_workspace.py --scenario A --output /tmp/ib-scA --starting-point vllm_running
+  cp senpai/launchers/scA/vllm-fp8-flashinfer-prefill/start_server.sh /tmp/ib-scA/task/start_server.sh
+  cd /tmp/ib-scA/task && source ./eval_env.sh && ./clean_eval_artifacts.sh && \
+    ./test_server.sh > agent/server.log 2>&1 & \
+    python evaluate.py --json-output-file metrics_full.json
+  ```
+- **RTX 6000 hardware notes:** FlashInfer attention at runtime fails (`_sm_scale` assertion in vLLM 0.11 / FlashInfer 0.6.11 on Blackwell SM 120f). FlashAttention rejects `--kv-cache-dtype fp8` on Blackwell. Use `VLLM_ATTENTION_BACKEND=FLASH_ATTN` + `--kv-cache-dtype auto` for reliable startup.
 
 ## Update history
 
@@ -39,3 +61,6 @@ review-ready PR becomes the new current best for its scenario.
   `codex/inferencebench-senpai-target` with shared-pod hardening and prepared
   RTX PRO 6000 scoring assets. No SENPAI candidates measured yet on this
   branch.
+- 2026-05-24 17:11 — PR #57 merged (r1-tanjiro). Scenario A new best: 1.884x
+  speedup. First winner on this branch. RTX 6000 compatibility constraint
+  documented: no FlashInfer attention, no FP8 KV cache.
