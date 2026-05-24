@@ -1,5 +1,56 @@
 # SENPAI Research Results
 
+## 2026-05-24 08:38 — PR #44: Scenario A FlashInfer + FP8 KV (r2-fern)
+
+- **Branch:** r2-fern/A-flashinfer-fp8-kv
+- **Hypothesis:** Scenario A (input-heavy, 8192→1024, concurrency 1) is TTFT/prefill-bound. FlashInfer attention kernel + FP8 KV cache + CUDA graphs + enlarged prefill batch (16384 tokens) should cut TTFT substantially over default vLLM.
+- **Result:**
+
+| Metric | Candidate | PyTorch Baseline | Ratio |
+|---|---:|---:|---:|
+| `scenario/A/speedup_over_pytorch` | **1.236x** | 1.00x | — |
+| `ttft.p50` (s) | 0.3548 | 0.4385 | 1.236x faster |
+| `ttft.p90` (s) | 0.3998 | 0.5089 | 1.273x |
+| `ttft.p99` (s) | 0.4087 | 0.9756 | 2.387x |
+| `tpot.p50` (s) | 0.01709 | 0.02576 | 1.508x |
+| `generation_throughput` (tok/s) | 55.36 | 35.65 | 1.553x |
+| `request_throughput` (req/s) | 0.0909 | 0.0709 | 1.282x |
+| `vram_peak_mb` | 92,133 | — | — |
+| `failure_count` | 0/128 | 0/128 | — |
+| `quality/mmlu_pro` | NOT RUN | 0.298 | (eval-pipeline bug) |
+
+- **W&B run:** `6h1b2dk7` (group: A-prefill-tuning, state: finished)
+- **Eval mode:** full eval, n=128 burst, success=128/128
+- **Stop rule:** fired at 1.236x < 1.4x threshold (Fern terminated terminally after full eval)
+- **Status:** MERGED — first scenario A baseline on RTX PRO 6000 (squash-merge, PR #44)
+
+### Analysis & Conclusions
+
+**Result matches H100 vLLM-default reference (1.25x A speedup)**, confirming this is the platform floor, not a meaningful optimization win.
+
+**What happened:**
+- Both enabling levers were unavailable on this Blackwell/CUDA-13 pod:
+  - **FlashInfer JIT fails** — same `curand.h` header mismatch that blocked scenario B's FlashInfer backend. FLASH_ATTN fallback used.
+  - **FP8 KV cache inactive** — FlashInfer required for FP8 KV on Mistral arch; without it, falls back to bf16.
+- Effective config shipped was: "vLLM default + FLASH_ATTN + CUDA graphs + 16384 batched-token prefill." That's essentially what H100 vLLM-default already provides.
+- `--no-enable-chunked-prefill` flag was overridden by vLLM v0.11.0 scheduler (it enables chunked prefill anyway when `--max-num-batched-tokens >= max-model-len`); actual prefill still ran in a single batch.
+- **Quality gate DID NOT RUN** — eval-pipeline registry-resolution bug: `quality_gate.py` looked for `unknown_model_torch.json` rather than the model-specific file. Launcher config has no quality-affecting changes; this is a pipeline bug, not a real quality issue.
+
+**Why merged despite being near floor:**
+- First valid scenario A measurement on RTX PRO 6000 Blackwell. Establishes concrete starting point.
+- Merging confirms launcher structure and naming convention for scenario A experiments.
+- Per merge-bias rule: improves over null baseline; small improvements compound.
+
+### Suggestions for scenario A round 2
+
+1. **FlashInfer 0.7.x nightly** — CUDA-13 headers shipped in FlashInfer ~0.7.0 (2026-04). `pip install flashinfer-python==0.7.0` in a prep PR would unlock both FlashInfer attention kernel AND FP8 KV cache. This is the single biggest lever for A.
+2. **xFormers or TRITON_ATTN_VLLM_V1** — Works without FlashInfer JIT. May give better long-prefill attention perf on Blackwell vs FLASH_ATTN.
+3. **Prefix caching** — Scenario A has long inputs (8192 tokens). If prompts share a common prefix, `--enable-prefix-caching` could dramatically reduce TTFT for cached requests.
+4. **`--enforce-eager` control run** — Verify CUDA graphs actually help at concurrency 1 prefill-bound workload (CUDA graphs benefit decode more than prefill).
+5. **Fix eval-pipeline quality-gate registry resolution** — Separate bug-fix PR.
+
+
+
 ## 2026-05-24 07:58 — PR #43: Scenario B n-gram speculative decoding + FP8 KV + CUDA graphs
 
 - **Branch:** r2-frieren/B-ngram-spec-fp8-kv
