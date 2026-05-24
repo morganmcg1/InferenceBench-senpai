@@ -124,6 +124,9 @@ python senpai/gpu_slot.py run --owner "$STUDENT_NAME" --pr 123 --scenario C -- \
   bash -lc 'cd /tmp/inferencebench-C/task && source ./eval_env.sh && ./clean_eval_artifacts.sh && ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --json-output-file metrics_full.json'
 ```
 
+For queued work, prefer `gpu_slot.py run --wait ...`; do not parse exact
+`status` text in shell loops. The status line is intentionally human-facing.
+
 The lease records owner, PR, scenario, command, timestamps, and expiry in
 `/tmp/inferencebench-gpu-slot.json` by default. It prevents accidental
 overlapping full workloads while preserving the official `test_server.sh` plus

@@ -83,6 +83,10 @@ python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
   bash -lc 'source ./eval_env.sh; ./clean_eval_artifacts.sh; ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --json-output-file metrics_full.json'
 ```
 
+If the slot is currently occupied, use `gpu_slot.py run --wait ...` rather than
+shell loops that parse the exact `status` text. Status output is for humans;
+the `run --wait` path is the coordination contract.
+
 When releasing or debugging the GPU, kill only the server process or supervised
 process group you started. Do not use broad cleanup commands such as `pkill
 python`, `pkill vllm`, or port-wide process killing in a shared pod; those can

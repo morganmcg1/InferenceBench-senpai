@@ -270,6 +270,10 @@ lease expires. Students should still run the official task-local
 `./test_server.sh` and `evaluate.py`; the slot prevents accidental overlapping
 full workloads, stale port ownership, and broad cleanup commands.
 
+Students should use `gpu_slot.py run --wait ...` for queued GPU work. Do not
+write shell loops that depend on the exact text printed by `gpu_slot.py status`;
+that output is for human debugging, not a stable machine interface.
+
 ## Running
 
 For local or pod-level exploration, start from a launcher recipe and copy it
