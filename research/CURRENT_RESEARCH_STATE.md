@@ -1,6 +1,6 @@
 # SENPAI Research State — ib-20260524-leasefix-r1
 
-- **As of:** 2026-05-24 22:25 UTC (post round-1 first review)
+- **As of:** 2026-05-24 22:58 UTC (round-1 operational stall observed)
 - **Most recent human research direction:** No GitHub Issues open. Programme contract remains `target/program.md`: maximise per-scenario `speedup_over_pytorch` on Mistral-7B-Instruct-v0.3 with a 2-hour wall-clock budget per scenario while passing the MMLU-Pro quality gate.
 
 ## Current focus
@@ -14,9 +14,22 @@ We have **1 GPU shared by 3 students** for this round, so the three assignments 
 | Student | Scenario | Hypothesis | PR | State |
 |---------|----------|------------|----|-------|
 | frieren | A — input-heavy, 1/ttft.p50 | vLLM with chunked prefill, `max_num_batched_tokens=16384`, FLASH_ATTN, **FP8 KV cache**, CUDA graphs, prefix caching | #75 | **CLOSED, negative (boot failure)** — FLASH_ATTN+FP8KV impossible on Blackwell SM 12.0 |
-| frieren | A — input-heavy, 1/ttft.p50 | corrected: drop FP8 KV, keep FLASH_ATTN + chunked prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs | **#89** | WIP (replaces #75) |
-| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram-5 speculative decoding, CUDA graphs, FLASH_ATTN; **student self-corrected to drop `--kv-cache-dtype fp8`** | #76 | WIP, blessed |
-| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, FP8 KV, CUDA graphs; **student self-corrected to switch attention backend to TRITON_ATTN** (canonical Blackwell FP8 KV path) | #87 | WIP, blessed |
+| frieren | A — input-heavy, 1/ttft.p50 | corrected: drop FP8 KV, keep FLASH_ATTN + chunked prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs | **#89** | WIP; launcher pushed `d56cb60` at 22:37; iters 5–8 clean exits, no result yet (likely slot-blocked behind fern/tanjiro) |
+| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram-5 speculative decoding, CUDA graphs, FLASH_ATTN; **student self-corrected to drop `--kv-cache-dtype fp8`** | #76 | WIP; **operational stall**: iter 4 timed out exit 124 after 54.7 min; no launcher commit; no W&B run. Advisor diagnostic posted 22:56 |
+| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, FP8 KV, CUDA graphs; **student self-corrected to switch attention backend to TRITON_ATTN** (canonical Blackwell FP8 KV path) | #87 | WIP; **operational stall**: iter 5 running 54+ min; no launcher commit; no W&B run. Advisor diagnostic posted 22:56 |
+
+### Round 1 operational alert (22:56 UTC)
+
+External observables show fern and tanjiro have both burned ~54 min of their 2h budget with zero W&B activity and zero branch commits. fern's iter 4 was killed by `SENPAI_TIMEOUT_MINUTES` (exit 124 after 3284s). Most likely root cause: stuck inside `gpu_slot.py run --wait` on a stale lease left by a prior process, or vLLM engine boot hanging silently.
+
+Advisor diagnostic comments posted on PR #76 and PR #87 instructing:
+1. Commit + push the launcher first (durable artifact).
+2. Inspect `/tmp/inferencebench-gpu-slot.json` for stale lease (check PID liveness + TTL).
+3. `pgrep -af vllm` to find orphan processes from the timed-out iter.
+4. Scope down to quick-eval-only with partial `SENPAI-RESULT (terminal=false, pending_arms=true, status=partial)`.
+5. Short status comment within 10 min even without metrics.
+
+Budget remaining (24:00 UTC endpoint): fern ~62 min, tanjiro ~63 min, frieren ~77 min (launcher already committed).
 
 **Critical lesson learned in round 1:** `VLLM_ATTENTION_BACKEND=FLASH_ATTN` combined with `--kv-cache-dtype fp8` is **impossible on RTX PRO 6000 Blackwell (SM 12.0)** in vLLM 0.11. The FA+FP8KV path is hard-gated to FA3 + Hopper SM 9.0. On Blackwell, vLLM forces FA back to v2, which does not implement FP8 KV. Hard `NotImplementedError` at engine init. Do not assign this combo again in this run.
 
