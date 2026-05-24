@@ -1,42 +1,44 @@
 # SENPAI Research State — ib-20260524-leasefix-r1
 
-- **As of:** 2026-05-24 22:58 UTC (round-1 operational stall observed)
+- **As of:** 2026-05-24 23:31 UTC (round-1 mid-flight; PR #76 merged, two PRs still in flight)
 - **Most recent human research direction:** No GitHub Issues open. Programme contract remains `target/program.md`: maximise per-scenario `speedup_over_pytorch` on Mistral-7B-Instruct-v0.3 with a 2-hour wall-clock budget per scenario while passing the MMLU-Pro quality gate.
 
 ## Current focus
 
-Establish the **first measured SENPAI baseline launchers** on the RTX PRO 6000 Blackwell shakedown hardware. No prior SENPAI measurement exists on this branch, so the immediate priority is to land three terminal-validated launcher recipes that beat the PyTorch baseline on three different scenarios. This both stocks `BASELINE.md` with real numbers and exposes any RTX-PRO-6000-specific surprises in vLLM 0.11.x before we start optimising further.
+First measured SENPAI baseline on this branch/hardware has landed: **Sc B = 2.694x** via PR #76. The remaining round-1 priority is to land at least one terminal result on Sc A and Sc C before the 24:00 UTC endpoint, then turn to round-2 follow-ups (sweep n-gram-7 on Sc B; cover Sc D — already kicked off via PR #95 to fern).
 
-We have **1 GPU shared by 3 students** for this round, so the three assignments are spread across three different scenarios to minimise serialisation of full evaluations.
+We have **1 GPU shared by 3 students** for this round, with the three assignments spread across distinct scenarios to minimise serialisation of full evaluations.
 
-## Round 1 assignments + round-1.5 corrections
+## Round 1 assignments + outcomes
 
 | Student | Scenario | Hypothesis | PR | State |
 |---------|----------|------------|----|-------|
 | frieren | A — input-heavy, 1/ttft.p50 | vLLM with chunked prefill, `max_num_batched_tokens=16384`, FLASH_ATTN, **FP8 KV cache**, CUDA graphs, prefix caching | #75 | **CLOSED, negative (boot failure)** — FLASH_ATTN+FP8KV impossible on Blackwell SM 12.0 |
-| frieren | A — input-heavy, 1/ttft.p50 | corrected: drop FP8 KV, keep FLASH_ATTN + chunked prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs | **#89** | WIP; launcher pushed `d56cb60` at 22:37; iters 5–8 clean exits, no result yet (likely slot-blocked behind fern/tanjiro) |
-| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram-5 speculative decoding, CUDA graphs, FLASH_ATTN; **student self-corrected to drop `--kv-cache-dtype fp8`** | #76 | WIP; **operational stall**: iter 4 timed out exit 124 after 54.7 min; no launcher commit; no W&B run. Advisor diagnostic posted 22:56 |
-| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, FP8 KV, CUDA graphs; **student self-corrected to switch attention backend to TRITON_ATTN** (canonical Blackwell FP8 KV path) | #87 | WIP; **operational stall**: iter 5 running 54+ min; no launcher commit; no W&B run. Advisor diagnostic posted 22:56 |
+| frieren | A — input-heavy, 1/ttft.p50 | corrected: drop FP8 KV, keep FLASH_ATTN + chunked prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs | **#89** | WIP; launcher pushed `d56cb60` at 22:37; no measured result, almost certainly slot-blocked behind fern/tanjiro all round. Budget effectively exhausted (~29 min left). |
+| fern    | B — output-heavy, 1/tpot.p50 | vLLM with n-gram-5 speculative decoding, CUDA graphs, FLASH_ATTN; **student self-corrected to drop `--kv-cache-dtype fp8`** | **#76** | **MERGED 23:24** — 2.6937x speedup over PyTorch (full eval, 64 burst). Quality MMLU-Pro 0.302 vs 0.298 baseline, ratio 1.013 PASS at n=500. Clean relaunch reproduced TPOT magnitude. Now the live Sc B baseline. |
+| fern    | D — balanced burst 4, geomean | round-2 candidate brought forward: vLLM with **n-gram-3 spec** + chunked prefill + prefix caching, `max_num_batched_tokens=8192`, `max_num_seqs=64`. Mid-strength speculative decoding sized for D's burst=4 + 2K output sweet spot. | **#95** | WIP; created 23:28. fern reassigned after Sc B win; will at best commit a launcher this round given ~29 min remaining. Full eval is round-2 work. |
+| tanjiro | C — high-load, geomean req/s | vLLM with `max_num_seqs=256`, `max_num_batched_tokens=16384`, chunked prefill, prefix caching, **FP8 KV via TRITON_ATTN** (canonical Blackwell path), CUDA graphs | **#87** | WIP; launcher committed `21b5a2e`. Posted **partial** result at 23:21: scenario/C/speedup_over_pytorch ≈ **24.22x** on first measured pass, MMLU-Pro quality PASS. Needs clean relaunch + terminal `SENPAI-RESULT` before merge. ~29 min budget remaining. |
 
-### Round 1 operational alert (22:56 UTC)
+### Round 1 narrative
 
-External observables show fern and tanjiro have both burned ~54 min of their 2h budget with zero W&B activity and zero branch commits. fern's iter 4 was killed by `SENPAI_TIMEOUT_MINUTES` (exit 124 after 3284s). Most likely root cause: stuck inside `gpu_slot.py run --wait` on a stale lease left by a prior process, or vLLM engine boot hanging silently.
+- **fern (Sc B → Sc D)**: silent 54-min stall on iter 4 caused by `SENPAI_TIMEOUT_MINUTES` killing the orchestrating Claude shell (`exit 124 after 3284s`); the **detached `gpu_slot.py` + vLLM server + `evaluate.py` continued** and produced the full 64-burst + 500-sample MMLU-Pro result anyway. Operational lesson: the eval pipeline is independent of the Claude controller. Once fern committed the launcher (`1e1718d`), posted the terminal result, and the clean relaunch reproduced TPOT magnitude, PR #76 was squash-merged at 23:24 UTC and `BASELINE.md` updated. fern reassigned to Sc D as PR #95.
+- **tanjiro (Sc C)**: same silent-stall pattern, recovered to a partial measured result of ~24.22x speedup with quality PASS. Needs clean relaunch + terminal SENPAI-RESULT to merge.
+- **frieren (Sc A)**: launcher landed early (`d56cb60` at 22:37) but never won a slot through fern's and tanjiro's long sessions. No measured result expected in round 1.
 
-Advisor diagnostic comments posted on PR #76 and PR #87 instructing:
-1. Commit + push the launcher first (durable artifact).
-2. Inspect `/tmp/inferencebench-gpu-slot.json` for stale lease (check PID liveness + TTL).
-3. `pgrep -af vllm` to find orphan processes from the timed-out iter.
-4. Scope down to quick-eval-only with partial `SENPAI-RESULT (terminal=false, pending_arms=true, status=partial)`.
-5. Short status comment within 10 min even without metrics.
+### Critical lesson learned in round 1
 
-Budget remaining (24:00 UTC endpoint): fern ~62 min, tanjiro ~63 min, frieren ~77 min (launcher already committed).
-
-**Critical lesson learned in round 1:** `VLLM_ATTENTION_BACKEND=FLASH_ATTN` combined with `--kv-cache-dtype fp8` is **impossible on RTX PRO 6000 Blackwell (SM 12.0)** in vLLM 0.11. The FA+FP8KV path is hard-gated to FA3 + Hopper SM 9.0. On Blackwell, vLLM forces FA back to v2, which does not implement FP8 KV. Hard `NotImplementedError` at engine init. Do not assign this combo again in this run.
+`VLLM_ATTENTION_BACKEND=FLASH_ATTN` combined with `--kv-cache-dtype fp8` is **impossible on RTX PRO 6000 Blackwell (SM 12.0)** in vLLM 0.11. The FA+FP8KV path is hard-gated to FA3 + Hopper SM 9.0. On Blackwell, vLLM forces FA back to v2, which does not implement FP8 KV. Hard `NotImplementedError` at engine init. Do not assign this combo again in this run.
 
 Canonical Blackwell FP8 KV paths:
-1. **TRITON_ATTN backend** — `platforms/cuda.py` auto-routes FP8 KV to TRITON_ATTN on non-Hopper. tanjiro is exercising this on Sc C.
+1. **TRITON_ATTN backend** — `platforms/cuda.py` auto-routes FP8 KV to TRITON_ATTN on non-Hopper. tanjiro is exercising this on Sc C (PR #87, partial 24.22x).
 2. **FlashInfer backend** — supports FP8 KV but `senpai/runtime_env.sh` disables FlashInfer by default on Blackwell shakedown. Re-enabling is allowed if a PR is explicitly testing it.
-3. **Drop FP8 KV entirely** — bf16 KV cache is fine on Mistral-7B with 96GB and burst concurrency ≤ 64. fern (Sc B) and the corrected frieren PR #89 (Sc A) are using this path.
+3. **Drop FP8 KV entirely** — bf16 KV cache is fine on Mistral-7B with 96GB and burst concurrency ≤ 64. fern's winning PR #76 (Sc B) and the corrected frieren PR #89 (Sc A) use this path.
+
+### Other lessons from round 1
+
+- **Detached eval pipelines survive Claude shell SIGTERM**: `gpu_slot.py`, vLLM, and `evaluate.py` continue after the orchestrating Claude session is killed at the 55-min `SENPAI_TIMEOUT_MINUTES` boundary. Students must commit the launcher early so the artifact is durable; the metrics will still appear in W&B even if the controlling shell dies.
+- **vLLM 0.11 V1 engine forces `chunked_prefill_enabled=True` when speculative decoding is on**, regardless of `--no-enable-chunked-prefill`. Hard constraint, not a launcher bug.
+- **`--disable-log-stats` suppresses spec-decode acceptance rate** in vLLM logs. Removing it is a clean follow-up for any spec-decoding sweep.
 
 Common ground (still): every launcher sources `senpai/runtime_env.sh`, wraps heavy GPU work in `senpai/gpu_slot.py run --wait`, runs quick eval before full, runs a clean relaunch before declaring terminal, and posts a `SENPAI-RESULT` marker per `program.md`.
 
@@ -46,18 +48,20 @@ Common ground (still): every launcher sources `senpai/runtime_env.sh`, wraps hea
 - **Scenario B (fern):** TPOT on a concurrency-1 long-output workload is the cleanest place to play with speculative decoding. n-gram is the safest spec method (exact verification preserves quality), and the SMAC3 H100 result of 15× is largely a speculative-decoding effect. Per-token decode is the metric; CUDA graphs are non-negotiable.
 - **Scenario C (tanjiro):** Throughput is batching-dominated. Mistral-7B + 96GB VRAM + FP8 KV cache lets us comfortably push `max_num_seqs` to 256, matching the burst concurrency cap. Public reference is the one scenario where the *default* vLLM is already very strong; modest improvements compound in the aggregate geomean.
 
-## Next research directions (queued for next round)
+## Next research directions (round 2 queue)
 
-These are queued as follow-ups based on the round-1 results. Do not assign until round 1 reports.
+Ranked by expected impact relative to the current `BASELINE.md` (Sc B = 2.694x; A/C/D pending):
 
-1. **Scenario D (balanced) launcher** — geomean of TTFT/TPOT/req/s at 4K/2K, burst concurrency 4. Likely a hybrid of the round-1 winners (chunked prefill + moderate `max_num_seqs` + maybe lightweight n-gram spec).
-2. **Speculative-decoding sweep on Scenario B** — 3/5/7 tokens, plus draft-model (EAGLE / Medusa / draft-Mistral) variants once the quality gate is known to hold.
-3. **Engine bake-off on Scenario C** — SGLang RadixAttention vs vLLM prefix caching. SGLang has known wins on repeated-prefix throughput.
-4. **FP8 weights** — if FP8 KV is quality-safe, try FP8 weights too on the throughput scenario; biggest VRAM lever, biggest quality risk. Quality gate is hard.
-5. **TRITON_ATTN smoke** — Blackwell sometimes prefers Triton kernels. Run a controlled comparison once a baseline launcher exists per scenario.
-6. **Scheduler policy** — vLLM v1 scheduler tweaks (preemption priority, chunked-prefill admission policy); SGLang `--schedule-policy lpm` vs default `fcfs`.
-7. **Cross-scenario "universal" launcher** — once we have winners per scenario, run an A–D confirmation on the best general-purpose config and report the aggregate geomean.
-8. **Speculative decoding for Scenario D** — D has burst concurrency 4 with 2K outputs, which is in the sweet spot for spec decoding without batch saturation.
+1. **n-gram-7 sweep on Sc B** — direct follow-up to the merged 2.694x n-gram-5 winner. The H100 SMAC3 reference hits 15.23x on Sc B, almost entirely from speculative decoding; we have ~5.6× of headroom against that. Group runs with `--wandb_group`. Pair with n-gram-3 to confirm the local optimum.
+2. **Sc A**: assign once round-1 closes. **frieren PR #89** (FLASH_ATTN bf16 + chunked-prefill + 16384 max_num_batched_tokens + prefix caching + CUDA graphs) is already committed and slot-blocked — extend its budget into round 2 to land the first Sc A number, then iterate. Round-2 follow-up candidate: **FlashInfer backend on Sc A** (`VLLM_ATTENTION_BACKEND=FLASHINFER`), expected 1.3–1.8x TTFT over FA2; first verify the installed FlashInfer's Blackwell sm_100 support.
+3. **Sc C terminal**: if tanjiro's clean relaunch doesn't terminate in round 1, finish it in round 2. The partial 24.22x is far above the H100 vLLM-default reference (~1× of the 48.69 req/s baseline) and the H100 SMAC3 stretch is only 46.7 req/s — strong indicator the FP8-KV-via-TRITON_ATTN path is the right canonical config.
+4. **Sc D** — fern's PR #95 (n-gram-3 spec + chunked prefill + prefix cache, `max_num_seqs=64`) — full eval to be carried into round 2.
+5. **n-gram acceptance-rate visibility** — drop `--disable-log-stats` on the next Sc B variant so we can see acceptance directly instead of inferring from end-to-end TPOT.
+6. **Engine bake-off on Sc C** — SGLang RadixAttention vs vLLM prefix caching once tanjiro's vLLM baseline lands; SGLang's H100 default beats vLLM's on throughput-style workloads.
+7. **FP8 weights on Sc C** — `--quantization fp8` if FP8 KV holds the quality gate. Biggest VRAM lever, biggest quality risk. Verify `--quantization fp8` CLI compatibility with the installed vLLM build first.
+8. **Draft-model speculative decoding on Sc B** — EAGLE / Medusa / draft-Mistral once the n-gram local optimum is mapped; the SMAC3 H100 15.23x almost certainly involves draft models.
+9. **Scheduler policy** — vLLM v1 preemption / chunked-prefill admission tweaks; SGLang `--schedule-policy lpm` vs default `fcfs`.
+10. **Cross-scenario "universal" launcher** — once we have winners per scenario, run an A–D confirmation on the best general-purpose config and report the aggregate geomean.
 
 ## Plateau watch
 
@@ -65,19 +69,17 @@ We are nominally at round 1, so there is no plateau yet. After three rounds of <
 
 ## Round 2 candidate hypotheses (from researcher-agent)
 
-`research/RESEARCH_IDEAS_2026-05-24_advisor.md` ranks 8 hypotheses. Highest-impact follow-ups not in round 1:
+`research/RESEARCH_IDEAS_2026-05-24_advisor.md` ranks 8 hypotheses. Status after round 1:
 
-1. **FlashInfer attention backend on Scenario A** — explicitly override `runtime_env.sh` to set `VLLM_ATTENTION_BACKEND=FLASHINFER` + `VLLM_USE_FLASHINFER_SAMPLER=1` + `VLLM_DISABLE_FLASHINFER_PREFILL=0`. Expected 1.3–1.8× TTFT over the FLASH_ATTN baseline. Risk: Blackwell sm_100 PTX support depends on the installed FlashInfer version; must smoke-test boot first.
-2. **SGLang FP8 weights + RadixAttention on Scenario C** — `--quantization fp8 --schedule-policy lpm`. SGLang's H100 default already beats vLLM's default on throughput; FP8 weights + RadixAttention give ~7 GB free for KV cache. Risk: quality gate with per-tensor FP8 scaling on Mistral GQA; CLI compatibility of `--quantization fp8` on the installed SGLang build.
-3. **n-gram speculative decoding sweep on Scenario B** — the researcher recommends 7 tokens instead of 5 once fern's PR #76 returns a baseline. Round-1's 5-token choice is the conservative starting point; the sweep is a natural follow-up.
-4. **SGLang FlashInfer + CUDA graphs on Scenario D** — compound winner once round-1 baselines exist.
+1. **n-gram-7 speculative decoding on Sc B** — researcher recommendation now actionable since fern's n-gram-5 PR #76 merged at 2.694x. Top of the round-2 queue.
+2. **FlashInfer attention backend on Sc A** — `VLLM_ATTENTION_BACKEND=FLASHINFER` + `VLLM_USE_FLASHINFER_SAMPLER=1` + `VLLM_DISABLE_FLASHINFER_PREFILL=0`. Expected 1.3–1.8× TTFT over the FLASH_ATTN baseline. Risk: Blackwell sm_100 PTX support depends on the installed FlashInfer version; must smoke-test boot first. Schedule **after** frieren's PR #89 (FA bf16) provides the Sc A reference number.
+3. **SGLang FP8 weights + RadixAttention on Sc C** — `--quantization fp8 --schedule-policy lpm`. FP8 weights + RadixAttention give ~7 GB free for KV cache. Risk: quality gate with per-tensor FP8 scaling on Mistral GQA; CLI compatibility of `--quantization fp8` on the installed SGLang build. Schedule **after** tanjiro's PR #87 reaches terminal.
+4. **SGLang FlashInfer + CUDA graphs on Sc D** — compound winner once round-1 baselines exist. Sequenced **after** fern's PR #95 (vLLM Sc D) returns a baseline.
 
-Open uncertainties flagged by the researcher:
-- Installed FlashInfer version's Blackwell sm_100 support.
+Open uncertainties flagged by the researcher (still open):
+- Installed FlashInfer version's Blackwell sm_100 support — to verify before any FlashInfer launcher in round 2.
 - SGLang `--quantization fp8` CLI accepted by the installed build.
-- n-gram acceptance rate on LongBench-v2 prompts.
-
-These will be resolved by round-1 results before being assigned.
+- n-gram acceptance rate on LongBench-v2 prompts (Sc B); drop `--disable-log-stats` on the next variant to measure directly.
 
 ## Open external context
 
