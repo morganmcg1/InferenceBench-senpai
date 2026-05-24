@@ -53,6 +53,12 @@ unset _runtime_env_candidates _cand
 # Force integer device index — some nodes expose GPU UUIDs which vLLM cannot parse.
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
+# runtime_env.sh appends pip-installed CUDA 12.9 headers to CPATH, which
+# conflicts with the system nvcc (CUDA 13.2) and trips flashinfer JIT
+# compilation. We only need LD_LIBRARY_PATH at runtime; nvcc finds its
+# headers via /usr/local/cuda/include automatically.
+unset CPATH
+
 # Use FlashAttention backend on Blackwell for the decode-heavy single-stream path.
 export VLLM_ATTENTION_BACKEND="${VLLM_ATTENTION_BACKEND:-FLASH_ATTN}"
 
