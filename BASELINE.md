@@ -39,7 +39,7 @@ default 4.05x aggregate (A 1.25x, B 2.25x, C 48.69x, D 1.96x).
 |---|---|---|---|---|---|
 | A | **winner merged** | **1.261x** (TTFT p50 0.348 s) | `senpai/launchers/A/vllm-prefill-a/start_server.sh` | #61 | `aucwenw1` |
 | B | open | — (no candidate) | PyTorch torch backend baseline | — | — |
-| C | open | — (no candidate) | PyTorch torch backend baseline | — | — |
+| C | **winner merged** | **22.23x** (geomean req/s 1.883) | `senpai/launchers/C/vllm-throughput-c/start_server.sh` | #59 | `tawme06p` |
 | D | open | — (no candidate) | PyTorch torch backend baseline | — | — |
 
 **Scenario A winner recipe (merged PR #61):**
@@ -48,6 +48,14 @@ vLLM 0.11.0, `--gpu-memory-utilization 0.90`, `--max-num-seqs 16`,
 `--enable-prefix-caching`, `--kv-cache-dtype auto` (FP8 KV rejected by
 FlashAttention on this Blackwell hardware), `VLLM_ATTENTION_BACKEND=FLASH_ATTN`.
 Quality: MMLU-Pro 0.296 / 0.298 baseline, ratio 0.9933 (pass).
+
+**Scenario C winner recipe (merged PR #59):**
+vLLM 0.11.0, `--gpu-memory-utilization 0.92`, `--max-num-seqs 256`,
+`--max-num-batched-tokens 8192`, `--enable-chunked-prefill`,
+`--enable-prefix-caching`, `--kv-cache-dtype auto`, `--block-size 16`,
+`VLLM_ATTENTION_BACKEND=FLASH_ATTN`. Per-profile: burst 32.4x, poisson 23.4x,
+constant 14.5x. Quality: MMLU-Pro 0.308 / 0.298 baseline, ratio 1.034 (pass).
+768/768 successes.
 
 **Known hardware constraints (RTX PRO 6000 Blackwell, this pod):**
 - `--kv-cache-dtype fp8`: REJECTED by FlashAttention on this device.
