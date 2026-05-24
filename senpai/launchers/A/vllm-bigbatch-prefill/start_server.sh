@@ -47,6 +47,11 @@ echo "============================================================"
 # Force integer device index — some nodes expose GPU UUIDs which vLLM cannot parse.
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
+# Pod-local: flashinfer JIT top-k/top-p sampler fails to compile on this image
+# (CUDA-13 nvcc vs CUDA-12 pip headers). Native torch sampler is exact at
+# concurrency 1. Confirmed by r3-frieren on PR #37.
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
+
 exec python3 -m vllm.entrypoints.openai.api_server \
     --model "${MODEL_ID}" \
     --host "${HOST}" \
