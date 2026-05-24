@@ -27,7 +27,7 @@ every terminal review-ready PR that beats the current best.
 | A — input-heavy (TTFT)   | `scenario/A/speedup_over_pytorch` | _no measurement yet_ | _vLLM default starting point_ | — | — | Establish first |
 | B — output-heavy (TPOT)  | `scenario/B/speedup_over_pytorch` | _no measurement yet_ | _vLLM default starting point_ | — | — | Largest headroom on H100 ref (15x SMAC3 vs 2.25x default) |
 | C — high-load (req/s)    | `scenario/C/speedup_over_pytorch` | _no measurement yet_ | _vLLM default starting point_ | — | — | Default already near top on H100 ref |
-| D — general (geomean)    | `scenario/D/speedup_over_pytorch` | _no measurement yet_ | _vLLM default starting point_ | — | — | Balanced workload |
+| D — general (geomean)    | `scenario/D/speedup_over_pytorch` | **1.5015x** | `senpai/launchers/D/balanced-fp8/start_server.sh` | #82 | [85zn8jd4](https://wandb.ai/wandb-applied-ai-team/inferencebench-senpai/runs/85zn8jd4) | FP8 weights + chunked prefill + max-num-seqs 64 + max-num-batched-tokens 8192; MMLU-Pro ratio 0.9933 (PASS at tau=0.95) |
 
 ## Public H100 reference snapshot (2026-05-21)
 
@@ -45,3 +45,4 @@ shakedown results are not directly comparable.
 
 ## Update history
 - 2026-05-24: file created. No live measurements yet.
+- 2026-05-24 23:08 UTC: PR #82 merged — Sc. D = **1.5015x** speedup_over_pytorch (tanjiro, balanced-fp8 launcher). First on-hardware measurement of this run. MMLU-Pro ratio 0.9933 over n=500, 0.7% margin above tau=0.95. W&B run `85zn8jd4`.
