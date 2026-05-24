@@ -138,30 +138,9 @@ RUN uv pip install --system --no-cache \
         "transformers>=4.55.2,<4.58" && \
     uv pip install --system --no-cache --prerelease=allow flashinfer-python || true
 
-RUN export LD_LIBRARY_PATH="$(python - <<'PY'
-import site
-from pathlib import Path
-
-libs = []
-for root in site.getsitepackages() + [site.getusersitepackages()]:
-    base = Path(root) / "nvidia"
-    if base.exists():
-        libs.extend(str(path) for path in base.glob("*/lib") if path.is_dir())
-print(":".join(dict.fromkeys(libs)))
-PY
-)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" && \
-    python - <<'PY' && \
+RUN export LD_LIBRARY_PATH="$(python -c 'import site; from pathlib import Path; libs=[]; [libs.extend(str(path) for path in (Path(root) / "nvidia").glob("*/lib") if path.is_dir()) for root in site.getsitepackages() + [site.getusersitepackages()] if (Path(root) / "nvidia").exists()]; print(":".join(dict.fromkeys(libs)))')${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" && \
+    python -c 'import torch, transformers, vllm; assert torch.__version__.startswith("2.8.0"), torch.__version__; assert vllm.__version__ == "0.11.0", vllm.__version__; print("torch", torch.__version__); print("transformers", transformers.__version__); print("vllm", vllm.__version__)' && \
     python -m vllm.entrypoints.openai.api_server --help >/tmp/vllm_api_server_help.txt
-import torch
-import transformers
-import vllm
-
-assert torch.__version__.startswith("2.8.0"), torch.__version__
-assert vllm.__version__ == "0.11.0", vllm.__version__
-print("torch", torch.__version__)
-print("transformers", transformers.__version__)
-print("vllm", vllm.__version__)
-PY
 
 RUN cd /opt && \
     git clone --depth=1 https://github.com/rank-and-file/filelock_workarounds.git
