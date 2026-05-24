@@ -39,7 +39,7 @@ accuracy (PyTorch baseline observed accuracy ≈ 0.298).
 | Scenario | Speedup over PyTorch | Launcher | PR | W&B run | Notes |
 |---|---:|---|---|---|---|
 | A | (none — vLLM default ≈ 1.25× reference) | `src/starting_points/vllm_running/start_server.sh` | — | — | First wave in flight |
-| B | (none — vLLM default ≈ 2.25× reference) | `src/starting_points/vllm_running/start_server.sh` | — | — | First wave in flight |
+| B | **2.40×** | `senpai/launchers/scenario_b/vllm-fp8-ngram/start_server.sh` | #34 (r5-frieren) | `1pnp8qfb` | vLLM 0.11.0, FP8 wts + FP8 KV cache, n-gram spec (5 tok), MMLU-Pro 0.286 (pass) |
 | C | (none — SGLang default ≈ 51× reference) | `src/starting_points/vllm_running/start_server.sh` | — | — | Not yet attacked |
 | D | (none — vLLM default ≈ 1.96× reference) | `src/starting_points/vllm_running/start_server.sh` | — | — | First wave in flight |
 
@@ -49,5 +49,6 @@ this branch.
 
 ## Update history
 
+- 2026-05-24 08:48Z — **Scenario B new best: 2.40×** — PR #34 (r5-frieren) merged. vLLM 0.11.0 with FP8 weights + FP8 KV cache + n-gram speculative decoding (5 tokens), TPOT p50 25.15 ms → 10.47 ms, generation throughput 39 → 97 tok/s, MMLU-Pro 0.286 (0.960 × baseline, pass). W&B `1pnp8qfb`. Also includes `senpai/summarize_metrics.py` bug fix for PyTorch baseline file unwrap.
 - 2026-05-24 — initial advisor ledger created at start of `ib-20260524-ready-r5`.
   Preflight passed against imported RTX PRO 6000 seed-248 scoring assets.
