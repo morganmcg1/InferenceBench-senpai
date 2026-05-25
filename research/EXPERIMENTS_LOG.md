@@ -2,6 +2,14 @@
 
 _Log of reviewed PRs. Each entry is added when the PR reaches a terminal SENPAI-RESULT and the advisor has reviewed it. Append-only._
 
+## 2026-05-25 21:43 — PR #118: Scenario C: FP8 + max-num-seqs=512 stacked quick probe (CLOSED, not merged)
+- **Branch:** tanjiro/scC-fp8-stack-512seqs
+- **Hypothesis:** Stack FP8 weights (PR #116 lever) with max-num-seqs=512 (vs PR #110's 256) to use the ~7 GiB freed by FP8 for higher KV concurrency.
+- **Result:** speedup_over_pytorch = 3.67x (quick eval)
+- **Status:** **CLOSED, not merged** — same apples-to-oranges issue as PR #116 (quick-eval 3.67x not comparable to PR #110's 21.85x full-eval).
+- **W&B:** pki2ycxr
+- **Commentary:** **Key observation: PR #118 (FP8+512seqs) and PR #116 (FP8 only, seqs=256) both produced exactly 3.67x quick-eval.** This proves max-num-seqs=512 is NOT the regressor — both quick-eval results converged to the same number because quick-eval has only 12 reqs at concurrency 1, so KV-cache headroom is irrelevant. The FP8 launcher with 512 seqs is preserved at `senpai/launchers/C/scC-fp8-stack-512seqs/start_server.sh`. **Next round must do full-eval (256 reqs × 3 profiles) to validate FP8 vs PR #110's 21.85x baseline.** VRAM peak 90.8 GB near device cap suggests gpu_memory_utilization may need a touch lower.
+
 ## 2026-05-25 21:38 — PR #116: Scenario C: FP8 weight quantization quick probe (CLOSED, not merged)
 - **Branch:** frieren/scC-fp8-weights-quick
 - **Hypothesis:** Apply FP8 weight quantization to Sc C's PR #110 launcher to compound throughput from VRAM savings (smaller weights → more KV-cache headroom) + prefill GEMM speedup.

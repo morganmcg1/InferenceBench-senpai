@@ -1,10 +1,14 @@
 # SENPAI Research State
 
-- **Time:** 2026-05-25 21:39 UTC
+- **Time:** 2026-05-25 21:44 UTC
 - **Most recent human direction:** none (no GitHub Issues this launch)
 - **Research tag/branch:** ib-20260525-three2-r1
 - **Hardware:** 1x RTX PRO 6000 Blackwell (~96GB VRAM, shakedown, not leaderboard-comparable to H100)
-- **Status:** Round 2 winding down. Hard end ~21:45 UTC (~6 min). 6 PRs merged + 1 closed this launch.
+- **Status:** Round 2 closed. 6 PRs merged + 2 closed (Sc C FP8 quick-eval × 2) this launch.
+
+## Critical Sc C finding (round 2 close)
+
+PR #116 (FP8 only, max-num-seqs=256) and PR #118 (FP8 + max-num-seqs=512) BOTH produced identical 3.67x quick-eval Sc C results. This proves max-num-seqs is not the regressor — quick-eval has only 12 reqs at c=1 so KV concurrency headroom is irrelevant in that mode. **Action item next round: full-eval one of the FP8 Sc C launchers vs PR #110's 21.85x.**
 
 ## Final round 1+2 scoreboard
 
@@ -32,10 +36,10 @@ H100 vLLM-default: A 1.25x | B 2.25x | C 48.69x | D 1.96x
 
 **Quality gate at quick eval is unreliable** — all PRs report quality_ratio=0.839 (observed=0.250, baseline=0.298) because n=16 only has 1-2 "correct answer" granularity. This is the same noise floor for BF16 and FP8 — we cannot distinguish them at this sample size. Full n=500 eval needed before claiming FP8 introduces quality regression.
 
-## Queued for next round (PRs #117 #118 carrying forward)
+## Queued for next round
 
-- **PR #117 (fern, Sc B)**: n-gram speculative decoding via `--speculative-config '{"method":"ngram"...}'`. The real TPOT lever for Sc B — FP8 only gave +3% because decode is bandwidth-bound, not GEMM-bound; speculative decoding directly attacks the per-token decode latency by predicting multiple tokens at once. Expected 2-3x compound on top of FP8.
-- **PR #118 (tanjiro, Sc C)**: FP8 + max-num-seqs=512 (vs PR #110's 256). The FP8 weight footprint reduction frees ~7GB which can fund higher concurrency — frieren's PR #116 measured KV reporting 19.88x concurrency headroom at 32k tokens. Untapped capacity to push throughput higher than 21.85x.
+- **PR #117 (fern, Sc B)**: n-gram speculative decoding via `--speculative-config '{"method":"ngram"...}'`. The real TPOT lever for Sc B — FP8 only gave +3% because decode is bandwidth-bound, not GEMM-bound; speculative decoding directly attacks the per-token decode latency by predicting multiple tokens at once. Expected 2-3x compound on top of FP8. **Status: queued WIP, did not run in round 2.**
+- **PR #118 (tanjiro, Sc C)**: CLOSED — produced identical 3.67x to PR #116. The Sc C FP8 question remains open and needs full-eval validation, NOT another quick probe. Recommended next-round form: run PR #110's full-eval test_server harness on the FP8 launcher (256 reqs × 3 profiles) to get apples-to-apples comparison.
 
 ## Highest-priority directions for next round (post-round-2)
 
