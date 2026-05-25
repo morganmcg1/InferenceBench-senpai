@@ -21,17 +21,27 @@ These are the raw objectives used in the `speedup_over_pytorch` denominator.
 
 ## Current best valid launcher per scenario
 
-No SENPAI launcher has been measured yet on this branch. All entries below are
-**open** — each scenario's current best is the PyTorch baseline at `1.00x` and
-any improving candidate is mergeable.
-
 | Scenario | Best launcher | Primary metric | Speedup over PyTorch | W&B run | PR |
 |---|---|---|---:|---|---|
 | A | — (PyTorch baseline) | `scenario/A/speedup_over_pytorch` | `1.00x` | — | — |
-| B | — (PyTorch baseline) | `scenario/B/speedup_over_pytorch` | `1.00x` | — | — |
+| **B** | `senpai/launchers/B/vllm_ngram_spec_bf16/start_server.sh` | `scenario/B/speedup_over_pytorch` | **`3.50x`** | `x9t8u1d6` | #102 |
 | C | — (PyTorch baseline) | `scenario/C/speedup_over_pytorch` | `1.00x` | — | — |
 | D | — (PyTorch baseline) | `scenario/D/speedup_over_pytorch` | `1.00x` | — | — |
 | Aggregate | — | `aggregate/geomean_speedup_over_pytorch` | `1.00x` | — | — |
+
+### Scenario B — best launcher details (PR #102)
+
+- **Launcher:** `senpai/launchers/B/vllm_ngram_spec_bf16/start_server.sh`
+- **Engine:** vLLM, BF16 KV, FlashAttention backend, CUDA graphs on
+- **Speculative config:** n-gram, `num_speculative_tokens=7`, `prompt_lookup_max=5`, `prompt_lookup_min=2`
+- **Key flags:** `--max-num-seqs 64 --max-num-batched-tokens 8192 --gpu-memory-utilization 0.92 --enable-chunked-prefill --enable-prefix-caching`
+- **TPOT.p50:** 0.00719 s (vs PyTorch 0.02515 s)
+- **Generation throughput:** 129.26 tok/s (vs PyTorch 39.19)
+- **Quality:** MMLU-Pro 0.300 / 0.298 baseline / ratio 1.007 ✅
+- **Failures:** 0/64
+- **VRAM peak:** 89,759 MB
+- **W&B:** `x9t8u1d6`, group `scenario-B-ngram-spec-decoding`
+- **Reproduce:** source `senpai/runtime_env.sh`; set `VLLM_ATTENTION_BACKEND=FLASH_ATTN`; run `senpai/launchers/B/vllm_ngram_spec_bf16/start_server.sh`
 
 ## Public reference snapshot (2026-05-21, H100 80 GB)
 
@@ -54,5 +64,5 @@ Largest known headroom over framework defaults:
 
 ## Update history
 
-- 2026-05-25 — Initialized ledger from PyTorch baselines on RTX PRO 6000
-  seed=248. No SENPAI candidates measured yet.
+- 2026-05-25 13:57 — **Scenario B updated** to 3.50x (PR #102, frieren). vLLM + n-gram spec decoding (spec_tokens=7, lookup=5), BF16 KV, FA backend, CUDA graphs. Quality pass 1.007x baseline.
+- 2026-05-25 — Initialized ledger from PyTorch baselines on RTX PRO 6000 seed=248.

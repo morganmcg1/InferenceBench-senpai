@@ -17,13 +17,17 @@ from decode-time techniques: speculative decoding, CUDA graphs, KV-cache
 dtype/allocation, and batch sizing. With a single benchmark GPU and one
 student, opening on B is the highest-leverage first measurement.
 
+## Merged results
+
+| PR | Scenario | Speedup | Notes |
+|---|---|---|---|
+| #102 | B (output-heavy) | **3.50x** | vLLM + n-gram spec (spec=7, lookup=5), BF16 KV, CUDA graphs. Quality 1.007x. |
+
 ## Active hypothesis pipeline
 
-1. **PR #(pending) — Scenario B / vLLM + n-gram speculative decoding +
-   CUDA-graphed BF16 KV launcher.** Frieren. Goal: clear the vLLM default
-   (~2.25x reference) and move toward the 15x decode ceiling, with quick
-   probes for `num_speculative_tokens` and `prompt_lookup_max` before a
-   full eval.
+1. **PR #(pending) — Scenario B / wider n-gram spec window.** Frieren. Push
+   `num_speculative_tokens` to 10-12 with `prompt_lookup_max=7-8`. Calibrated
+   from PR #102: quick probes on n=4 overstate; need at least n=16 quick probe.
 
 ## Potential next research directions
 
