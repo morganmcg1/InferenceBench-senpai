@@ -1,8 +1,9 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~16:57 UTC (round 1 full-eval converging;
-  fern arm 2 full eval at ~82% as of 16:46; frieren queued for n=24 full
-  eval; tanjiro queued for tuned-vLLM-D quick)
+- **Date / time:** 2026-05-25 ~17:08 UTC (PR #105 fern MERGED 1.240x Sc. A;
+  frieren running full eval but urgently needs to abort+restart with
+  --request-limit 24 to fit the 17:34 deadline; tanjiro queued; fern
+  assigned PR #107 Sc. C quick)
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
@@ -34,11 +35,12 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Status @ 16:57 UTC | Hypothesis |
+| Student  | PR  | Scenario | Engine | Status @ 17:08 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram); queued behind fern via gpu_slot TTL 3600s; advisor authorized full eval at `--request-limit 24` (speed n=24 + quality n=500 MMLU-Pro, ~30 min total) | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
-| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x); arm 2 full eval at 82% as of 16:46 (105/128 reqs), ETA ~16:55 UTC. **FP8 arm 3 descoped** due to wall clock; bank arm 2 only and release slot immediately. Staged FP8 launcher kept on branch as round-2 candidate | Long-prefill launcher; FP8 arm 3 deferred to next launch |
-| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import; vLLM **defaults** quick = 1.241x. Tuned launcher staged at `senpai/launchers/D/tanjiro-tuned-vllm-balanced/`. Queued via gpu_slot TTL 1800s, queue position 2. Will get ~5 min window ~17:30-17:34 UTC for tuned quick only — no follow-up arm in this round | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
+| frieren  | 104 | B (output-heavy) | vLLM   | quick 2.89x ngram; running full 64-req eval (started ~16:54); URGENT: advisor posted abort+restart-with-n=24 directive at 17:06 UTC. If frieren aborts ~17:06 and restarts with `--request-limit 24`, ETA terminal ~17:30 UTC | CUDA-graph decode + n-gram speculative (n=3, lookup=5) |
+| fern     | 105 | A (input-heavy)  | vLLM | **MERGED** 1.240x (ttft.p50 0.3537s, 128/128, MMLU-Pro PASS). W&B `insngzmf`. FP8 arm 3 staged on branch as round-2 candidate | Tuned vLLM prefill no-prefix. COMPLETED. |
+| fern     | 107 | C (high-load)    | vLLM   | NEW PR assigned 17:07 UTC. Quick-only: queue position 3 (after frieren+tanjiro), TTL 600s. If slot frees before 17:30 UTC → quick eval (~2 min at c=32), else post `no_gpu_time` terminal | Default-ish vLLM C launcher: max-num-seqs 64, chunked prefill ON |
+| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | Heartbeating blocked, waiter PID 61189 alive; queue position 2. Tuned launcher at `senpai/launchers/D/tanjiro-tuned-vllm-balanced/`. Brief ~5 min window after frieren releases | Tuned vLLM Sc. D: chunked prefill ON, max-num-seqs 32, batched-tokens 8192 |
 
 ### Live quick-probe partial results
 
