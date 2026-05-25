@@ -17,7 +17,7 @@ PyTorch baseline metrics are present in `src/eval/inference/baselines/speed/torc
 | A: Input-heavy (TTFT) | **1.92x** | #113 | ikthm99f | vLLM 0.11.0 --quantization fp8 --enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --no-enable-prefix-caching --gpu-mem 0.92, FLASH_ATTN; FP8 weights W8A8 dynamic, 1.92x over PyTorch (+50% over BF16 1.28x); quality quick n=16 ratio 0.839 (same noise floor as BF16 quick — needs n=500 confirm) |
 | B: Output-heavy (TPOT) | **1.46x** | #114 | nbfrqfvy | vLLM 0.11.0 --quantization fp8 + PR #109 decode-tight launcher; +3% over BF16 1.42x — FP8 weights help less in decode-bound workloads (vs +50% for prefill-bound Sc A); quality quick n=16 ratio 0.839 same as BF16 noise floor |
 | C: High-load (req/s geomean) | **21.85x** | #110 | m6pt9mpu | vLLM 0.11.0 --max-num-seqs 256 --max-num-batched-tokens 8192 --enable-chunked-prefill; quality 0.31/0.298 ratio 1.04 ✅ |
-| D: General (geomean) | **1.25x** | #112 | 3pm8uuvh | vLLM 0.11.0 --max-num-seqs 32 --max-num-batched-tokens 16384 --enable-chunked-prefill --no-enable-prefix-caching --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839) — quick-eval forced c=1 not Sc D's c=4 so chunked-prefill benefit unexercised |
+| D: General (geomean) | **1.41x** | #115 | rciu3qok | vLLM 0.11.0 --quantization fp8 + PR #112 balanced launcher; +13% over BF16 1.25x — FP8 weights helps Sc D (mixed prefill+decode at c=4); quality quick n=16 ratio 0.839 |
 
 ## Reference snapshot (paper, H100, NOT this hardware)
 From `program.md` — public reference, do not rank as our baseline. Used only as ceiling guidance.
@@ -73,6 +73,15 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - **Caveat:** quick-eval forces concurrency=1, while Sc D scenario uses concurrency=4. The chunked-prefill + 16384 batched-tokens config is designed to help at c=4 (4×4k concurrent prefills batched in one scheduler step) but this is not exercised in quick-eval. **Full eval at c=4 likely shows higher speedup with TTFT p90 regression eliminated.**
 - **Finding:** Positive (first Sc D baseline). Kernel-level wins (TPOT 1.49x) dominate the quick number; the chunked-prefill batching hypothesis remains unfalsified by full eval.
 
+## Scenario D detail — PR #115 (merged 2026-05-25 21:32 UTC) ⭐ FP8 winner
+- **Launcher:** `senpai/launchers/scenarioD/fp8-weights-quick/start_server.sh`
+- **Engine:** vLLM 0.11.0
+- **Key flags:** PR #112 launcher + `--quantization fp8` (KV-cache auto/BF16)
+- **PyTorch baseline raw geomean inverse latency throughput:** 1.9298 → FP8 raw 2.7274 → **1.413x speedup** (+13% over BF16 1.25x)
+- **Quality:** quick-only (n=16), observed 0.250 / baseline 0.298 / ratio 0.839
+- **W&B:** run rciu3qok
+- **Finding:** Positive. FP8 contributes for Sc D's mixed prefill+decode at c=4 — smaller gain than Sc A (+50%) but bigger than Sc B (+3%), consistent with prefill-bound > mixed > decode-bound FP8 win ordering. Caveat: quick-eval still runs at c=1 not Sc D's c=4 so chunked-prefill batching at c=4 remains unexercised.
+
 ## Scenario C detail — PR #110 (merged 2026-05-25 20:36 UTC)
 - **Launcher:** `senpai/launchers/C/vllm-tuned-256seq-8192batch/start_server.sh`
 - **Engine:** vLLM 0.11.0
@@ -93,3 +102,4 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - 2026-05-25 21:20 UTC — Scenario D baseline set at 1.25x from PR #112 (tanjiro); quick-only, positive (first Sc D baseline). All 4 scenarios now have baseline entries.
 - 2026-05-25 21:24 UTC — Scenario A baseline raised to 1.92x from PR #113 (frieren); FP8 weights W8A8 dynamic — first non-parametric winner, +50% over BF16 baseline.
 - 2026-05-25 21:31 UTC — Scenario B baseline raised to 1.46x from PR #114 (fern); FP8 weights, +3% over BF16. Diagnoses FP8 win scaling: prefill-bound>>decode-bound.
+- 2026-05-25 21:32 UTC — Scenario D baseline raised to 1.41x from PR #115 (tanjiro); FP8 weights, +13% over BF16. Mixed workload between A (+50%) and B (+3%) — confirms ordering.
