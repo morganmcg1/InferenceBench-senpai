@@ -1,17 +1,22 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~16:23 UTC (round 1 full-eval in flight;
-  frieren's first full-eval attempt was watchdog-killed; advisor re-issued
-  with mitigation pattern)
+- **Date / time:** 2026-05-25 ~16:57 UTC (round 1 full-eval converging;
+  fern arm 2 full eval at ~82% as of 16:46; frieren queued for n=24 full
+  eval; tanjiro queued for tuned-vLLM-D quick)
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
   "/workspace/senpai-${STUDENT_NAME}/target"` and call `senpai/gpu_slot.py`
   from there (NOT `/workspace/senpai/target` or `target/senpai/gpu_slot.py`).
   Future PR instructions must reflect this layout.
-- **Wall-clock budget:** 2 hours total, started ~15:53 UTC. About **30 min
-  in / 90 min remaining** as of 16:23 UTC. Reserve final ~15 min for advisor
-  review and merge.
+- **Wall-clock budget (CORRECTED):** 2 hours total, pod created
+  **15:34:10 UTC** (not 15:53), so launch ends ~17:34 UTC. About **83 min
+  in / ~37 min remaining** as of 16:57 UTC. Frieren caught the original
+  miscount in the 16:44 PR comment on #104; advisor re-issued plan at
+  16:55-16:57 UTC: fern banks arm 2 only (FP8 arm 3 descoped), frieren
+  runs full eval with `--request-limit 24` (~30 min), tanjiro takes a
+  brief ~5 min window for tuned-vLLM-D quick. Reserve final 5-10 min for
+  advisor merge.
 - **Hardware:** 1 RTX PRO 6000 ~96GB GPU shared by 3 students (shakedown,
   not leaderboard-comparable to H100).
 - **Pod-watchdog mismatch (NEW):** the group-1 pod entrypoint kills any
@@ -29,11 +34,11 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Status @ 16:23 UTC | Hypothesis |
+| Student  | PR  | Scenario | Engine | Status @ 16:57 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram); first full-eval attempt watchdog-killed at 16:18:25 (no terminal posted, GPU dropped to 0); advisor re-issued retry with watchdog-mitigation pattern at 16:23 UTC | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
-| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x). Student re-assigned PR at 16:18:25 after watchdog churn; advisor reposted FP8 redirect + watchdog warning at 16:23 UTC. Pending: bank arm-2 full eval, then FP8 weight-quant arm 3 | Long-prefill launcher; arm 3 redirect = `--quantization fp8` weight quant |
-| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import; vLLM **defaults** quick = 1.241x (NOT the tuned recipe). Advisor reposted tuned-launcher reminder + watchdog warning at 16:23 UTC. Tuned recipe (chunked prefill ON, max-num-seqs 32, batched-tokens 8192) still pending | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
+| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram); queued behind fern via gpu_slot TTL 3600s; advisor authorized full eval at `--request-limit 24` (speed n=24 + quality n=500 MMLU-Pro, ~30 min total) | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
+| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x); arm 2 full eval at 82% as of 16:46 (105/128 reqs), ETA ~16:55 UTC. **FP8 arm 3 descoped** due to wall clock; bank arm 2 only and release slot immediately. Staged FP8 launcher kept on branch as round-2 candidate | Long-prefill launcher; FP8 arm 3 deferred to next launch |
+| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import; vLLM **defaults** quick = 1.241x. Tuned launcher staged at `senpai/launchers/D/tanjiro-tuned-vllm-balanced/`. Queued via gpu_slot TTL 1800s, queue position 2. Will get ~5 min window ~17:30-17:34 UTC for tuned quick only — no follow-up arm in this round | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
 
 ### Live quick-probe partial results
 
