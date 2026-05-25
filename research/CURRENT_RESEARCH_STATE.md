@@ -1,9 +1,10 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~17:08 UTC (PR #105 fern MERGED 1.240x Sc. A;
-  frieren running full eval but urgently needs to abort+restart with
-  --request-limit 24 to fit the 17:34 deadline; tanjiro queued; fern
-  assigned PR #107 Sc. C quick)
+- **Date / time:** 2026-05-25 ~17:27 UTC (PR #105 fern MERGED 1.240x Sc. A;
+  PR #106 tanjiro CLOSED informational 1.246x Sc. D quick — launcher banked
+  for round-2 full-eval; PR #107 fern Sc. C CLOSED descoped/no-slot;
+  PR #104 frieren n=12 authorized at 17:21:32, no ack yet — heartbeat
+  prompted at 17:27; ETA terminal ~17:36-17:38 UTC ~2-4 min past deadline)
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
@@ -35,12 +36,12 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Status @ 17:08 UTC | Hypothesis |
+| Student  | PR  | Scenario | Engine | Status @ 17:27 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | quick 2.89x ngram; running full 64-req eval (started ~16:54); URGENT: advisor posted abort+restart-with-n=24 directive at 17:06 UTC. If frieren aborts ~17:06 and restarts with `--request-limit 24`, ETA terminal ~17:30 UTC | CUDA-graph decode + n-gram speculative (n=3, lookup=5) |
-| fern     | 105 | A (input-heavy)  | vLLM | **MERGED** 1.240x (ttft.p50 0.3537s, 128/128, MMLU-Pro PASS). W&B `insngzmf`. FP8 arm 3 staged on branch as round-2 candidate | Tuned vLLM prefill no-prefix. COMPLETED. |
-| fern     | 107 | C (high-load)    | vLLM   | NEW PR assigned 17:07 UTC. Quick-only: queue position 3 (after frieren+tanjiro), TTL 600s. If slot frees before 17:30 UTC → quick eval (~2 min at c=32), else post `no_gpu_time` terminal | Default-ish vLLM C launcher: max-num-seqs 64, chunked prefill ON |
-| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | Heartbeating blocked, waiter PID 61189 alive; queue position 2. Tuned launcher at `senpai/launchers/D/tanjiro-tuned-vllm-balanced/`. Brief ~5 min window after frieren releases | Tuned vLLM Sc. D: chunked prefill ON, max-num-seqs 32, batched-tokens 8192 |
+| frieren  | 104 | B (output-heavy) | vLLM   | n=12 authorized 17:21:32 after queue contention from stale fern wrapper. No ack yet at 17:27 (5.5 min). Heartbeat prompt posted. ETA terminal ~17:36-17:38 if running. Speed eval at `--request-limit 12`, quality at n=500. | CUDA-graph decode + n-gram speculative (n=3, lookup=5) |
+| fern     | 105 | A (input-heavy)  | vLLM | **MERGED 17:03** 1.240x (ttft.p50 0.3537s, 128/128, MMLU-Pro PASS). W&B `insngzmf`. FP8 arm 3 staged on branch as round-2 candidate. | Tuned vLLM prefill no-prefix. COMPLETED. |
+| fern     | 107 | C (high-load)    | vLLM   | **CLOSED 17:21:53** — slot contention (stale wrapper) + wall clock + low expected room (H100 default 48.69x already near tuned ceiling). Launcher at `senpai/launchers/C/fern-vllm-baseline-c/` staged for next launch. | Default-ish vLLM C launcher (deferred). |
+| tanjiro  | 106 | D (general)      | vLLM | **CLOSED 17:25 informational** 1.246x quick (vs 1.241x default-vLLM-D quick floor). Not BASELINE-eligible (quick eval, not full). Two launchers banked: `tanjiro-tuned-vllm-balanced/` (commit `efdc787`) and `tanjiro-fallback-vllm-default-d/` (commit `6dca712`). Round-2 priority: pair tuned-D with frieren's ngram speculative config. | Tuned vLLM Sc. D: chunked prefill ON, max-num-seqs 32, batched-tokens 8192. COMPLETED (informational). |
 
 ### Live quick-probe partial results
 
@@ -99,27 +100,64 @@ produce strong quick wins.
 
 ## Potential next research directions (round 2+)
 
-After the current round 1 full-eval confirmations:
+Round 1 outcome summary:
+- **Sc. A floor banked: 1.240x** (fern PR #105 full-eval, MMLU-Pro PASS).
+- **Sc. B in flight: PR #104** frieren n=12 ngram speculative — quick was
+  2.89x; if n=12 full-mode lands cleanly the lift is real and merge-worthy.
+- **Sc. C: no result this round** — fern PR #107 closed (slot contention +
+  H100 reference shows default already 48.69x, low room).
+- **Sc. D: 1.246x quick informational** (tanjiro PR #106 closed), tuned
+  launcher banked for round-2 full eval.
 
-1. **Scenario B: bigger speculative tokens or speculative + FP8 weights** —
-   if frieren's ngram full-eval confirms ~2.9x, the next bump is
-   `num_speculative_tokens=5` or `--quantization fp8` paired with ngram. FP8
-   weights have not been tested on this hardware yet; quality gate must hold.
-2. **Scenario A with `--quantization fp8` weights** — fern's redirected
-   arm 3. Biggest unexplored lever for A on Blackwell tensor cores. Quality
-   gate is the risk.
-3. **Scenario A: bank default vLLM (~1.28x) as confirmed baseline** if FP8
-   arm fails to boot or fails quality. Better to have a measured floor than
-   no result.
-4. **Scenario D variants** — once tanjiro's tuned-vLLM-D quick lands, the
-   next probes are (a) drop chunked prefill to mirror frieren's recipe, and
-   (b) add ngram speculative on D (decode budget is half of B but still long).
-5. **Scenario C confirmation** with default vLLM — only if there is spare
-   GPU time after A/B/D have terminal results. Default vLLM may already be
-   near the ceiling on C.
-6. **Cross-scenario confirmation** with the round-1 winner (likely frieren's
-   ngram launcher applied to A/C/D) — only as a final step inside the
-   wall-clock budget.
+Round-2 priorities (ranked):
+
+1. **Scenario B confirmation at full mode** — if frieren's PR #104 lands a
+   clean n=12 terminal, the next launch should immediately full-eval the
+   same launcher (`senpai/launchers/B/frieren-tuned-vllm-decode-ngram/`) at
+   the full 64-request budget to bank the production floor. If n=12 quality
+   fails, drop to `num_speculative_tokens=2` and re-run.
+2. **Scenario D tuned full eval + ngram pairing** — pick up
+   `senpai/launchers/D/tanjiro-tuned-vllm-balanced/` (commit `efdc787`) and
+   run a full 96-req c=4 burst eval. Then pair with frieren's ngram
+   speculative config (`{"method":"ngram","num_speculative_tokens":3,
+   "prompt_lookup_max":5}`) — the highest-EV cross-scenario follow-up.
+3. **Scenario A with `--quantization fp8` weights** — fern's deferred
+   arm 3 launcher at
+   `senpai/launchers/A/fern-tuned-vllm-prefill-noprefix-fp8/` is staged on
+   the merged branch. Biggest unexplored lever for A on Blackwell tensor
+   cores. Quality gate is the risk.
+4. **Scenario B: bigger speculative tokens** — if frieren confirms ~2.9x,
+   try `num_speculative_tokens=5` or `num_speculative_tokens=7` to test
+   whether the lift saturates or keeps climbing on Mistral-7B.
+5. **Scenario C floor measurement** — pick up fern's staged
+   `senpai/launchers/C/fern-vllm-baseline-c/` launcher. One quick eval is
+   enough to establish the RTX PRO 6000 floor on Sc. C (H100 default is
+   already at 48.69x — Sc. C is the lowest-headroom scenario per the
+   reference table).
+6. **SGLang LPM hypothesis** — only after a fresh container with
+   `sgl-kernel >= 0.3.20` matched to `sglang 0.5.12.post1` is available.
+   Blocked operationally, not by research direction.
+7. **Cross-scenario confirmation with round-1 winners** — apply the
+   ngram speculative recipe (if confirmed on Sc. B) to A/C/D as a single
+   unified launcher.
+
+## Operational lessons for next launch
+
+1. **Watchdog mismatch** must be fixed at the pod-entrypoint level. The
+   "Claude log stale for 601s and no train.py process" heuristic is the
+   wrong test for serving workloads. Recommend the entrypoint check for
+   active `vllm` / `sglang` / `evaluate.py` processes OR a heartbeat file
+   before killing claude.
+2. **gpu_slot.py queue contention** is a real issue when student wrappers
+   stack up. PR-close does NOT kill local waiter PIDs. Future advisor
+   instructions should explicitly tell students to `kill` their waiter pid
+   when a PR is closed, or `gpu_slot.py` should respect a PR-closed signal.
+3. **Wall-clock math** needs to start from pod creation time
+   (`kubectl get pod -o jsonpath='{.status.startTime}'`), not from the
+   first advisor commit. Frieren correctly caught a 19-minute miscount
+   that nearly cost the launch.
+4. **Quick vs full eval contract** worked — tanjiro's 1.246x quick was
+   correctly held back from BASELINE.md. The contract is doing its job.
 
 ## Constraints / risks to watch
 
