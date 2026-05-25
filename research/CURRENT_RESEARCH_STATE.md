@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~16:03 UTC (round 1 fern complete, frieren+tanjiro silent on GPU)
+- **Date / time:** 2026-05-25 ~16:07 UTC (round 1 quick probes all in; frieren is the strong candidate; tanjiro pivoted to vLLM)
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
@@ -19,28 +19,28 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Status @ 16:03 UTC | Hypothesis |
+| Student  | PR  | Scenario | Engine | Status @ 16:07 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | 12.5-min claude session ended 15:55 with no posted partial; advisor pinged with status-check + GPU-orphan note | CUDA-graph decode launcher, no chunked prefill, big mem util, prefix caching on, optional n-gram speculative arm |
-| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick done (1.27x, 1.28x — both neutral). PR flipped review→wip; advisor sent **FP8 weight quant redirect** plus optional bank-arm-2-full-eval | Long-prefill launcher; arm 3 redirect = `--quantization fp8` weight quant |
-| tanjiro  | 106 | D (general)      | SGLang | no W&B run, no PR partial after 20 min; advisor pinged with status-check + GPU-orphan note | Tuned SGLang `lpm` scheduler + triton attention, with vLLM-default fallback if SGLang fails to import |
+| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram speculative); partial, no W&B; sent back to wip for full eval + W&B log + terminal marker | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
+| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x). Redirect in flight: bank arm-2 full eval, then FP8 weight-quant arm 3 | Long-prefill launcher; arm 3 redirect = `--quantization fp8` weight quant |
+| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import (sgl-kernel 0.3.4 vs sglang 0.5.12 version skew). Advisor pivoted to **tuned vLLM Scenario D launcher** with chunked prefill on + max-num-seqs 32 | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
 
 ### Live quick-probe partial results
 
 | PR | Arm | Speedup vs PyTorch | W&B run | Notes |
 | -- | --- | -----------------: | ------- | ----- |
 | 105 | arm1 (prefix cache ON)  | 1.27x Sc. A | `sm95i0u2` | Close to default-vLLM reference (1.25x). |
-| 105 | arm2 (prefix cache OFF) | 1.28x Sc. A | `osss9jxl` | No measurable median improvement vs arm 1. p90 outlier was cold-path. |
+| 105 | arm2 (prefix cache OFF) | 1.28x Sc. A | `osss9jxl` | No measurable median improvement vs arm 1. |
+| 104 | arm1 (CUDA graphs + no chunked prefill) | 1.43x Sc. B | _none — not logged_ | Real but modest. ITL/TPOT gap suggested non-steady-state overhead. |
+| 104 | arm2 (arm1 + n-gram speculative n=3, lookup=5) | **2.89x Sc. B** | _none — not logged_ | **Strongest result so far on this advisor branch.** TPOT 0.0087s vs PyTorch 0.0252s. Quality on quick-mode (16-sample) passes. Needs full eval + W&B log for terminal confirmation. |
 
-### Operational concern
+### Operational note (resolved)
 
-GPU shows ~92,981 MiB / 97,887 MiB (~95%) persistently since ~15:55 UTC even
-when no student claude session is actively reporting work. Likely an
-**orphaned vLLM server** from an earlier iteration is holding the slot, which
-would cause `senpai/gpu_slot.py run --wait` to refuse new heavy commands.
-Advisor posted a cleanup note on PR #104 and PR #106 asking frieren/tanjiro
-to run `nvidia-smi` + `ps -fp` against any vllm/sglang server PIDs and to
-terminate only their own process group if they own the orphan.
+The earlier "GPU pinned at ~93GB looks like orphan" hypothesis was **wrong** —
+that VRAM was frieren's arm 2 vLLM server actively running. The slot ownership
+and gpu_slot wrapper were working correctly. Keeping the orphan-detection
+cleanup note on PR #104 and PR #106 as defensive guidance, but no actual
+orphan was present.
 
 Scenario C is intentionally not in the first round — the public reference
 shows default vLLM already at 48.69x, close to the tuned ceiling, so it has
@@ -66,30 +66,27 @@ produce strong quick wins.
 
 ## Potential next research directions (round 2+)
 
-After round-1 quick probes return:
+After the current round 1 full-eval confirmations:
 
-1. **Scenario A with `--quantization fp8` weights** — fern's neutral 1.27x
-   suggests vLLM defaults already saturate the simple prefill levers on
-   RTX PRO 6000. FP8 weights (Mistral-7B-Instruct-v0.3-FP8) might cut
-   per-step prefill cost, gated by the quality gate.
-2. **Scenario A with `--enable-chunked-prefill --max-num-batched-tokens 8192`**
-   — opposite hypothesis: align prefill chunk to CUDA-graph budget instead of
-   disabling chunked prefill.
-3. **Scenario A: bank default vLLM as confirmed baseline** and reallocate
-   fern's GPU time to a different scenario (e.g. C confirmation or a B
-   variant) if both fern arms come in neutral.
-4. **Scenario B with n-gram speculative decoding** — biggest expected TPOT
-   win if frieren's arm 1 prefix-caching/CUDA-graph baseline already beats
-   default.
-5. **Scenario D with tuned vLLM** if SGLang underperforms or fails to boot
-   — mirror frieren's recipe with c=4-aware `--max-num-seqs`.
-6. **Scenario C confirmation** with default vLLM or default SGLang — only
-   if there is spare GPU time to bank a Scenario C baseline.
-7. **FP8 weight quantization** for Scenario B (decode-heavy) if Mistral-7B
-   FP8 builds load cleanly on RTX PRO 6000 — guarded by quality gate.
-8. **Cross-scenario confirmation** with the round-1 winner, only as a final
-   step inside the wall-clock budget if we have a mature single-scenario
-   winner.
+1. **Scenario B: bigger speculative tokens or speculative + FP8 weights** —
+   if frieren's ngram full-eval confirms ~2.9x, the next bump is
+   `num_speculative_tokens=5` or `--quantization fp8` paired with ngram. FP8
+   weights have not been tested on this hardware yet; quality gate must hold.
+2. **Scenario A with `--quantization fp8` weights** — fern's redirected
+   arm 3. Biggest unexplored lever for A on Blackwell tensor cores. Quality
+   gate is the risk.
+3. **Scenario A: bank default vLLM (~1.28x) as confirmed baseline** if FP8
+   arm fails to boot or fails quality. Better to have a measured floor than
+   no result.
+4. **Scenario D variants** — once tanjiro's tuned-vLLM-D quick lands, the
+   next probes are (a) drop chunked prefill to mirror frieren's recipe, and
+   (b) add ngram speculative on D (decode budget is half of B but still long).
+5. **Scenario C confirmation** with default vLLM — only if there is spare
+   GPU time after A/B/D have terminal results. Default vLLM may already be
+   near the ceiling on C.
+6. **Cross-scenario confirmation** with the round-1 winner (likely frieren's
+   ngram launcher applied to A/C/D) — only as a final step inside the
+   wall-clock budget.
 
 ## Constraints / risks to watch
 
