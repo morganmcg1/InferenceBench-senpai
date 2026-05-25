@@ -1,8 +1,12 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 (launch start)
-- **Most recent human directive:** none received yet for this launch (no
-  open issues on this advisor branch).
+- **Date / time:** 2026-05-25 ~15:53 UTC (round 1 partials starting to land)
+- **Most recent human directive:** path correction on all 3 round-1 PRs from
+  `morganmcg1` (operator). In this packed 3-student pod the student checkouts
+  are **per-student**, not shared: students should `cd
+  "/workspace/senpai-${STUDENT_NAME}/target"` and call `senpai/gpu_slot.py`
+  from there (NOT `/workspace/senpai/target` or `target/senpai/gpu_slot.py`).
+  Future PR instructions must reflect this layout.
 - **Wall-clock budget:** 2 hours, shared across assignment, quick eval,
   advisor review, full eval, and final review window.
 - **Hardware:** 1 RTX PRO 6000 ~96GB GPU shared by 3 students (shakedown,
@@ -15,11 +19,17 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Hypothesis |
-| -------- | --- | -------- | ------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | CUDA-graph decode launcher, no chunked prefill, big mem util, prefix caching on, optional n-gram speculative arm |
-| fern     | 105 | A (input-heavy)  | vLLM   | Long-prefill launcher, `--max-num-batched-tokens 16384`, no chunked prefill, trimmed `--max-model-len`, optional no-prefix-caching arm |
-| tanjiro  | 106 | D (general)      | SGLang | Tuned SGLang `lpm` scheduler + triton attention, with vLLM-default fallback if SGLang fails to import |
+| Student  | PR  | Scenario | Engine | Status @ 15:53 UTC | Hypothesis |
+| -------- | --- | -------- | ------ | ------------------ | ---------- |
+| frieren  | 104 | B (output-heavy) | vLLM   | server loading on GPU (96% VRAM) | CUDA-graph decode launcher, no chunked prefill, big mem util, prefix caching on, optional n-gram speculative arm |
+| fern     | 105 | A (input-heavy)  | vLLM   | arm 1 quick done: 1.27x (neutral), arm 2 (`--no-enable-prefix-caching`) in flight | Long-prefill launcher, `--max-num-batched-tokens 16384`, no chunked prefill, trimmed `--max-model-len`, optional no-prefix-caching arm |
+| tanjiro  | 106 | D (general)      | SGLang | in setup, no quick partial yet | Tuned SGLang `lpm` scheduler + triton attention, with vLLM-default fallback if SGLang fails to import |
+
+### Live quick-probe partial results
+
+| PR | Arm | Speedup vs PyTorch | W&B run | Notes |
+| -- | --- | -----------------: | ------- | ----- |
+| 105 | arm1 (prefix cache ON) | 1.27x Sc. A | `sm95i0u2` | Close to default-vLLM reference (1.25x). Disabling chunked prefill + 16k batched tokens did not unlock new behavior on this hardware. Quality check on 16-sample subset is informational only. |
 
 Scenario C is intentionally not in the first round — the public reference
 shows default vLLM already at 48.69x, close to the tuned ceiling, so it has
@@ -47,19 +57,26 @@ produce strong quick wins.
 
 After round-1 quick probes return:
 
-1. **Scenario B with n-gram speculative decoding** — biggest expected TPOT
-   win if the prefix-caching/CUDA-graph baseline already beats default.
-2. **Scenario A with FlashInfer attention** — only if the default
-   `VLLM_ATTENTION_BACKEND=FLASH_ATTN` baseline is the bottleneck on long
-   prefill *and* the backend boots cleanly with quality passing.
-3. **Scenario D with tuned vLLM** if SGLang underperforms — mirror frieren's
-   recipe with c=4-aware `--max-num-seqs`.
-4. **Scenario C confirmation** with default vLLM (likely small upside) or
-   default SGLang (already 51.12x on H100 reference) — only if there is
-   spare GPU time to bank a Scenario C baseline.
-5. **FP8 weight quantization** for Scenario B (decode-heavy) if Mistral-7B
+1. **Scenario A with `--quantization fp8` weights** — fern's neutral 1.27x
+   suggests vLLM defaults already saturate the simple prefill levers on
+   RTX PRO 6000. FP8 weights (Mistral-7B-Instruct-v0.3-FP8) might cut
+   per-step prefill cost, gated by the quality gate.
+2. **Scenario A with `--enable-chunked-prefill --max-num-batched-tokens 8192`**
+   — opposite hypothesis: align prefill chunk to CUDA-graph budget instead of
+   disabling chunked prefill.
+3. **Scenario A: bank default vLLM as confirmed baseline** and reallocate
+   fern's GPU time to a different scenario (e.g. C confirmation or a B
+   variant) if both fern arms come in neutral.
+4. **Scenario B with n-gram speculative decoding** — biggest expected TPOT
+   win if frieren's arm 1 prefix-caching/CUDA-graph baseline already beats
+   default.
+5. **Scenario D with tuned vLLM** if SGLang underperforms or fails to boot
+   — mirror frieren's recipe with c=4-aware `--max-num-seqs`.
+6. **Scenario C confirmation** with default vLLM or default SGLang — only
+   if there is spare GPU time to bank a Scenario C baseline.
+7. **FP8 weight quantization** for Scenario B (decode-heavy) if Mistral-7B
    FP8 builds load cleanly on RTX PRO 6000 — guarded by quality gate.
-6. **Cross-scenario confirmation** with the round-1 winner, only as a final
+8. **Cross-scenario confirmation** with the round-1 winner, only as a final
    step inside the wall-clock budget if we have a mature single-scenario
    winner.
 
