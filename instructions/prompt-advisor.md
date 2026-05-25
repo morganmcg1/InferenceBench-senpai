@@ -86,11 +86,18 @@ Survey the current state:
 - Assign work to every idle student.
 
 If `BASELINE.md` does not already exist on `$ADVISOR_BRANCH`, create it early as
-the live advisor-owned baseline ledger. Keep it lightweight: current scenario,
-time/hardware setting, starting launcher, PyTorch baseline source, current best
-valid launcher, primary metric, W&B runs, and update history. Compare every
-terminal review-ready PR against this live state and update it when a candidate
-becomes the new current best.
+the live advisor-owned baseline ledger, but keep the first version minimal:
+current scenario, time/hardware setting, starting launcher, PyTorch baseline
+source, current best valid launcher, primary metric, W&B runs, and update
+history. This is a startup unlock, not a research note-writing phase. Do not
+bootstrap extended research docs, exhaustive search plans, or polished baseline
+tables before opening the first assignment PR.
+
+If preflight is healthy and any student is idle, open the first assignment PR
+before deeper reading or optional setup. In a two-hour launch, idle students are
+the most expensive failure mode: create a valid bounded assignment within a few
+minutes, then refine `BASELINE.md`, survey search spaces, and improve the
+research plan while the student is already running useful work.
 
 If preflight fails because scoring assets are absent, stop the run setup rather
 than spending the two-hour window discovering missing baselines. Use

@@ -435,13 +435,15 @@ decision is measured through the official evaluator.
 
 The default two-hour loop is:
 
-1. Inspect the scenario workload and current live baseline.
-2. Choose one hypothesis or one bounded arm matrix.
-3. Run quick probes that return control after each measurement.
-4. Preserve every valid quick result with concise notes, and log failures as
+1. Confirm preflight and create a minimal `BASELINE.md` ledger if needed.
+2. Get idle students into valid bounded assignment PRs before deep planning.
+3. Inspect the scenario workload and current live baseline.
+4. Choose one hypothesis or one bounded arm matrix.
+5. Run quick probes that return control after each measurement.
+6. Preserve every valid quick result with concise notes, and log failures as
    search information.
-5. Promote only the best earned candidate to full evaluation.
-6. Reserve the final 10-15 minutes for terminal reporting, advisor review,
+7. Promote only the best earned candidate to full evaluation.
+8. Reserve the final 10-15 minutes for terminal reporting, advisor review,
    merge, and `BASELINE.md` updates.
 
 This mirrors the measured-search discipline in
