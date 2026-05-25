@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-05-25 17:25 UTC — PR #106: Scenario D: tuned vLLM launcher (chunked prefill ON, max-num-seqs 32) — informational, NOT MERGED
+
+- **Student / branch:** tanjiro / `tanjiro/scenario-d-sglang-lpm` (pivoted to vLLM after SGLang sgl-kernel/sglang version skew blocked LPM hypothesis on this pod)
+- **Hypothesis:** Tuned vLLM D recipe (`--max-num-seqs 32`, `--enable-chunked-prefill`, `--max-num-batched-tokens 8192`, `--enable-prefix-caching`, `--max-model-len 8192`, `--gpu-memory-utilization 0.95`) separates from default vLLM under Sc. D's c=4 burst concurrency.
+- **Result table:**
+
+| Arm | Mode | Speedup | TTFT.p50 | TPOT.p50 | gen tok/s | Quality | W&B run |
+|-----|------|--------:|---------:|---------:|----------:|---------|---------|
+| fallback default-vLLM-D | quick (4 req, c=1 burst) | 1.241x | 0.1955s | 0.01698s | 56.88 | 0.839 ratio (quick-mode noise, n=16) | `1tryfxbl` |
+| tuned-vLLM-D | quick (4 req, c=1 burst) | **1.246x** | 0.1952s | 0.01683s | 58.92 | 0.839 ratio (quick-mode noise, n=16) | `73o7oq1b` |
+
+- **Commentary:** Hypothesis directionally confirmed but not validated — tuned recipe is +0.4% over default at quick scale, well inside noise. The quick eval runs only 4 sequential requests at c=1 burst (despite the "burst" profile name), so scheduling-pressure-sensitive levers (`--max-num-seqs 32`, chunked prefill interleaving) cannot demonstrate their value. Full eval at c=4 burst would be the real test but wall-clock did not permit it this round. SGLang LPM hypothesis remained untested due to documented `sgl-kernel < 0.3.20` / `sglang 0.5.12.post1` version mismatch — operational issue for next launch.
+- **Disposition:** **NOT MERGED** — quick eval results are not BASELINE-eligible per the merge contract (full `evaluate.py` + n=500 MMLU-Pro required). Closed as informational. Two launchers banked as round-2 candidates: `senpai/launchers/D/tanjiro-tuned-vllm-balanced/start_server.sh` (commit `efdc787`) for full-eval validation, and `senpai/launchers/D/tanjiro-fallback-vllm-default-d/start_server.sh` (commit `6dca712`) as confirmed default-vLLM-D floor. Student's suggested round-2 follow-up of pairing the tuned-D recipe with frieren's ngram speculative config is the highest-priority candidate.
+
+---
+
 ## 2026-05-25 17:03 UTC — PR #105: Scenario A: tuned vLLM prefill launcher (big batched tokens, no chunked prefill)
 
 - **Branch:** `fern/scenario-a-tuned-vllm-prefill`
