@@ -44,6 +44,12 @@ hide a useful quick result behind a long blocking full evaluation. Unless the
 advisor explicitly says this is final confirmation, quick and full evaluation
 should be separate supervised launches.
 
+At the start of a research-arm PR, bias toward learning quickly. If the
+assignment gives you room to explore, run small, valid probes that compare
+meaningfully different settings or launcher families before spending the scarce
+full-eval budget on one candidate. Preserve the best quick winner, but do not
+stop exploring merely because the first healthy arm improved over PyTorch.
+
 The normal experiment surface is:
 
 ```text
@@ -72,6 +78,12 @@ When a quick probe finishes, commit or preserve the launcher and quick metrics,
 then post a concise partial result if the full evaluation will take more than a
 few minutes or the run is within 30 minutes of cutoff. Use
 `terminal=false,pending_arms=true` for partial `SENPAI-RESULT` comments.
+Partial comments are checkpoints for coordination and later analysis. If the
+assignment already defines the next arm, keep going after posting the
+checkpoint. If the next step would start an expensive full evaluation, leave the
+assigned search surface, or require a GPU-queue decision, ask the advisor
+explicitly in the PR comment and use the standard advisor-question workflow so
+the advisor sees it.
 
 Do not default to vLLM-only. Treat vLLM, SGLang, TGI, TensorRT-LLM, and custom
 OpenAI-compatible servers as live candidates. Pick the engine family that best

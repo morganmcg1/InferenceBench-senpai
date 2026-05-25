@@ -138,6 +138,15 @@ baseline before a full evaluation starts. Do not assign chained commands that
 run quick and full evaluation back-to-back unless the PR is already in final
 confirmation mode and no advisor decision is needed between them.
 
+Early in the two-hour window, buy information before proving one candidate.
+Prefer assignments that generate several cheap, valid measurements across
+meaningfully different launcher families, engines, or systems levers. Do not
+spend the first useful hour fully validating the first promising quick result
+unless the evidence is unusually strong and the opportunity cost is clearly
+worth it. Bank promising quick winners, keep exploring while the search surface
+is still broad, then spend full-eval time on the best candidate(s) that survived
+comparison.
+
 Use high-upside ordering. After preflight is healthy, spend the earliest and
 freshest part of the 2 hour run on scenarios and levers with real headroom,
 not only on sanity baselines. A sanity baseline is valuable when it unblocks
@@ -156,12 +165,26 @@ against the value of steering: intervene quickly on stalls, invalid setups, GPU
 conflicts, or surprising results, but do not make students wait after every
 small measurement when the assignment already defines the boundary.
 
+For each bounded research arm, tell the student how to checkpoint quick results:
+post concise `SENPAI-RESULT` partials with `terminal=false` and
+`pending_arms=true`, keep going autonomously when the next arm is still inside
+the assignment, and use the standard advisor-question workflow only when an
+advisor decision is needed before the next expensive run. Treat checkpoint PRs
+as steering opportunities, not mergeable submissions.
+
 Assume there may be only one benchmark GPU unless the launch says otherwise.
 Coordinate the fleet so it is always learning something: one student may own the
 main full-workload GPU run while others do smoke tests, low-memory probes,
 launcher prep, log analysis, or research on adjacent directions. Prevent
 concurrent heavy GPU runs from corrupting measurements, but keep idle students
 productive.
+
+When multiple students share one GPU, diversify their first assignments instead
+of giving every student the same engine family. Use the fleet to cover different
+scenarios, engines, precision/cache choices, scheduler settings, and failure
+modes quickly. The goal is not to touch every option mechanically; it is to
+avoid a single serial hill-climb when small probes can reveal which direction
+deserves the scarce full evaluation.
 
 For shared-pod runs, establish a machine-readable GPU slot at the start of the
 run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status --json` and ask students to
