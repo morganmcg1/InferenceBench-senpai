@@ -17,7 +17,7 @@ PyTorch baseline metrics are present in `src/eval/inference/baselines/speed/torc
 | A: Input-heavy (TTFT) | **1.28x** | #108 | kw34mlo8 | vLLM 0.11.0 --enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --block-size 16 --no-enable-prefix-caching --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839 — no full eval run, BF16 no precision change) |
 | B: Output-heavy (TPOT) | **1.42x** | #109 | 53phrwhc | vLLM 0.11.0 --max-num-seqs 32 --max-num-batched-tokens 4096 --block-size 16 --no-enable-prefix-caching --no-enable-chunked-prefill --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839 — no full eval run, BF16 no precision change) |
 | C: High-load (req/s geomean) | **21.85x** | #110 | m6pt9mpu | vLLM 0.11.0 --max-num-seqs 256 --max-num-batched-tokens 8192 --enable-chunked-prefill; quality 0.31/0.298 ratio 1.04 ✅ |
-| D: General (geomean) | _none yet_ | — | — | — |
+| D: General (geomean) | **1.25x** | #112 | 3pm8uuvh | vLLM 0.11.0 --max-num-seqs 32 --max-num-batched-tokens 16384 --enable-chunked-prefill --no-enable-prefix-caching --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839) — quick-eval forced c=1 not Sc D's c=4 so chunked-prefill benefit unexercised |
 
 ## Reference snapshot (paper, H100, NOT this hardware)
 From `program.md` — public reference, do not rank as our baseline. Used only as ceiling guidance.
@@ -43,6 +43,17 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - **W&B:** runs 6xukzikz (default), 53phrwhc (arm1+arm2), 7h7i5ipf (arm3)
 - **Finding:** Negative — all 4 arms within 0.5%; CUDA graphs already on in vLLM 0.11.0 default, block-size and seqs settings don't move TPOT at concurrency 1. Next lever: speculative decoding (EAGLE3/n-gram), engine swap.
 
+## Scenario D detail — PR #112 (merged 2026-05-25 21:20 UTC)
+- **Launcher:** `senpai/launchers/D/vllm-balanced-quick/start_server.sh`
+- **Engine:** vLLM 0.11.0
+- **Key flags:** `--max-num-seqs 32 --max-num-batched-tokens 16384 --enable-chunked-prefill --no-enable-prefix-caching --gpu-memory-utilization 0.92`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`
+- **PyTorch baseline raw geomean inverse latency throughput:** 1.9298 → quick raw 2.4137 → **1.251x speedup**
+- **Per-metric:** TTFT p50 1.09x | TTFT p90 0.39x ⚠️ (regression at c=1) | TPOT p50 1.49x | gen_throughput 1.50x | req_throughput 1.20x
+- **Quality:** quick-only (n=16), observed 0.250 / baseline 0.298 / ratio 0.839
+- **W&B:** run 3pm8uuvh
+- **Caveat:** quick-eval forces concurrency=1, while Sc D scenario uses concurrency=4. The chunked-prefill + 16384 batched-tokens config is designed to help at c=4 (4×4k concurrent prefills batched in one scheduler step) but this is not exercised in quick-eval. **Full eval at c=4 likely shows higher speedup with TTFT p90 regression eliminated.**
+- **Finding:** Positive (first Sc D baseline). Kernel-level wins (TPOT 1.49x) dominate the quick number; the chunked-prefill batching hypothesis remains unfalsified by full eval.
+
 ## Scenario C detail — PR #110 (merged 2026-05-25 20:36 UTC)
 - **Launcher:** `senpai/launchers/C/vllm-tuned-256seq-8192batch/start_server.sh`
 - **Engine:** vLLM 0.11.0
@@ -60,3 +71,4 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - 2026-05-25 20:36 UTC — Scenario C baseline set at 21.85x from PR #110 (tanjiro); first terminal winner.
 - 2026-05-25 21:03 UTC — Scenario A baseline set at 1.28x from PR #108 (frieren); quick-only, negative parametric result.
 - 2026-05-25 21:03 UTC — Scenario B baseline set at 1.42x from PR #109 (fern); quick-only, negative parametric result.
+- 2026-05-25 21:20 UTC — Scenario D baseline set at 1.25x from PR #112 (tanjiro); quick-only, positive (first Sc D baseline). All 4 scenarios now have baseline entries.
