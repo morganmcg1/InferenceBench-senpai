@@ -1,16 +1,26 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~16:07 UTC (round 1 quick probes all in; frieren is the strong candidate; tanjiro pivoted to vLLM)
+- **Date / time:** 2026-05-25 ~16:23 UTC (round 1 full-eval in flight;
+  frieren's first full-eval attempt was watchdog-killed; advisor re-issued
+  with mitigation pattern)
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
   "/workspace/senpai-${STUDENT_NAME}/target"` and call `senpai/gpu_slot.py`
   from there (NOT `/workspace/senpai/target` or `target/senpai/gpu_slot.py`).
   Future PR instructions must reflect this layout.
-- **Wall-clock budget:** 2 hours, shared across assignment, quick eval,
-  advisor review, full eval, and final review window.
+- **Wall-clock budget:** 2 hours total, started ~15:53 UTC. About **30 min
+  in / 90 min remaining** as of 16:23 UTC. Reserve final ~15 min for advisor
+  review and merge.
 - **Hardware:** 1 RTX PRO 6000 ~96GB GPU shared by 3 students (shakedown,
   not leaderboard-comparable to H100).
+- **Pod-watchdog mismatch (NEW):** the group-1 pod entrypoint kills any
+  student claude session if "Claude log stale for 601s and no train.py
+  process". This already torpedoed frieren's first full-eval attempt at
+  16:18:25 UTC. Advisor instructions now ask each student to (a) emit
+  periodic stdout inside long `gpu_slot run --wait` bash blocks and (b)
+  post a brief PR comment 4-5 min into any long-running eval to reset the
+  watchdog timer.
 
 ## Current research focus
 
@@ -19,11 +29,11 @@ round buys information cheaply by running three diverse quick probes across
 three different scenarios and two different engine families (vLLM and SGLang)
 before committing the scarce full-eval slot.
 
-| Student  | PR  | Scenario | Engine | Status @ 16:07 UTC | Hypothesis |
+| Student  | PR  | Scenario | Engine | Status @ 16:23 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram speculative); partial, no W&B; sent back to wip for full eval + W&B log + terminal marker | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
-| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x). Redirect in flight: bank arm-2 full eval, then FP8 weight-quant arm 3 | Long-prefill launcher; arm 3 redirect = `--quantization fp8` weight quant |
-| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import (sgl-kernel 0.3.4 vs sglang 0.5.12 version skew). Advisor pivoted to **tuned vLLM Scenario D launcher** with chunked prefill on + max-num-seqs 32 | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
+| frieren  | 104 | B (output-heavy) | vLLM   | arm 1 quick 1.43x, **arm 2 quick 2.89x** (ngram); first full-eval attempt watchdog-killed at 16:18:25 (no terminal posted, GPU dropped to 0); advisor re-issued retry with watchdog-mitigation pattern at 16:23 UTC | CUDA-graph decode launcher; arm 2 = n-gram speculative decoding (n=3, prompt_lookup_max=5) |
+| fern     | 105 | A (input-heavy)  | vLLM   | arm 1+2 quick neutral (1.27x, 1.28x). Student re-assigned PR at 16:18:25 after watchdog churn; advisor reposted FP8 redirect + watchdog warning at 16:23 UTC. Pending: bank arm-2 full eval, then FP8 weight-quant arm 3 | Long-prefill launcher; arm 3 redirect = `--quantization fp8` weight quant |
+| tanjiro  | 106 | D (general)      | vLLM (was SGLang) | SGLang failed to import; vLLM **defaults** quick = 1.241x (NOT the tuned recipe). Advisor reposted tuned-launcher reminder + watchdog warning at 16:23 UTC. Tuned recipe (chunked prefill ON, max-num-seqs 32, batched-tokens 8192) still pending | Tuned vLLM Scenario D with chunked prefill, prefix caching, 8k batched tokens |
 
 ### Live quick-probe partial results
 
@@ -34,13 +44,29 @@ before committing the scarce full-eval slot.
 | 104 | arm1 (CUDA graphs + no chunked prefill) | 1.43x Sc. B | _none — not logged_ | Real but modest. ITL/TPOT gap suggested non-steady-state overhead. |
 | 104 | arm2 (arm1 + n-gram speculative n=3, lookup=5) | **2.89x Sc. B** | _none — not logged_ | **Strongest result so far on this advisor branch.** TPOT 0.0087s vs PyTorch 0.0252s. Quality on quick-mode (16-sample) passes. Needs full eval + W&B log for terminal confirmation. |
 
-### Operational note (resolved)
+### Operational notes
 
-The earlier "GPU pinned at ~93GB looks like orphan" hypothesis was **wrong** —
-that VRAM was frieren's arm 2 vLLM server actively running. The slot ownership
-and gpu_slot wrapper were working correctly. Keeping the orphan-detection
-cleanup note on PR #104 and PR #106 as defensive guidance, but no actual
-orphan was present.
+1. **Earlier "orphan GPU" hypothesis was wrong (resolved).** The 93GB VRAM
+   at ~15:55 UTC was frieren's arm 2 vLLM server actively running. Slot
+   ownership and gpu_slot wrapper were working correctly. The defensive
+   orphan-detection comment is still on PR #104 and PR #106 but no orphan
+   was present.
+
+2. **Pod-watchdog mismatch (active, NEW).** The group-1 pod entrypoint
+   kills student claude sessions if "Claude log stale for 601s and no
+   train.py process". This expects training workloads; serving evals look
+   idle to it. Frieren's first full-eval was killed at 16:18:25 UTC, the
+   GPU was wiped to 0 MiB, and the eval result was lost. Advisor mitigation
+   pattern (now in all 3 PRs):
+
+   - Inside long `gpu_slot.py run --wait` bash blocks, emit periodic
+     `echo "$(date -u) <progress>"` lines so claude's stdout keeps flowing.
+   - Post a brief `STUDENT <name>: full-eval in progress` PR comment 4-5
+     min into any long evaluator run — any `gh pr comment` tool call is
+     enough to reset the watchdog timer.
+
+   This is a process-level coping mechanism, not a real fix; for future
+   pods the entrypoint watchdog would need a serving-aware heuristic.
 
 Scenario C is intentionally not in the first round — the public reference
 shows default vLLM already at 48.69x, close to the tuned ceiling, so it has
