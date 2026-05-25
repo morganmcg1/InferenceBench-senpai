@@ -34,7 +34,7 @@ ratio threshold τ=0.95 → minimum candidate accuracy ≈ 0.283.
 
 | Scenario | Current best speedup vs PyTorch | Launcher | PR | W&B run | Notes |
 |---|---:|---|---|---|---|
-| A (TTFT prefill) | _none yet_ | _pending_ | _pending_ | _pending_ | Awaiting first frieren run. |
+| A (TTFT prefill) | **1.2433x** | `senpai/launchers/A/vllm-prefill-tune/start_server.sh` | #100 (merged) | `x6t65ria` | TTFT.p50=0.3527s, quality PASS (ratio 1.00), 128/128. RTX PRO 6000 shakedown. VRAM peak 90.2GiB — reduce `--gpu-memory-utilization` to ~0.75 for H100 portability. |
 | B (TPOT decode) | _none yet_ | _pending_ | _pending_ | _pending_ | |
 | C (throughput)  | _none yet_ | _pending_ | _pending_ | _pending_ | vLLM defaults are very strong here per public table. |
 | D (general)     | _none yet_ | _pending_ | _pending_ | _pending_ | |
@@ -44,13 +44,30 @@ the W&B full-eval run is tied to this advisor branch, quality passes, failure
 rate is low, the launcher relaunches cleanly, and the exact launcher contents
 are recorded on this branch.
 
+### Scenario A detail — current best
+
+- **PR #100** merged 2026-05-25
+- **Launcher:** vLLM + `VLLM_ATTENTION_BACKEND=FLASH_ATTN` + `--enable-chunked-prefill`
+  + `--max-num-batched-tokens 16384` + `--max-num-seqs 16` + `--block-size 16`
+  + `--max-model-len 10240` + `--gpu-memory-utilization 0.90` + CUDA graphs ON
+  + BF16 KV + no prefix caching + `--seed 248`
+- **TTFT.p50:** 0.3527s (PyTorch: 0.4385s) → **1.2433x speedup**
+- **TPOT.p50:** 0.0172s (PyTorch: 0.0258s) — 1.50x bonus
+- **Quality:** MMLU-Pro 0.298/0.298, ratio 1.000, PASS (τ=0.95)
+- **Requests:** 128/128 success, 0 failures, 0 empty
+- **VRAM peak:** 90.2GiB on RTX PRO 6000
+
+**Key findings from PR #100:**
+- Chunked vs monolithic prefill tied at concurrency 1 (1.272x vs 1.271x quick) — no interleaving, so scheduler choice is neutral at this workload
+- Headroom to gain: FlashInfer/Triton attention kernels (currently disabled for RTX PRO 6000 stability), FP8 KV cache (FlashAttn rejected it — needs different backend)
+
 ## Quick-Probe / Partial Evidence (not merge-eligible)
 
-_None yet._
+_None._
 
 ## Failed Launches / Closed Dead Ends
 
-_None yet._
+_None._
 
 ## Public Reference Snapshot (H100 80GB, 2026-05-21)
 
@@ -65,5 +82,7 @@ For orientation only. Not directly comparable to RTX PRO 6000 shakedown runs.
 
 ## Update History
 
+- 2026-05-25 08:29 — PR #100 merged (frieren): Scenario A vLLM prefill tune.
+  First measured candidate: 1.2433x speedup, quality PASS. Key finding: chunked
+  vs monolithic prefill is neutral at concurrency 1. VRAM 90.2GiB on RTX PRO 6000.
 - 2026-05-25 — Advisor: initialized live baseline ledger after preflight pass.
-  No measured candidates yet.
