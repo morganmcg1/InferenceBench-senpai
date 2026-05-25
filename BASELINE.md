@@ -14,7 +14,7 @@ PyTorch baseline metrics are present in `src/eval/inference/baselines/speed/torc
 ## Current best per scenario (terminal full-eval valid)
 | Scenario | Best speedup_over_pytorch | PR | W&B run | Notes |
 |---|---:|---|---|---|
-| A: Input-heavy (TTFT) | **1.28x** | #108 | kw34mlo8 | vLLM 0.11.0 --enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --block-size 16 --no-enable-prefix-caching --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839 — no full eval run, BF16 no precision change) |
+| A: Input-heavy (TTFT) | **1.92x** | #113 | ikthm99f | vLLM 0.11.0 --quantization fp8 --enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --no-enable-prefix-caching --gpu-mem 0.92, FLASH_ATTN; FP8 weights W8A8 dynamic, 1.92x over PyTorch (+50% over BF16 1.28x); quality quick n=16 ratio 0.839 (same noise floor as BF16 quick — needs n=500 confirm) |
 | B: Output-heavy (TPOT) | **1.42x** | #109 | 53phrwhc | vLLM 0.11.0 --max-num-seqs 32 --max-num-batched-tokens 4096 --block-size 16 --no-enable-prefix-caching --no-enable-chunked-prefill --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839 — no full eval run, BF16 no precision change) |
 | C: High-load (req/s geomean) | **21.85x** | #110 | m6pt9mpu | vLLM 0.11.0 --max-num-seqs 256 --max-num-batched-tokens 8192 --enable-chunked-prefill; quality 0.31/0.298 ratio 1.04 ✅ |
 | D: General (geomean) | **1.25x** | #112 | 3pm8uuvh | vLLM 0.11.0 --max-num-seqs 32 --max-num-batched-tokens 16384 --enable-chunked-prefill --no-enable-prefix-caching --gpu-mem 0.92; quality quick-only (n=16, ratio 0.839) — quick-eval forced c=1 not Sc D's c=4 so chunked-prefill benefit unexercised |
@@ -25,14 +25,24 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - vLLM default (no agent): A 1.25x | B 2.25x | C 48.69x | D 1.96x
 - SGLang default (no agent): A 1.22x | B 1.77x | C 51.12x | D 2.14x
 
-## Scenario A detail — PR #108 (merged 2026-05-25 21:03 UTC)
+## Scenario A detail — PR #113 (merged 2026-05-25 21:24 UTC) ⭐ FP8 winner
+- **Launcher:** `senpai/launchers/scenarioA/fp8-weights-quick/start_server.sh`
+- **Engine:** vLLM 0.11.0
+- **Key flags:** `--quantization fp8 --enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --no-enable-prefix-caching --gpu-memory-utilization 0.92`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`, KV-cache-dtype auto (BF16)
+- **PyTorch baseline raw:** 1/ttft.p50 = 2.280 → FP8 raw 4.380 → **1.921x speedup**
+- **Quality:** quick-only (n=16), observed 0.250 / baseline 0.298 / ratio 0.839 — same noise floor as BF16 quick (both hit 4/16); full n=500 needed to call true FP8 quality impact
+- **W&B:** run ikthm99f
+- **VRAM peak:** 90.4 GB / 95 GB
+- **Finding:** **Positive winner.** FP8 boots cleanly on SM120 Blackwell (no missing-kernel issue). Cuts prefill GEMM cost roughly in half — confirms PR #108's diagnosis that Sc A at concurrency 1 was matmul-bound, not scheduler-bound. Next lever: full n=500 quality eval; FP8 W8A8 vs int8_w8a8/awq_marlin comparison; stack FP8 with speculative decoding for decode tail.
+
+## Scenario A detail — PR #108 (merged 2026-05-25 21:03 UTC, superseded by #113)
 - **Launcher:** `senpai/launchers/A/scA-vllm-chunked-prefill-16k/start_server.sh`
 - **Engine:** vLLM 0.11.0
 - **Key flags:** `--enable-chunked-prefill --max-num-batched-tokens 16384 --max-num-seqs 32 --block-size 16 --no-enable-prefix-caching --gpu-memory-utilization 0.92`, `VLLM_ATTENTION_BACKEND=FLASH_ATTN`
 - **PyTorch baseline raw:** 1/ttft.p50 = 2.280 → Arm 1 raw 2.918 → **1.280x speedup**
 - **Quality:** quick-only (n=16), observed 0.250 / baseline 0.298 / ratio 0.839 — no full eval; BF16 throughout, no precision change
 - **W&B:** runs y65m9q4h (arm0), kw34mlo8 (arm1 terminal), 9jq9360t (arm2)
-- **Finding:** Negative — all 3 arms within 0.4%; concurrency-1 single-request prefill is matmul-bound, not scheduler-bound. Next lever: weight quantization (AWQ/FP8) or speculative decoding.
+- **Finding:** Negative — all 3 arms within 0.4%; concurrency-1 single-request prefill is matmul-bound, not scheduler-bound. **Diagnosis confirmed by PR #113.**
 
 ## Scenario B detail — PR #109 (merged 2026-05-25 21:03 UTC)
 - **Launcher:** `senpai/launchers/B/arm1-block16/start_server.sh`
@@ -72,3 +82,4 @@ From `program.md` — public reference, do not rank as our baseline. Used only a
 - 2026-05-25 21:03 UTC — Scenario A baseline set at 1.28x from PR #108 (frieren); quick-only, negative parametric result.
 - 2026-05-25 21:03 UTC — Scenario B baseline set at 1.42x from PR #109 (fern); quick-only, negative parametric result.
 - 2026-05-25 21:20 UTC — Scenario D baseline set at 1.25x from PR #112 (tanjiro); quick-only, positive (first Sc D baseline). All 4 scenarios now have baseline entries.
+- 2026-05-25 21:24 UTC — Scenario A baseline raised to 1.92x from PR #113 (frieren); FP8 weights W8A8 dynamic — first non-parametric winner, +50% over BF16 baseline.
