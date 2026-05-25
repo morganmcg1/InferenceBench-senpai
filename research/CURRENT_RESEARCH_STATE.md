@@ -1,81 +1,68 @@
 # SENPAI Research State
 
-- **Date/time:** 2026-05-25 (start of ib-20260525-one3-r1 session)
+- **Date/time:** 2026-05-25 ~08:30 UTC (in-session update)
 - **Research tag:** ib-20260525-one3-r1
-- **Hardware:** 1× RTX PRO 6000 Blackwell ~96GB VRAM (shakedown; leaderboard claims need H100)
-- **Time budget:** 2 hours total from start gate
+- **Hardware:** 1x RTX PRO 6000 Blackwell ~96GB VRAM (shakedown; leaderboard claims need H100)
+- **Time budget:** ~55 min remaining (budget runs to ~09:29 UTC)
 
 ## Most recent research direction from human researcher team
 
-No human-team directives received yet in this session. Proceeding per advisor
-prompt contract.
+No human-team directives received this session.
 
 ## Current research focus and themes
 
-**First PR in flight:** Scenario A prefill tuning (PR #100, student: frieren)
+**Active PR:** #101 (frieren, Scenario B n-gram speculative decoding)
 
-The opening play is to establish a clean vLLM-on-RTX-PRO-6000 baseline for
-Scenario A (long-context input-heavy, 8K/1K, concurrency 1, burst TTFT.p50)
-and immediately discover which prefill knobs move the needle. This is a fast
-evaluating scenario (~12 min full eval) that gives us early evidence about how
-aggressive our optimization budget should be.
+PR #100 (Scenario A) merged with **1.2433x speedup** (TTFT.p50 0.3527s vs PyTorch
+0.4385s). Key finding: chunked vs monolithic prefill neutral at concurrency 1
+-- no decode to interleave with. Baseline established for Scenario A.
 
-### Themes in flight
+Now pushing into Scenario B: the highest-headroom scenario (public HPO 15.23x
+vs vLLM default 2.25x). N-gram speculative decoding is the primary lever:
+concurrency 1 with 8K output is the textbook best case for batch-1 spec dec.
+Single arm, no sweep -- time is critical.
 
-1. **Prefill throughput (Scenario A):** max_num_batched_tokens, chunked prefill
-   vs. monolithic, CUDA graph, memory utilization. These are the first-order
-   levers for single-stream 8K-token prefill latency on vLLM.
+### Active experiments
 
-2. **Engine health check:** First run also validates the stack — runtime_env.sh,
-   FlashAttention backend (FlashInfer explicitly off per shakedown hardware),
-   gpu_slot.py coordination, W&B logging pipeline, clean relaunch — before we
-   push toward harder experiments.
+| PR | Scenario | Student | Hypothesis | Status |
+|---|---|---|---|---|
+| #101 | B (TPOT) | frieren | vLLM n-gram spec dec (5 tokens, FlashAttn) | WIP |
 
-## Potential next research directions and themes
+### Completed / merged
 
-Listed roughly by expected value given one GPU and ~90 min remaining after PR
-#100 lands:
+| PR | Scenario | Speedup | Key finding |
+|---|---|---|---|
+| #100 | A (TTFT) | **1.2433x** | Chunked vs monolithic neutral at conc 1; FlashAttn is main gain |
 
-### Short-term (next 1–2 PRs)
+## Potential next research directions
 
-- **Scenario B decode tuning** — TPOT.p50 at concurrency 1 with 8K output
-  tokens. Biggest absolute headroom (default 2.25x, HPO 15.23x). Key lever:
-  n-gram speculative decoding (`--speculative-config '{"method":"ngram",...}'`)
-  because concurrency=1 decode is the ideal spec-dec setting. Also FP8 weight
-  quantization to reduce memory and CUDA graph warmup.
-- **Scenario A follow-up: Triton backend** — ablate `TRITON_ATTN` vs
-  `FLASH_ATTN` on the winning Scenario A launcher to characterize attention
-  backend on this specific Blackwell GPU.
+### Within this session (time permitting after PR #101)
 
-### Medium-term
+- **Scenario B follow-up:** if PR #101 n-gram acceptance rate is low (<0.2),
+  try a fresh arm with num_speculative_tokens=3 or fall back to pure
+  FlashAttn baseline for B.
+- **Scenario A Triton kernel ablation:** replace FLASH_ATTN with TRITON_ATTN
+  on the PR #100 launcher -- measures whether Blackwell GPU architecture prefers
+  the Triton kernel for prefill.
 
-- **Scenario D balanced** — 4K/2K, concurrency 4, burst. The knobs that help A
-  (prefill tuning) and B (decode, spec-dec) partially stack here. Worth a PR
-  once we have A and B winners to reference.
-- **FP8 weight quantization** — bitsandbytes or vLLM native FP8 weights to
-  reduce memory pressure and increase batch capacity. Must clear quality gate.
-- **SGLang for Scenario C** — vLLM defaults already dominate C (throughput)
-  per the public reference (48.69x vs HPO 46.70x). SGLang has strong RadixAttention
-  for prefix-cached workloads; check whether it beats vLLM default here when
-  the workload has no natural shared prefix.
+### Post-session or H100 follow-ups
 
-### Exploratory (if time allows)
-
-- **TensorRT-LLM** — Potentially strong for Scenario A/B if the environment
-  has a pre-compiled engine. Risky on time given compilation overhead.
-- **Speculative decoding with target-as-draft** — Mistral 7B + n-gram prompts
-  lookup for Scenario B long decode sequences.
-- **Custom OpenAI-compatible server** — e.g. a minimal server that bypasses
-  vLLM's tokenizer_mode overhead for scenarios where input token length is the
-  hot path. Very exploratory.
+- **FP8 weight quantization:** need quality gate validation. Could give 1.5-2x
+  TPOT gain if MMLU-Pro passes.
+- **Scenario D (balanced, conc 4):** port the A+B winner config. Chunked prefill
+  will matter here (concurrent decode exists at conc 4). Likely 3-5x achievable.
+- **SGLang for Scenario C:** vLLM default already dominates C; SGLang RadixAttention
+  is a long-shot worth one quick probe on H100.
+- **H100 confirmation:** repeat PR #100 and PR #101 winners on H100 to convert
+  shakedown numbers into leaderboard-comparable results.
 
 ## Key invariants to preserve
 
-- All results must use the pre-staged scoring assets from PVC:
-  `--import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248`
-- Every terminal result needs a full `evaluate.py --json-output-file` run, a
-  W&B log under `wandb-applied-ai-team/inferencebench-senpai`, and a clean
-  relaunch confirm.
+- All results must use pre-staged scoring assets:
+  senpai/require_scoring_preflight.sh --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248
+- Every terminal result needs full evaluate.py run, W&B log, and clean relaunch.
 - RTX PRO 6000 shakedown: no FlashInfer unless explicitly tested; no FP8 KV
-  cache unless a boot-to-quality run proves it works on this hardware.
-- `BASELINE.md` is advisor-owned and updated only from verified terminal runs.
+  cache unless proven on this hardware.
+- BASELINE.md is advisor-owned and updated only from verified terminal runs.
+- VRAM ceiling: PR #100 VRAM = 90.2GiB at 0.90 util. Any H100 80GB target
+  needs --gpu-memory-utilization <= 0.75.
