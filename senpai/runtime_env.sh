@@ -36,6 +36,10 @@ nvidia_libs="$(printf '%s\n' "$pythonpath_entries" | sed -n '2p')"
 
 if [ -n "$nvidia_includes" ]; then
   export CPATH="${nvidia_includes}${CPATH:+:${CPATH}}"
+  export C_INCLUDE_PATH="${nvidia_includes}${C_INCLUDE_PATH:+:${C_INCLUDE_PATH}}"
+  export CPLUS_INCLUDE_PATH="${nvidia_includes}${CPLUS_INCLUDE_PATH:+:${CPLUS_INCLUDE_PATH}}"
+  nvcc_include_flags="$(printf '%s' "$nvidia_includes" | tr ':' '\n' | sed 's#^#-I#' | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+  export NVCC_PREPEND_FLAGS="${nvcc_include_flags}${NVCC_PREPEND_FLAGS:+ ${NVCC_PREPEND_FLAGS}}"
 fi
 
 if [ -n "$nvidia_libs" ]; then
