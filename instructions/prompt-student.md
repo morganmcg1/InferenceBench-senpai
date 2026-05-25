@@ -62,6 +62,13 @@ terminal summary when the arm budget, stop rule, or time budget is exhausted.
 Do not ask the advisor to approve each quick-eval arm unless the next step
 would leave the assigned search surface.
 
+Do not default to vLLM-only. Treat vLLM, SGLang, TGI, TensorRT-LLM, and custom
+OpenAI-compatible servers as live candidates. Pick the engine family that best
+matches the scenario and current evidence, and use quick launch probes to decide
+whether non-vLLM paths deserve full evaluator time. These engines are examples,
+not a whitelist; any creative serving approach is valid if it preserves the base
+model, OpenAI-compatible API, quality gate, metric semantics, and clean relaunch.
+
 Respect the advisor's GPU coordination strategy. If another student is handling
 the main heavy GPU workload, keep making progress through smoke tests,
 low-memory probes, launcher prep, log analysis, or research that can inform the

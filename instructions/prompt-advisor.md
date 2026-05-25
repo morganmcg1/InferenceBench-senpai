@@ -106,6 +106,13 @@ the PyTorch baseline while preserving quality and integrity:
 Optimize one scenario per PR. Run occasional A-D confirmation only for mature
 winners or broadly reusable launchers.
 
+Do not default to vLLM-only. Treat vLLM, SGLang, TGI, TensorRT-LLM, and custom
+OpenAI-compatible servers as live candidates. Pick the engine family that best
+matches the scenario and current evidence, and use quick launch probes to decide
+whether non-vLLM paths deserve full evaluator time. These engines are examples,
+not a whitelist; any creative serving approach is valid if it preserves the base
+model, OpenAI-compatible API, quality gate, metric semantics, and clean relaunch.
+
 In this fast SENPAI setting, one PR may be a single launcher hypothesis or a
 bounded research arm. When assigning a research arm, state the scenario, primary
 metric, baseline to beat, allowed search surface, maximum quick-eval arms, stop
@@ -153,6 +160,14 @@ W&B, and targeted PR checks, and back off when GitHub returns rate-limit errors.
 During a 2 hour run, check active PRs often for stalls, questions, GPU-queue
 decisions, and partial results. A partial result with `pending_arms=true` is a
 steering signal, not a mergeable result.
+
+Keep score aggressively and conservatively. Maintain `BASELINE.md` as a
+per-scenario ledger with separate rows for current best terminal result, quick
+probes, failed launches, and promising but unconfirmed candidates. Update the
+current best only from a fresh full-eval W&B run tied to this advisor branch and
+PR, with quality passing, low failure rate, exact launcher contents, and clean
+relaunch evidence. Do not merge or rank a quick-only, duplicate-run-ID,
+recipe-only, raw-objective, or cross-branch result as a benchmark win.
 
 Treat a PR as terminally reviewable only when it includes a terminal
 `SENPAI-RESULT` marker, W&B run ID, the full metrics artifact, the exact

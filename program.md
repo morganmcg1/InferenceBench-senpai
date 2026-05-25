@@ -172,6 +172,32 @@ The base model must remain the assigned `INFERENCE_BENCH_BASE_MODEL`. A
 different model repo, smaller substitute, external API, response cache, or
 pre-generated output invalidates the run.
 
+## Hardware-Specific Runtime Learnings
+
+Keep this section narrow. Hardware-specific means a candidate may behave
+differently because the active GPU architecture, VRAM size, or compiled kernel
+support differs. Missing scoring assets, W&B setup, tokenizer downloads, CUDA
+header/package mismatches, and broken Python imports are infrastructure problems,
+not serving ideas and not hardware wins or losses.
+
+Current RTX PRO 6000 shakedown runs are useful for research direction but are
+not leaderboard-comparable to the paper's H100 80GB setting. In particular:
+
+- The RTX PRO 6000 shakedown GPU has about 96GB VRAM, while the leaderboard
+  setting is one H100 80GB. A launcher that only wins because it uses memory
+  headroom above the H100 budget must be treated as shakedown-only until an H100
+  run confirms it.
+- Do not assume H100, B200, or generic Blackwell FP8/kernel guidance transfers
+  unchanged to the current RTX PRO 6000 pod. Backend choice, kernel availability,
+  and vLLM build support must be proved by a clean server boot, quality pass, and
+  full evaluator run on the active hardware.
+- vLLM's FlashAttention backend rejecting FP8 KV cache is not a pure RTX PRO
+  6000 incompatibility. Treat `VLLM_ATTENTION_BACKEND=FLASH_ATTN` plus
+  `--kv-cache-dtype fp8` as a backend/version constraint unless a run explicitly
+  proves otherwise. For this shakedown hardware, prefer BF16 KV with
+  FlashAttention, or test FP8 KV only through a backend that actually boots,
+  preserves quality, and improves the target metric.
+
 ## Launch Preflight And Scoring Assets
 
 Before assigning serving experiments in a paper-grade run, the advisor should
@@ -385,6 +411,12 @@ This target gives agents broad freedom over framework, optimization, and
 parameter choices. SENPAI adds coordination: the advisor manages scarce time and
 GPU access, students run bounded research arms or single hypotheses, and every
 decision is measured through the official evaluator.
+
+Do not collapse the portfolio to vLLM by habit. Explore vLLM, SGLang, TGI,
+TensorRT-LLM, and custom OpenAI-compatible servers as live candidates whenever
+the time budget and scenario make that plausible. The point is not to touch every
+engine mechanically; it is to choose the engine and launcher family most likely
+to beat the current baseline under the official evaluator.
 
 Do not overfit to this document's example levers. Choose strategies based on the
 active scenario, current live baseline, measured failures, remaining wall-clock
