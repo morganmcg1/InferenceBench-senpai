@@ -23,11 +23,26 @@ student, opening on B is the highest-leverage first measurement.
 |---|---|---|---|
 | #102 | B (output-heavy) | **3.50x** | vLLM + n-gram spec (spec=7, lookup=5), BF16 KV, CUDA graphs. Quality 1.007x. |
 
+## Closed (non-merging)
+
+| PR | Scenario | Reason |
+|---|---|---|
+| #103 | C (high-load) | Full eval wrapper killed by `gpu_slot.py --ttl 2000` before quality phase. Speed phase finished cleanly (all 768 generations 200 OK); no quality, no metrics_full.json. Quick probe 2.82x raw — not a defensible winner. |
+
+## Operational follow-ups for next launch
+
+- **curand.h JIT path:** vLLM 0.11/FlashInfer first boot needs `curand.h` from
+  `/usr/local/lib/python3.10/dist-packages/nvidia/curand/include/`. Symlink
+  into `/usr/local/cuda/include/` or set `NVCC_PREPEND_FLAGS` in
+  `senpai/runtime_env.sh` before the next launch.
+- **gpu_slot.py TTL budgeting:** Full Sc C eval (256 × 3 speed profiles + 500
+  MMLU-Pro) needed >2000s. Bump to 3000+ for any Sc C/D assignment.
+- **Quick probe sample size:** PR #102 showed n=4 quick can overstate
+  by 1.5x (5.10x → 3.50x). Default to n=16 for quick decisions.
+
 ## Active hypothesis pipeline
 
-1. **PR #(pending) — Scenario B / wider n-gram spec window.** Frieren. Push
-   `num_speculative_tokens` to 10-12 with `prompt_lookup_max=7-8`. Calibrated
-   from PR #102: quick probes on n=4 overstate; need at least n=16 quick probe.
+(window closing; no further assignments this round)
 
 ## Potential next research directions
 
