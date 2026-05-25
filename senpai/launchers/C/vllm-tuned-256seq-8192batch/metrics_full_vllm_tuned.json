@@ -1,0 +1,132 @@
+{
+  "scenario": "C",
+  "name": "High load",
+  "mission": "Handle maximum concurrent users without errors. Optimize total throughput under burst, poisson, and constant load.",
+  "dataset": null,
+  "dataset_split": null,
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "profiles": {
+    "burst": {
+      "request_count": 256,
+      "success_count": 256,
+      "failure_count": 0,
+      "empty_output_count": 0,
+      "failure_rate": 0.0,
+      "ttft": {
+        "p50": 0.09088042238727212,
+        "p90": 2.5607392750680447,
+        "p99": 3.3517018252518027
+      },
+      "itl": {
+        "p50": 0.022687921300530434,
+        "p90": 0.024104447662830354,
+        "p99": 0.0651091994345188
+      },
+      "tpot": {
+        "p50": 0.0370257417601937,
+        "p90": 0.05240235612454387,
+        "p99": 0.7530663910693539
+      },
+      "generation_throughput_tokens_per_s": 25.726273851360407,
+      "request_throughput_req_per_s": 2.6794708920866483,
+      "json_valid_rate": null,
+      "choice_accuracy": null
+    },
+    "poisson": {
+      "request_count": 256,
+      "success_count": 256,
+      "failure_count": 0,
+      "empty_output_count": 0,
+      "failure_rate": 0.0,
+      "ttft": {
+        "p50": 0.05447267089039087,
+        "p90": 0.061305681243538857,
+        "p99": 0.09492915011942382
+      },
+      "itl": {
+        "p50": 0.017086364328861237,
+        "p90": 0.017759297229349612,
+        "p99": 0.021965478509664533
+      },
+      "tpot": {
+        "p50": 0.026285253834719143,
+        "p90": 0.03682365171788704,
+        "p99": 0.4197660839707509
+      },
+      "generation_throughput_tokens_per_s": 36.16425595248414,
+      "request_throughput_req_per_s": 1.956875230367243,
+      "json_valid_rate": null,
+      "choice_accuracy": null
+    },
+    "constant": {
+      "request_count": 256,
+      "success_count": 256,
+      "failure_count": 0,
+      "empty_output_count": 0,
+      "failure_rate": 0.0,
+      "ttft": {
+        "p50": 0.04436983121559024,
+        "p90": 0.0455654626712203,
+        "p99": 0.04802795122377573
+      },
+      "itl": {
+        "p50": 0.01397229079157114,
+        "p90": 0.014298727735877037,
+        "p99": 0.016747773438692107
+      },
+      "tpot": {
+        "p50": 0.021480300777227818,
+        "p90": 0.03011258161106213,
+        "p99": 0.422697238259373
+      },
+      "generation_throughput_tokens_per_s": 44.41383857907526,
+      "request_throughput_req_per_s": 1.2091773675931397,
+      "json_valid_rate": null,
+      "choice_accuracy": null
+    }
+  },
+  "vram_peak_mb": 89101.0,
+  "speed_eval": {
+    "requests_source": "/tmp/ib-scenario-c/inference_eval/baselines/speed/torch/inference_scenario_c_high_load/mistralai_Mistral-7B-Instruct-v0.3/requests.jsonl",
+    "requests_used_file": "requests_used_speed.jsonl",
+    "generation_log_file": "speed_generations.jsonl"
+  },
+  "quality_check": {
+    "tau": 0.95,
+    "pass": true,
+    "datasets": {
+      "mmlu_pro": {
+        "observed_accuracy": 0.31,
+        "baseline_accuracy": 0.298,
+        "ratio": 1.0402684563758389,
+        "tau": 0.95,
+        "pass": true,
+        "n": 500,
+        "note": "",
+        "baseline_ref": {
+          "generated_at_unix": 1779573070,
+          "dataset": "mmlu_pro",
+          "seed": 248,
+          "n": 500,
+          "accuracy": 0.298,
+          "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+          "server_url": "http://127.0.0.1:40801",
+          "baseline_log_file": "src/eval/inference/baselines/quality/torch/mistralai_Mistral-7B-Instruct-v0.3/mmlu_pro/248_500/baseline_generations.jsonl",
+          "baseline_metrics_file": "src/eval/inference/baselines/quality/torch/mistralai_Mistral-7B-Instruct-v0.3/mmlu_pro/248_500/baseline_metrics.json"
+        },
+        "samples_file": "/tmp/ib-scenario-c/inference_eval/baselines/samples/mmlu_pro/248_500/samples.jsonl",
+        "generation_log_file": "quality_mmlu_pro_generations.jsonl",
+        "seed": 248,
+        "evaluated_count": 500
+      }
+    },
+    "baseline_registry": "/tmp/ib-scenario-c/inference_eval/baselines/quality/mistralai_Mistral-7B-Instruct-v0.3_torch.json"
+  },
+  "eval_pipeline": {
+    "version": 1,
+    "steps": [
+      "speed_eval",
+      "quality_check"
+    ]
+  }
+}
