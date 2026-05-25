@@ -275,6 +275,12 @@ The task workspace still uses the official `evaluate.py`, quality gate, request
 files, launcher contract, and supervised relaunch shape. The helper only stages
 those pieces in a predictable pod-local directory.
 
+Use `$PROBLEM_DIR` as the canonical path to the active target checkout in
+commands and PR instructions. In packed multi-student pods, each logical
+student may have a separate checkout such as
+`/workspace/senpai-$STUDENT_NAME/target`; a single hardcoded
+`/workspace/senpai/target` path is not portable.
+
 For RTX PRO 6000 or other shared-pod shakedown runs, source the SENPAI runtime
 environment helper before starting vLLM/SGLang/TGI:
 

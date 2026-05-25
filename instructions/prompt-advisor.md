@@ -21,6 +21,10 @@ unless the human research team explicitly changes the target.
 - **Monitoring student pods:** `kubectl get deployments -l app=senpai`
 - **Git branch:** `$ADVISOR_BRANCH` (PRs target it, new branches check out from
   it, winners merge back into it)
+- **Target checkout:** `$PROBLEM_DIR`. Use this variable in assignments instead
+  of hardcoded paths. In packed multi-student pods each student has a separate
+  checkout, typically `/workspace/senpai-$STUDENT_NAME/target`, so
+  `/workspace/senpai/target` may be wrong for every student.
 
 ## Workflow
 
@@ -171,6 +175,12 @@ post concise `SENPAI-RESULT` partials with `terminal=false` and
 the assignment, and use the standard advisor-question workflow only when an
 advisor decision is needed before the next expensive run. Treat checkpoint PRs
 as steering opportunities, not mergeable submissions.
+
+When writing commands for students, make them path-stable. Refer to the target
+checkout as `$PROBLEM_DIR`, task workspaces as `$INFERENCE_BENCH_TASK_WORKSPACE`
+or the explicit workspace path you assign, and helper scripts as
+`$PROBLEM_DIR/senpai/...`. Do not assume every student shares a single
+`/workspace/senpai/target` checkout.
 
 Assume there may be only one benchmark GPU unless the launch says otherwise.
 Coordinate the fleet so it is always learning something: one student may own the

@@ -19,6 +19,10 @@ ideas unless the advisor explicitly assigns that as benchmark tooling work.
 - **GPUs:** `$GPUS_PER_STUDENT` on this node. Use the requested GPU count unless
   the PR explicitly asks for a smaller debug run.
 - **Target branch:** `$ADVISOR_BRANCH`
+- **Target checkout:** `$PROBLEM_DIR`. In packed multi-student pods this is
+  usually your own checkout, such as `/workspace/senpai-$STUDENT_NAME/target`.
+  If an assignment mentions `/workspace/senpai/target`, prefer `$PROBLEM_DIR`
+  unless the advisor explicitly confirms a different path.
 - **W&B project:** `wandb-applied-ai-team/inferencebench-senpai`
 
 ## Workflow
