@@ -31,14 +31,9 @@ These are the denominators for `speedup_over_pytorch` on this hardware.
 
 ## Current best valid launcher per scenario
 
-No SENPAI launcher has been confirmed on this advisor branch yet. Treat
-default `src/starting_points/vllm_running/start_server.sh` (vLLM defaults,
-`--gpu-memory-utilization 0.90`) as the implicit starting point until a
-clean-relaunch full-eval result lands here.
-
 | Scenario | Best `speedup_over_pytorch` | Engine | Launcher recipe | W&B run | PR |
 | -------- | --------------------------- | ------ | --------------- | ------- | -- |
-| A        | _none yet_                  | _n/a_  | _n/a_           | _n/a_   | _n/a_ |
+| A        | **1.240x** (ttft.p50 0.3537s vs PyTorch 0.4385s, 128/128, MMLU-Pro 1.020 PASS) | vLLM | `senpai/launchers/A/fern-tuned-vllm-prefill-noprefix/start_server.sh` — `--max-model-len 12288 --max-num-batched-tokens 16384 --max-num-seqs 16 --gpu-memory-utilization 0.95 --no-enable-prefix-caching --no-enable-chunked-prefill` | `insngzmf` | #105 |
 | B        | _none yet_                  | _n/a_  | _n/a_           | _n/a_   | _n/a_ |
 | C        | _none yet_                  | _n/a_  | _n/a_           | _n/a_   | _n/a_ |
 | D        | _none yet_                  | _n/a_  | _n/a_           | _n/a_   | _n/a_ |
@@ -63,7 +58,8 @@ proved on this hardware before being used.
 
 ## Update history
 
-- 2026-05-25 — initial advisor-owned BASELINE.md created on launch.
+- 2026-05-25 15:39 UTC — initial BASELINE.md created on launch boot.
+- 2026-05-25 17:03 UTC — **PR #105 merged** (fern, Sc. A). First confirmed Sc. A result on RTX PRO 6000: **1.240x** speedup. Launcher: `senpai/launchers/A/fern-tuned-vllm-prefill-noprefix/start_server.sh`. Full eval 128/128, MMLU-Pro n=500 PASS (0.304 vs 0.298 baseline, ratio 1.020). W&B: `insngzmf`. Notes: arm 2 (no prefix caching) marginally beat arm 1 (1.24x vs 1.27x quick); FP8 arm 3 staged on branch as round-2 candidate.
 
 ## Update rules
 
