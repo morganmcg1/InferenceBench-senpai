@@ -2,6 +2,46 @@
 
 _Log of reviewed PRs. Each entry is added when the PR reaches a terminal SENPAI-RESULT and the advisor has reviewed it. Append-only._
 
+## 2026-05-25 21:38 — PR #116: Scenario C: FP8 weight quantization quick probe (CLOSED, not merged)
+- **Branch:** frieren/scC-fp8-weights-quick
+- **Hypothesis:** Apply FP8 weight quantization to Sc C's PR #110 launcher to compound throughput from VRAM savings (smaller weights → more KV-cache headroom) + prefill GEMM speedup.
+- **Result:** speedup_over_pytorch = 3.67x (quick eval)
+- **Status:** **CLOSED, not merged** — 3.67x is a quick-eval number not comparable to PR #110's full-eval 21.85x. Merging would corrupt baseline. Frieren correctly self-flagged this in his report. Launcher preserved in branch history (`senpai/launchers/scenarioC/fp8-weights-quick/start_server.sh`).
+- **Commentary:** FP8 boots cleanly on Sc C; KV-cache reports 19.88x concurrency at 32k tokens with 79.52 GiB available (huge headroom from freed weight footprint). The structural prediction (FP8 frees KV pool for higher concurrency) holds. **Next round priority: full-eval validation of this launcher to compare to 21.85x baseline; PR #118 (tanjiro Sc C FP8+512seqs) is the queued continuation.**
+
+## 2026-05-25 21:32 — PR #115: Scenario D: FP8 weight quantization quick probe (compounds PR #113 win) ⭐ FP8 winner
+- **Branch:** tanjiro/scD-fp8-weights-quick
+- **Hypothesis:** Apply FP8 weights to Sc D's PR #112 launcher; FP8 should compound for mixed prefill+decode at concurrency 4.
+- **Result:** speedup_over_pytorch = **1.413x** (vs 1.25x BF16 baseline, +13%)
+- **Quality:** quick-only (n=16), ratio 0.839 (same noise floor as BF16 quick)
+- **W&B:** rciu3qok
+- **Commentary:** FP8 helps Sc D's mixed workload — smaller than Sc A (+50%) but bigger than Sc B (+3%). Confirms ordering: prefill-bound > mixed > decode-bound for FP8 weight win. Caveat: quick-eval forces c=1, so chunked-prefill batching at Sc D's actual c=4 remains unexercised.
+
+## 2026-05-25 21:31 — PR #114: Scenario B: FP8 weight quantization quick probe (decode kernel-bound follow-up) ⭐ FP8 winner
+- **Branch:** fern/scB-fp8-weights-quick
+- **Hypothesis:** Apply FP8 weights to fern's PR #109 Arm 1 decode-tight launcher to test if FP8 helps decode-bound workloads.
+- **Result:** speedup_over_pytorch = **1.464x** (vs 1.42x BF16 baseline, +3%)
+- **Quality:** quick-only (n=16), ratio 0.839
+- **W&B:** nbfrqfvy
+- **Commentary:** FP8 provides only +3% for Sc B decode — much smaller than Sc A's +50% (prefill-bound). Confirms that decode at concurrency 1 is memory-bandwidth-limited, not GEMM-limited. **FP8 weights reduce GEMM cost but not memory bandwidth needed to stream weights to decode.** Next lever for Sc B is speculative decoding (PR #117 queued).
+
+## 2026-05-25 21:24 — PR #113: Scenario A: FP8 weight quantization quick probe (matmul-bound follow-up) ⭐ FP8 winner (BIG)
+- **Branch:** frieren/scA-fp8-weights-quick
+- **Hypothesis:** Apply FP8 weights to frieren's PR #108 chunked-prefill launcher to test if FP8 reduces the prefill GEMM cost that the round 1 analysis identified as the bottleneck.
+- **Result:** speedup_over_pytorch = **1.921x** (vs 1.28x BF16 baseline, **+50%**)
+- **Quality:** quick-only (n=16), ratio 0.839 (same noise floor as BF16 quick)
+- **W&B:** ikthm99f
+- **Commentary:** **Strongest win of round 2.** FP8 weights cut the 8k-token prefill GEMM cost roughly in half, exactly as predicted by the round 1 analysis (Sc A is matmul-bound at c=1). FP8 boots cleanly on SM120 Blackwell — no missing kernels, no fallback. The "FP8 weights help most for prefill-bound workloads" hypothesis is now empirically confirmed by the ordering A(+50%) >> D(+13%) >> B(+3%). VRAM peak 90.4 GB. Quality at quick n=16 hits the same 4/16 floor as BF16 — full n=500 eval needed to confirm true FP8 quality impact.
+
+## 2026-05-25 21:20 — PR #112: Scenario D: vLLM balanced quick probe (first Sc D baseline) ⭐ first Sc D baseline
+- **Branch:** tanjiro/scD-vllm-balanced-quick
+- **Hypothesis:** Apply vLLM balanced config (max-num-seqs 32, max-num-batched-tokens 16384, chunked-prefill ON) to Scenario D as the first probe of this scenario; chunked-prefill should help cross-request batching at c=4.
+- **Result:** speedup_over_pytorch = **1.251x** (first Sc D baseline)
+- **Per-metric:** TTFT p50 1.09x | TTFT p90 0.39x (regression at c=1) | TPOT p50 1.49x | gen_throughput 1.50x
+- **Quality:** quick-only (n=16), ratio 0.839
+- **W&B:** 3pm8uuvh
+- **Commentary:** First Sc D baseline established. Important caveat: quick-eval forces concurrency=1, not Sc D's specified concurrency=4, so the chunked-prefill cross-request batching benefit is unexercised. TPOT p50 1.49x and gen_throughput 1.50x are kernel-level wins. TTFT p90 0.39x regression likely disappears at proper c=4. **Suggested follow-up: full eval at c=4 likely shows substantially higher speedup.**
+
 ## 2026-05-25 21:03 — PR #108: Scenario A: vLLM prefill sweep (chunked-prefill ON vs OFF, big batch budget)
 - **Branch:** frieren/scA-vllm-prefill-sweep
 - **Hypothesis:** Scenario A (TTFT, input-heavy) benefits from chunked-prefill ON + max-num-batched-tokens=16384, which lets vLLM overlap prefill chunks with decode for other requests and saturate DRAM bandwidth.
