@@ -41,6 +41,10 @@ other advisor branches are not.
 Time is critical. Treat the 2 hour InferenceBench budget as the whole research
 program, including assignment, quick evaluation, advisor review, final
 validation, and cleanup. Keep decisions small, measured, and clock-aware.
+Preserve a hard review window: do not start or approve new full evaluations
+when there is not enough wall time left for the run to finish, the student to
+post artifacts, and you to review, merge, and update `BASELINE.md`. As a
+default, reserve the final 10-15 minutes for review and scorekeeping only.
 For Kubernetes launches, ensure the human/operator has armed
 `senpai/arm_cluster_cutoff.sh` or an equivalent cutoff job before the run
 starts; do not rely on a delete-only cleanup job that loses Claude Code
@@ -73,6 +77,10 @@ Survey the current state:
   research tag/group.
 - Read `$PROBLEM_DIR/program.md`, especially the scenario metrics, integrity
   rules, and 2026-05-21 reference snapshot.
+- Skim `$PROBLEM_DIR/senpai/research/auto_gpu_kernel_competition_lessons.md`
+  for the measured-search loop: inspect the workload, run cheap probes, log
+  failures, compare small deltas carefully, and full-evaluate only candidates
+  that earned it.
 - Inspect `src/baselines/search_spaces/*.yaml` and
   `src/eval/inference/hpo_search_baselines.py` for known useful search levers.
 - Assign work to every idle student.
@@ -117,6 +125,22 @@ In this fast SENPAI setting, one PR may be a single launcher hypothesis or a
 bounded research arm. When assigning a research arm, state the scenario, primary
 metric, baseline to beat, allowed search surface, maximum quick-eval arms, stop
 rule, W&B group, GPU-queue expectations, and final full-eval requirement.
+Also state the quick-to-full promotion rule: quick evaluation must return
+control to the student, be summarized or logged, and be compared against the
+baseline before a full evaluation starts. Do not assign chained commands that
+run quick and full evaluation back-to-back unless the PR is already in final
+confirmation mode and no advisor decision is needed between them.
+
+Use high-upside ordering. After preflight is healthy, spend the earliest and
+freshest part of the 2 hour run on scenarios and levers with real headroom,
+not only on sanity baselines. A sanity baseline is valuable when it unblocks
+measurement, but it should not consume the best part of the run if a
+scenario-aligned serving idea is ready.
+
+Every assignment should include a tiny decision tree: what to do if the quick
+probe wins clearly, what to do if it is neutral, what to do if it fails to boot
+or fails quality, and which next arm is most likely. This keeps the student
+moving without another advisor round trip.
 
 It is fine to prescribe an exact strategy when you have a strong view. It is
 also fine to give a student bounded autonomy for several quick arms when advisor
@@ -160,6 +184,10 @@ W&B, and targeted PR checks, and back off when GitHub returns rate-limit errors.
 During a 2 hour run, check active PRs often for stalls, questions, GPU-queue
 decisions, and partial results. A partial result with `pending_arms=true` is a
 steering signal, not a mergeable result.
+If a student has a long-running full evaluation in progress, check whether a
+quick result has already been committed, commented, or logged. If not, push the
+student to stop treating the full result as the first observable artifact. A
+quick result plus clear caveats is the research heartbeat for long evaluations.
 
 Keep score aggressively and conservatively. Maintain `BASELINE.md` as a
 per-scenario ledger with separate rows for current best terminal result, quick
@@ -183,6 +211,11 @@ leaderboard results.
 Merge small clean improvements. Send promising non-winners back with a specific
 next variant. Close dead ends when they are clearly worse, fail to launch, fail
 quality, or violate the benchmark contract.
+
+Do not rely on faster GitHub polling to save end-of-run submissions. If a
+student posts a terminal result inside the final minute, there may be no time to
+merge it safely. Shape the run so terminal results arrive before the review
+window starts.
 
 ## Protected Boundaries
 

@@ -37,6 +37,13 @@ window, including implementation, smoke tests, W&B logging, final full
 evaluation, clean relaunch, and reporting. Move quickly, keep notes concise, and
 reserve time for validation.
 
+Use a measured iteration loop. Inspect the workload and assignment, implement
+one candidate, run a quick probe, regain control, summarize or log the quick
+result, then decide whether the candidate deserves a full evaluation. Do not
+hide a useful quick result behind a long blocking full evaluation. Unless the
+advisor explicitly says this is final confirmation, quick and full evaluation
+should be separate supervised launches.
+
 The normal experiment surface is:
 
 ```text
@@ -61,6 +68,10 @@ discard invalid or crashing arms, keep W&B logging complete, and submit one
 terminal summary when the arm budget, stop rule, or time budget is exhausted.
 Do not ask the advisor to approve each quick-eval arm unless the next step
 would leave the assigned search surface.
+When a quick probe finishes, commit or preserve the launcher and quick metrics,
+then post a concise partial result if the full evaluation will take more than a
+few minutes or the run is within 30 minutes of cutoff. Use
+`terminal=false,pending_arms=true` for partial `SENPAI-RESULT` comments.
 
 Do not default to vLLM-only. Treat vLLM, SGLang, TGI, TensorRT-LLM, and custom
 OpenAI-compatible servers as live candidates. Pick the engine family that best
@@ -87,6 +98,8 @@ compute processes already exist, and terminates the command process group if the
 lease is lost. Do not launch a second wrapper for the same PR while the first is
 running, and do not background or disown a server outside the wrapper.
 
+Default to a quick-only wrapper first:
+
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
   --wait --ttl-s 1800 \
@@ -105,6 +118,31 @@ python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
       sleep 2
     done
     python evaluate.py --quick --json-output-file metrics_quick.json
+  '
+```
+
+After the quick result is clearly worth confirming and enough review time
+remains, run the full evaluation in a second wrapper. This gives you a clean
+relaunch confirmation and gives the advisor a chance to steer before expensive
+work:
+
+```bash
+python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
+  --wait --ttl-s 3600 \
+  --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
+  bash -lc '
+    set -euo pipefail
+    source "$PROBLEM_DIR/senpai/runtime_env.sh"
+    source ./eval_env.sh
+    ./clean_eval_artifacts.sh
+    ./test_server.sh > agent/server.log 2>&1 &
+    server_pid=$!
+    trap "kill -- -$server_pid 2>/dev/null || kill $server_pid 2>/dev/null || true" EXIT
+    for i in $(seq 1 240); do
+      curl -sf http://127.0.0.1:8000/v1/models >/dev/null && break
+      kill -0 "$server_pid" 2>/dev/null || { tail -120 agent/server.log; exit 11; }
+      sleep 2
+    done
     python evaluate.py --json-output-file metrics_full.json
   '
 ```
@@ -175,15 +213,33 @@ request file, and quality registry defaults so accidental `unknown_model`
 quality baselines do not become terminal results.
 
 Inside an InferenceBench task workspace, use the benchmark-provided launcher and
-evaluator flow:
+evaluator flow. Keep quick and full evaluation separate by default:
 
 ```bash
 source "$PROBLEM_DIR/senpai/runtime_env.sh"
 source ./eval_env.sh
 ./clean_eval_artifacts.sh
 ./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
 python evaluate.py --quick --json-output-file metrics_quick.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
+```
+
+If the quick result is worth confirming and there is enough time left for
+advisor review, relaunch cleanly for the full result:
+
+```bash
+source "$PROBLEM_DIR/senpai/runtime_env.sh"
+source ./eval_env.sh
+./clean_eval_artifacts.sh
+./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
 python evaluate.py --json-output-file metrics_full.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
 python "$PROBLEM_DIR/senpai/summarize_metrics.py" metrics_full.json \
   --scenario <A|B|C|D> \
   --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS"
@@ -205,6 +261,9 @@ Quick launch probes may skip quality only when the PR/advisor allows it; final
 terminal results must run quality with the prepared baseline registry.
 Before reporting a winner, confirm that the final `start_server.sh` launches
 cleanly from a fresh shell or supervised `./test_server.sh` run.
+Do not start a full evaluation if it is likely to finish inside the final
+review window with no time for reporting and advisor merge/update work; post the
+quick result as partial evidence instead.
 
 When working from the repository root, keep helper development isolated:
 

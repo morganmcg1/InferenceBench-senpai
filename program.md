@@ -310,14 +310,32 @@ into the active task workspace as `./start_server.sh`. The original benchmark
 task workspace contains `evaluate.py`, `test_server.sh`, `timer.sh`,
 `scenario.json`, and the task-local launcher.
 
-Inside an active InferenceBench task workspace:
+Inside an active InferenceBench task workspace, run a quick probe first and
+return control to the student/advisor loop before spending full-eval time:
 
 ```bash
 source ./eval_env.sh
 ./clean_eval_artifacts.sh
 ./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
 python evaluate.py --quick --json-output-file metrics_quick.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
+```
+
+If the quick result is promising, enough wall time remains, and the advisor's
+promotion rule says to confirm it, run the full evaluation as a clean relaunch:
+
+```bash
+source ./eval_env.sh
+./clean_eval_artifacts.sh
+./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
 python evaluate.py --json-output-file metrics_full.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
 python "$PROBLEM_DIR/senpai/summarize_metrics.py" metrics_full.json \
   --scenario A \
   --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS"
@@ -341,6 +359,9 @@ Quick runs are useful for launch failures and large regressions, but they are
 not sufficient evidence to merge a winner. A terminal winner needs a clean
 relaunch and full `evaluate.py --json-output-file ...` result unless the advisor
 explicitly marked the PR as tooling-only.
+Do not chain quick and full evaluation in one blocking command during search
+unless the advisor has already decided the candidate is in final confirmation
+mode.
 
 ## Metrics And Telemetry
 
@@ -412,6 +433,22 @@ parameter choices. SENPAI adds coordination: the advisor manages scarce time and
 GPU access, students run bounded research arms or single hypotheses, and every
 decision is measured through the official evaluator.
 
+The default two-hour loop is:
+
+1. Inspect the scenario workload and current live baseline.
+2. Choose one hypothesis or one bounded arm matrix.
+3. Run quick probes that return control after each measurement.
+4. Preserve every valid quick result with concise notes, and log failures as
+   search information.
+5. Promote only the best earned candidate to full evaluation.
+6. Reserve the final 10-15 minutes for terminal reporting, advisor review,
+   merge, and `BASELINE.md` updates.
+
+This mirrors the measured-search discipline in
+`senpai/research/auto_gpu_kernel_competition_lessons.md`: cheap probes are for
+learning, full runs are for confirmation, and failures should make the next arm
+smarter.
+
 Do not collapse the portfolio to vLLM by habit. Explore vLLM, SGLang, TGI,
 TensorRT-LLM, and custom OpenAI-compatible servers as live candidates whenever
 the time budget and scenario make that plausible. The point is not to touch every
@@ -434,6 +471,12 @@ Student result comments must include a single-line marker:
 ```markdown
 SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0}}
 ```
+
+Partial quick-probe comments should use the same marker with
+`"terminal":false` and `"pending_arms":true`. They are steering signals, not
+mergeable winners. If the PyTorch baseline was available and the helper
+computed a speedup, the partial metric may be a speedup; otherwise use the raw
+metric name and state that the result is non-terminal.
 
 Use the appropriate primary metric name:
 
