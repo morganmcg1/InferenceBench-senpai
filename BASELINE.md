@@ -60,6 +60,7 @@ proved on this hardware before being used.
 
 - 2026-05-25 15:39 UTC — initial BASELINE.md created on launch boot.
 - 2026-05-25 17:03 UTC — **PR #105 merged** (fern, Sc. A). First confirmed Sc. A result on RTX PRO 6000: **1.240x** speedup. Launcher: `senpai/launchers/A/fern-tuned-vllm-prefill-noprefix/start_server.sh`. Full eval 128/128, MMLU-Pro n=500 PASS (0.304 vs 0.298 baseline, ratio 1.020). W&B: `insngzmf`. Notes: arm 2 (no prefix caching) marginally beat arm 1 (1.24x vs 1.27x quick); FP8 arm 3 staged on branch as round-2 candidate.
+- 2026-05-25 17:31 UTC — **Round 1 complete.** No further baseline updates this launch. PR #106 closed informational (1.246x quick Sc. D, not BASELINE-eligible per full-eval contract). PR #104 closed watchdog kill (2.89x quick ngram on Sc. B banked as round-2 priority — never made it to full eval). PR #107 closed descoped/no-slot. Sc. B/C/D rows remain `_none yet_`. Round-2 pickups in priority order: (1) Sc. B full eval at `senpai/launchers/B/frieren-tuned-vllm-decode-ngram/`, (2) Sc. D full eval at `senpai/launchers/D/tanjiro-tuned-vllm-balanced/`, (3) Sc. A FP8 arm at `senpai/launchers/A/fern-tuned-vllm-prefill-noprefix-fp8/`.
 
 ## Update rules
 

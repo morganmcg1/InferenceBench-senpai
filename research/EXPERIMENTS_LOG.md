@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-05-25 17:30 UTC — PR #104: Scenario B: tuned vLLM decode + n-gram speculative — CLOSED, watchdog kill, NOT MERGED
+
+- **Student / branch:** frieren / `frieren/scenario-b-tuned-vllm-decode`
+- **Hypothesis:** CUDA-graph decode + n-gram speculative decoding (`num_speculative_tokens=3, prompt_lookup_max=5`) lifts Sc. B output-heavy speedup significantly above default vLLM (2.25x reference on H100).
+- **Result table:**
+
+| Arm | Mode | Speedup | TTFT.p50 | TPOT.p50 | gen tok/s | Quality | W&B run |
+|-----|------|--------:|---------:|---------:|----------:|---------|---------|
+| arm1 (CUDA graphs + no chunked prefill) | quick | 1.43x | — | — | — | passes quick MMLU-Pro | _not logged to W&B_ |
+| arm2 (arm1 + ngram speculative n=3, lookup=5) | quick | **2.89x** | — | 0.0087s (vs PyTorch 0.0252s) | — | passes quick MMLU-Pro | _not logged to W&B_ |
+| arm2 full eval n=64 | full | _watchdog kill, no result_ | — | — | — | — | — |
+| arm2 full eval n=12 (authorized 17:21:32) | full | _claude killed before start, no result_ | — | — | — | — | — |
+
+- **Commentary:** Strongest signal in this launch by a wide margin — the ngram speculative arm gave a measured 2.89x quick speedup on Sc. B vs PyTorch, with TPOT compressed to 0.0087s (~3x decode acceleration). This was on quick-mode (4 requests) and never logged to W&B, so the result is research evidence only and NOT BASELINE-eligible. Two attempts at a full eval were torpedoed by the pod-entrypoint watchdog: (1) first full 64-req eval was killed at 16:18:25 UTC, (2) advisor reissued at `--request-limit 24` and frieren correctly caught a wall-clock miscount; the second attempt at `--request-limit 12` could not start because frieren's claude session was killed during a 10-min idle wait (17:12 → 17:22) between abort+release and the n=12 authorization. The watchdog heuristic ("Claude log stale for 601s and no train.py process") is fundamentally incompatible with serving workloads.
+- **Disposition:** **NOT MERGED, NOT BASELINED.** Closed as watchdog kill. The launcher at `senpai/launchers/B/frieren-tuned-vllm-decode-ngram/start_server.sh` is the highest-priority round-2 pickup — a full eval of the same recipe at the start of next launch should land as the Sc. B baseline floor. Operational issue: the watchdog mismatch must be fixed at the pod-entrypoint level before another serving-heavy launch.
+
+---
+
 ## 2026-05-25 17:25 UTC — PR #106: Scenario D: tuned vLLM launcher (chunked prefill ON, max-num-seqs 32) — informational, NOT MERGED
 
 - **Student / branch:** tanjiro / `tanjiro/scenario-d-sglang-lpm` (pivoted to vLLM after SGLang sgl-kernel/sglang version skew blocked LPM hypothesis on this pod)

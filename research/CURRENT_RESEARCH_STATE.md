@@ -1,10 +1,13 @@
 # SENPAI Research State — `ib-20260525-three1-r1`
 
-- **Date / time:** 2026-05-25 ~17:27 UTC (PR #105 fern MERGED 1.240x Sc. A;
-  PR #106 tanjiro CLOSED informational 1.246x Sc. D quick — launcher banked
-  for round-2 full-eval; PR #107 fern Sc. C CLOSED descoped/no-slot;
-  PR #104 frieren n=12 authorized at 17:21:32, no ack yet — heartbeat
-  prompted at 17:27; ETA terminal ~17:36-17:38 UTC ~2-4 min past deadline)
+- **Date / time:** 2026-05-25 ~17:31 UTC — **ROUND 1 COMPLETE.** Final state:
+  PR #105 fern **MERGED** 1.240x Sc. A (first measured floor on RTX PRO 6000);
+  PR #106 tanjiro **CLOSED informational** 1.246x Sc. D quick (launcher banked
+  for round-2 full-eval); PR #107 fern Sc. C **CLOSED** descoped/no-slot;
+  PR #104 frieren **CLOSED** watchdog kill (no terminal — claude session
+  killed during 17:12-17:22 idle wait between abort and n=12 authorization;
+  quick 2.89x ngram speculative banked as research signal, launcher staged
+  for round-2 pickup as highest-priority Sc. B work).
 - **Most recent human directive:** path correction on all 3 round-1 PRs from
   `morganmcg1` (operator). In this packed 3-student pod the student checkouts
   are **per-student**, not shared: students should `cd
@@ -38,7 +41,7 @@ before committing the scarce full-eval slot.
 
 | Student  | PR  | Scenario | Engine | Status @ 17:27 UTC | Hypothesis |
 | -------- | --- | -------- | ------ | ------------------ | ---------- |
-| frieren  | 104 | B (output-heavy) | vLLM   | n=12 authorized 17:21:32 after queue contention from stale fern wrapper. No ack yet at 17:27 (5.5 min). Heartbeat prompt posted. ETA terminal ~17:36-17:38 if running. Speed eval at `--request-limit 12`, quality at n=500. | CUDA-graph decode + n-gram speculative (n=3, lookup=5) |
+| frieren  | 104 | B (output-heavy) | vLLM   | **CLOSED 17:30 watchdog kill.** Quick 2.89x ngram speculative result banked as research signal (NOT BASELINE — never logged to W&B, no full-eval terminal). Diagnosis: claude killed during 17:12-17:22 idle wait between abort+release and n=12 authorization. Launcher at `senpai/launchers/B/frieren-tuned-vllm-decode-ngram/` preserved for highest-priority round-2 pickup. | CUDA-graph decode + n-gram speculative (n=3, lookup=5) |
 | fern     | 105 | A (input-heavy)  | vLLM | **MERGED 17:03** 1.240x (ttft.p50 0.3537s, 128/128, MMLU-Pro PASS). W&B `insngzmf`. FP8 arm 3 staged on branch as round-2 candidate. | Tuned vLLM prefill no-prefix. COMPLETED. |
 | fern     | 107 | C (high-load)    | vLLM   | **CLOSED 17:21:53** — slot contention (stale wrapper) + wall clock + low expected room (H100 default 48.69x already near tuned ceiling). Launcher at `senpai/launchers/C/fern-vllm-baseline-c/` staged for next launch. | Default-ish vLLM C launcher (deferred). |
 | tanjiro  | 106 | D (general)      | vLLM | **CLOSED 17:25 informational** 1.246x quick (vs 1.241x default-vLLM-D quick floor). Not BASELINE-eligible (quick eval, not full). Two launchers banked: `tanjiro-tuned-vllm-balanced/` (commit `efdc787`) and `tanjiro-fallback-vllm-default-d/` (commit `6dca712`). Round-2 priority: pair tuned-D with frieren's ngram speculative config. | Tuned vLLM Sc. D: chunked prefill ON, max-num-seqs 32, batched-tokens 8192. COMPLETED (informational). |
