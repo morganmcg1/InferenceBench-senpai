@@ -51,6 +51,7 @@ echo "nvidia-smi: not found in container; check Kubernetes GPU passthrough." >&2
 exit 127
 EOF
 RUN chmod +x /usr/local/bin/nvidia-smi
+RUN test -s /usr/local/bin/nvidia-smi && grep -q '/usr/bin/nvidia-smi' /usr/local/bin/nvidia-smi
 
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \

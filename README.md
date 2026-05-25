@@ -25,6 +25,10 @@ What changed for SENPAI:
 - `senpai/preflight.py` now catches broken torch/vLLM runtime imports in the
   target image before the 2 hour clock opens, including the vLLM OpenAI API
   server entrypoint used by launcher experiments.
+- `senpai/run_launch_smoke_test_job.sh` runs the exact pod image and target
+  branch intended for launch before the 2 hour clock opens. It checks Claude
+  config, Weave plugin config, `nvidia-smi`, mounted secrets, and scoring
+  preflight from inside Kubernetes.
 - The cutoff harvester archives Claude Code logs from `/root` and per-student
   homes under `/workspace/home-*`, plus SENPAI student logs, before deleting
   pods.
@@ -87,6 +91,24 @@ senpai/require_scoring_preflight.sh \
 Do not start a SENPAI replicate unless `senpai/require_scoring_preflight.sh`
 passes in the same target branch/image/hardware context the advisor and
 students will use.
+
+Required launch smoke test before the 2 hour clock:
+
+```bash
+senpai/run_launch_smoke_test_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image-pull-secret ghcr-morganmcg1-pull \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+This job runs outside the benchmark budget and should pass before arming
+`senpai/arm_cluster_cutoff.sh`. It catches broken image/runtime wiring such as
+an empty `nvidia-smi` shim, invalid Claude/Weave JSON config, missing launch
+secrets, or absent scoring assets before advisor/student pods start waiting at
+the gate.
 
 Shared-pod shakedown notes:
 

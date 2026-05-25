@@ -75,6 +75,23 @@ senpai/require_scoring_preflight.sh \
 Do not open the SENPAI start gate until this hard preflight passes in the same
 target branch, image, and hardware context the run will use.
 
+Before arming the cutoff gate, also run the launch smoke job in Kubernetes with
+the exact image and target branch:
+
+```bash
+senpai/run_launch_smoke_test_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image-pull-secret ghcr-morganmcg1-pull \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+It verifies mounted launch secrets, Claude Code config, Weave plugin config,
+the `nvidia-smi` path, GPU visibility, and scoring preflight from inside the
+same pod image that advisor/student pods will use.
+
 If tokenizer/runtime drift prevents the official evaluator from sampling
 LongBench-v2 requests, materialize request files once without editing
 `src/eval`:
