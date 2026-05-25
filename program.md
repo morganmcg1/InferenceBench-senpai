@@ -422,6 +422,11 @@ Do not overfit to this document's example levers. Choose strategies based on the
 active scenario, current live baseline, measured failures, remaining wall-clock
 time, and available GPU capacity.
 
+For a measured example of successful autonomous GPU-systems optimization,
+advisors and students can consult
+`senpai/research/auto_gpu_kernel_competition_lessons.md`. Use it as search
+discipline and measurement guidance, not as a mandate to write custom kernels.
+
 ## Results Contract
 
 Student result comments must include a single-line marker:
