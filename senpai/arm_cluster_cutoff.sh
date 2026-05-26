@@ -84,6 +84,11 @@ if [ -z "$RUN_SLUG" ] || [ -z "$TAGS_CSV" ]; then
   exit 2
 fi
 
+if [[ "$IMAGE" != *@sha256:* ]]; then
+  echo "WARNING: cutoff job image is not pinned by digest: $IMAGE" >&2
+  echo "Use the digest printed by senpai/run_launch_smoke_test_job.sh for timed runs." >&2
+fi
+
 safe_name() {
   python - "$1" <<'PY'
 import re

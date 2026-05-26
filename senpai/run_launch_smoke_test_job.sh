@@ -209,6 +209,8 @@ spec:
               git config --global --add safe.directory /workspace/inferencebench
               echo "[smoke] head=\$(git rev-parse --short HEAD) branch=\$(git branch --show-current)"
 
+              source senpai/runtime_env.sh
+              python senpai/runtime_doctor.py
               senpai/require_scoring_preflight.sh \
                 --import-dir "\$IMPORT_DIR" \
                 --scenario "\$SCENARIO_ARG" \
@@ -231,4 +233,9 @@ kubectl apply -f "$manifest"
 if [[ "$WAIT" == "1" ]]; then
   kubectl wait --for=condition=complete "job/$JOB_NAME" --timeout=30m
   kubectl logs "job/$JOB_NAME"
+  image_id="$(kubectl get pods -l job-name="$JOB_NAME" -o jsonpath='{.items[0].status.containerStatuses[0].imageID}' 2>/dev/null || true)"
+  if [[ "$image_id" == *@sha256:* ]]; then
+    echo "[smoke-job] image digest passed: ${image_id#docker-pullable://}"
+    echo "[smoke-job] use this immutable digest for timed launches instead of a mutable tag."
+  fi
 fi

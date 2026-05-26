@@ -252,6 +252,11 @@ and starts the clock. It archives `/root/.claude` from every tagged
 advisor/student pod to the PVC shortly before shutdown, and then deletes the
 tagged SENPAI deployments/configmaps/secrets.
 
+Run `senpai/run_launch_smoke_test_job.sh` with the exact target branch and image
+before opening the timed gate. Use the immutable image digest printed by the
+passing smoke job for the timed SENPAI launch and cutoff job; mutable tags such
+as `:pr-1` are build pointers, not run provenance.
+
 If request generation is blocked by tokenizer/runtime drift, materialize
 deterministic request files once from the SENPAI helper instead of editing
 protected evaluator code:
@@ -308,6 +313,19 @@ write shell loops that depend on the exact text printed by `gpu_slot.py status`;
 that output is for human debugging, not a stable machine interface. If
 `status --json` reports active GPU compute processes without a matching lease,
 resolve the orphan before starting a new full workload.
+
+When the cutoff time is known, set `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass
+`--deadline-utc` to `gpu_slot.py`, and use `--min-remaining-s` for any full
+evaluation. The slot helper should refuse work that cannot plausibly finish,
+report, and be reviewed before the two-hour gate closes.
+
+Packed pods share one Python installation. Do not use global `pip install` or
+`uv pip install --system` during serving experiments; that can invalidate other
+students' measurements by changing torch, transformers, vLLM, or tokenizer
+behavior mid-run. The SENPAI image sets `PIP_REQUIRE_VIRTUALENV=true`. Optional
+backend installs belong in per-PR venvs created with
+`senpai/create_engine_venv.py` or an equivalent isolated environment, and
+runtime drift should be checked with `senpai/runtime_doctor.py`.
 
 ## Running
 
@@ -368,6 +386,22 @@ explicitly marked the PR as tooling-only.
 Do not chain quick and full evaluation in one blocking command during search
 unless the advisor has already decided the candidate is in final confirmation
 mode.
+
+Before a serving PR is merged as a winner or `BASELINE.md` is updated, run:
+
+```bash
+python senpai/validate_result.py metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id <run-id> \
+  --launcher ./start_server.sh \
+  --require-launcher
+```
+
+The validator must print `validation_pass=true` and
+`baseline_update_allowed=true`. Quick results, skipped quality, partial request
+counts, missing PyTorch baselines, missing W&B run IDs, and failed quality gates
+are research signals only; keep them out of the terminal current-best rows.
 
 ## Metrics And Telemetry
 
@@ -488,7 +522,7 @@ discipline and measurement guidance, not as a mandate to write custom kernels.
 Student result comments must include a single-line marker:
 
 ```markdown
-SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0}}
+SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0},"eval_mode":{"name":"full"},"terminal_eligible":true,"baseline_update_allowed":true}
 ```
 
 Partial quick-probe comments should use the same marker with

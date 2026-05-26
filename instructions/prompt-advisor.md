@@ -71,6 +71,10 @@ Survey the current state:
   baselines, quality samples, quality registry, W&B, or hardware mismatch
   before assigning serving work. Do not accept raw objectives or
   public-reference extrapolations as `speedup_over_pytorch`.
+- Run `python senpai/runtime_doctor.py` after preflight in shared pods and after
+  any PR that installs backend packages. If it reports torch/vLLM drift, a bad
+  `nvidia-smi`, or a disabled pip guard, fix the runtime before spending GPU
+  time on serving comparisons.
 - On current RTX PRO 6000 shakedown pods, tell students to source
   `senpai/runtime_env.sh` and avoid re-enabling FlashInfer or FP8 KV cache
   unless the PR is explicitly testing that hardware-specific path and the
@@ -204,6 +208,13 @@ comment timing alone. The helper now refuses to acquire a free-looking slot when
 `nvidia-smi` reports unleased GPU compute processes; treat that as an orphaned
 server/evaluator that needs cleanup before the next measurement.
 
+When the cutoff time is known, export it as
+`INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass `--deadline-utc` to `gpu_slot.py`.
+Require `--min-remaining-s` for full evaluations so students cannot start a
+heavy run that has no realistic path to finish, report, and be reviewed before
+cutoff. Use a larger buffer for Scenario C and any engine that needs slow model
+load or compile time.
+
 Use PR comments for high-level coordination, but trust the slot file for who is
 allowed to run the next heavy workload. Do not force-release a lease merely
 because the PR thread looks quiet. First check `status --json`, `nvidia-smi`,
@@ -242,11 +253,34 @@ Treat a PR as terminally reviewable only when it includes a terminal
 launcher recipe, and a clean relaunch result. Rank by the target scenario
 speedup, but reject any run that fails quality, has high failure rate, changes
 protected benchmark files, or relies on state outside the final launcher.
+Before merging a serving PR or updating the current-best row in `BASELINE.md`,
+run the mechanical validator against the student's full metrics:
+
+```bash
+python senpai/validate_result.py <metrics_full.json> \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json <matching_pytorch_baseline_metrics.json> \
+  --wandb-run-id <run-id> \
+  --launcher <start_server.sh> \
+  --require-launcher
+```
+
+Only `validation_pass=true` and `baseline_update_allowed=true` can update the
+terminal baseline. Quick-only results, skipped quality, partial request counts,
+missing W&B, or mismatched `SENPAI-RESULT` payloads stay in the quick/provisional
+ledger even if their speedup looks attractive.
 
 Reject `SENPAI-RESULT` payloads where `primary_metric.name` says
 `speedup_over_pytorch` but `primary_metric.value` is actually a raw objective.
 Raw objectives and quick-only probes are useful research signals, not
 leaderboard results.
+
+Do not allow backend package experiments to mutate the shared system Python in a
+packed pod. The image sets `PIP_REQUIRE_VIRTUALENV=true`; if a student needs
+SGLang, TensorRT-LLM, TGI tooling, or another backend not already in the image,
+assign it in a per-PR venv using `senpai/create_engine_venv.py` or an equivalent
+isolated environment, and require the final launcher to recreate or activate
+that environment explicitly.
 
 Merge small clean improvements. Send promising non-winners back with a specific
 next variant. Close dead ends when they are clearly worse, fail to launch, fail

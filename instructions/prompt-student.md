@@ -101,6 +101,21 @@ the main heavy GPU workload, keep making progress through smoke tests,
 low-memory probes, launcher prep, log analysis, or research that can inform the
 next GPU slot.
 
+Do not install backend packages into the shared system Python in a packed pod.
+The image sets `PIP_REQUIRE_VIRTUALENV=true` to prevent accidental global
+`pip install` drift. If you need packages that are not already in the image,
+use a per-PR venv, for example:
+
+```bash
+python "$PROBLEM_DIR/senpai/create_engine_venv.py" --engine sglang --pr "<assigned-pr>"
+source /tmp/inferencebench-engine-venvs/sglang-pr-<assigned-pr>/bin/activate
+```
+
+If you intentionally use a custom path or package list, report it in the PR and
+make the launcher recreate or activate that environment explicitly. After any
+package work, run `python "$PROBLEM_DIR/senpai/runtime_doctor.py"` before using
+the GPU slot.
+
 In a shared-pod run, check the slot before heavy GPU work:
 
 ```bash
@@ -118,7 +133,7 @@ Default to a quick-only wrapper first:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
-  --wait --ttl-s 1800 \
+  --wait --ttl-s 1800 --min-remaining-s 900 \
   --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
   bash -lc '
     set -euo pipefail
@@ -144,7 +159,7 @@ work:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
-  --wait --ttl-s 3600 \
+  --wait --ttl-s 3600 --min-remaining-s 1800 \
   --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
   bash -lc '
     set -euo pipefail
@@ -241,6 +256,13 @@ trap "kill $server_pid 2>/dev/null || true" EXIT
 python evaluate.py --quick --json-output-file metrics_quick.json
 kill "$server_pid" 2>/dev/null || true
 trap - EXIT
+python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_quick.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --no-terminal \
+  --pending-arms \
+  --name "$STUDENT_NAME/<short-description>/quick" \
+  --group "<hypothesis-or-pr>"
 ```
 
 If the quick result is worth confirming and there is enough time left for
@@ -264,6 +286,12 @@ python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_full.json \
   --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
   --name "$STUDENT_NAME/<short-description>" \
   --group "<hypothesis-or-pr>"
+python "$PROBLEM_DIR/senpai/validate_result.py" metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id "<run-id-from-log-command>" \
+  --launcher ./start_server.sh \
+  --require-launcher
 ```
 
 For current RTX PRO 6000 shakedown pods, `runtime_env.sh` disables vLLM's

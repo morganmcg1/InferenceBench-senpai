@@ -91,6 +91,10 @@ senpai/run_launch_smoke_test_job.sh \
 It verifies mounted launch secrets, Claude Code config, Weave plugin config,
 the `nvidia-smi` path, GPU visibility, and scoring preflight from inside the
 same pod image that advisor/student pods will use.
+When the smoke job passes, copy the printed `@sha256:...` image digest into the
+timed SENPAI launch and cutoff commands. Do not run the two-hour gate from a
+mutable tag such as `:pr-1` unless you have just smoke-tested that exact
+resolved image ID.
 
 If tokenizer/runtime drift prevents the official evaluator from sampling
 LongBench-v2 requests, materialize request files once without editing
@@ -129,6 +133,22 @@ locations for vLLM, FlashInfer, Triton, and related backends. On RTX PRO 6000
 shakedown pods it also defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768` and
 disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher opts
 back in. This is a process-local launch aid, not a benchmark harness change.
+It also defaults `PIP_REQUIRE_VIRTUALENV=true` so one student's backend install
+does not mutate the shared system Python for the whole pod.
+
+Check runtime drift before spending GPU time:
+
+```bash
+python senpai/runtime_doctor.py
+```
+
+If a PR needs backend packages that are not already in the image, create a
+per-PR venv instead of installing into the shared system environment:
+
+```bash
+python senpai/create_engine_venv.py --engine sglang --pr 123
+source /tmp/inferencebench-engine-venvs/sglang-pr-123/bin/activate
+```
 
 ## Shared GPU Slot
 
@@ -138,6 +158,7 @@ work without adding a separate runner:
 ```bash
 python senpai/gpu_slot.py status --json
 python senpai/gpu_slot.py run --wait --ttl-s 1800 \
+  --min-remaining-s 900 \
   --owner "$STUDENT_NAME" --pr 123 --scenario C -- \
   bash -lc 'cd /tmp/inferencebench-C/task && source ./eval_env.sh && ./clean_eval_artifacts.sh && ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --quick --json-output-file metrics_quick.json'
 ```
@@ -158,6 +179,32 @@ comment on the PR, and let the advisor decide whether to spend full-eval time.
 Run full evaluation in a second clean relaunch only after the quick result has
 earned confirmation and enough wall time remains for review.
 
+If the cutoff time is available, export it as
+`INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass `--deadline-utc` to `gpu_slot.py`.
+Pair that with `--min-remaining-s` so queued work refuses to start when it would
+finish too late to report and review.
+
+## Result Validation
+
+Use `summarize_metrics.py` and `log_metrics_to_wandb.py` for both quick and
+full results. The emitted `SENPAI-RESULT` includes `eval_mode`,
+`terminal_eligible`, and `baseline_update_allowed`; quick probes should have
+`terminal=false,pending_arms=true` and must not update `BASELINE.md`.
+
+Before merging a terminal serving PR or updating a current-best baseline row,
+run:
+
+```bash
+python senpai/validate_result.py metrics_full.json \
+  --scenario A \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id "<run-id>" \
+  --launcher ./start_server.sh \
+  --require-launcher
+```
+
+Treat any validation failure as provisional evidence, not a benchmark win.
+
 ## Cluster Cutoff And Conversation Logs
 
 Use `arm_cluster_cutoff.sh` when starting Kubernetes SENPAI runs. It waits for
@@ -175,7 +222,7 @@ senpai/arm_cluster_cutoff.sh \
   --budget-hours 2 \
   --harvest-lead-seconds 300 \
   --start-gate-path /mnt/new-pvc/senpai-start-gates/ib-YYYYMMDD-rerun/start \
-  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image ghcr.io/morganmcg1/inferencebench-senpai@sha256:<digest-from-smoke> \
   --image-pull-secret ghcr-morganmcg1-pull
 ```
 

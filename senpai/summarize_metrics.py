@@ -17,6 +17,8 @@ PRIMARY_NAMES = {
     "D": "scenario/D/geomean_inverse_latency_throughput",
 }
 
+FULL_QUALITY_N = 500
+
 
 def _p50(profile: dict[str, Any], key: str) -> float:
     value = (profile.get(key) or {}).get("p50")
@@ -89,7 +91,69 @@ def quality_metric(metrics: dict[str, Any]) -> tuple[str, float | None, dict[str
         "quality_ratio": dataset.get("ratio"),
         "quality_baseline_accuracy": dataset.get("baseline_accuracy"),
         "quality_tau": dataset.get("tau") or quality.get("tau"),
+        "quality_sample_n": dataset.get("n") or dataset.get("evaluated_count"),
     }
+
+
+def eval_mode(metrics: dict[str, Any]) -> dict[str, Any]:
+    raw = metrics.get("eval_mode")
+    if isinstance(raw, dict):
+        name = str(raw.get("name") or "unknown").strip().lower()
+        return {"name": name, **{k: v for k, v in raw.items() if k != "name"}}
+    pipeline = metrics.get("eval_pipeline") or {}
+    steps = pipeline.get("steps") if isinstance(pipeline, dict) else None
+    if isinstance(steps, list) and "mock" in steps:
+        return {"name": "mock"}
+    return {"name": "full"}
+
+
+def profile_health(metrics: dict[str, Any]) -> dict[str, Any]:
+    profiles = metrics.get("profiles") or {}
+    request_count = 0
+    success_count = 0
+    failure_count = 0
+    max_failure_rate = 0.0
+    for profile in profiles.values():
+        if not isinstance(profile, dict):
+            continue
+        request_count += int(profile.get("request_count", 0) or 0)
+        success_count += int(profile.get("success_count", 0) or 0)
+        failure_count += int(profile.get("failure_count", 0) or 0)
+        rate = profile.get("failure_rate")
+        if isinstance(rate, (int, float)):
+            max_failure_rate = max(max_failure_rate, float(rate))
+    return {
+        "speed_request_count": request_count,
+        "speed_success_count": success_count,
+        "speed_failure_count": failure_count,
+        "speed_max_failure_rate": max_failure_rate,
+    }
+
+
+def eligibility_issues(
+    *,
+    result: dict[str, Any],
+    mode: dict[str, Any],
+    baseline_primary: float | None,
+    quality: dict[str, Any],
+) -> list[str]:
+    issues: list[str] = []
+    if not result.get("terminal"):
+        issues.append("result is not terminal")
+    if result.get("pending_arms"):
+        issues.append("pending_arms is true")
+    if mode.get("name") != "full":
+        issues.append(f"eval_mode is {mode.get('name')!r}, not 'full'")
+    if baseline_primary is None:
+        issues.append("missing PyTorch baseline metric for speedup")
+    if quality.get("quality_pass") is not True:
+        issues.append("quality gate did not pass")
+    qn = quality.get("quality_sample_n")
+    if not isinstance(qn, (int, float)) or int(qn) < FULL_QUALITY_N:
+        issues.append(f"quality sample n is {qn!r}, expected at least {FULL_QUALITY_N}")
+    if quality.get("quality_ratio") is None:
+        issues.append("missing quality ratio")
+    return issues
 
 
 def _load_metrics(path: str) -> dict[str, Any]:
@@ -131,6 +195,7 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
     if test_value is None:
         test_name = primary_name
         test_value = primary_value
+    mode = eval_mode(metrics)
 
     reported_primary_name = primary_name
     reported_primary_value = primary_value
@@ -148,11 +213,17 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         "scenario": scenario,
         "metrics_json": str(args.metrics_json),
         "raw_primary_metric": {"name": primary_name, "value": primary_value},
+        "eval_mode": mode,
     }
     if baseline_primary is not None:
         result["baseline_primary_metric"] = {"name": primary_name, "value": baseline_primary}
         result["speedup_over_pytorch"] = speedup
     result.update(quality)
+    result.update(profile_health(metrics))
+    issues = eligibility_issues(result=result, mode=mode, baseline_primary=baseline_primary, quality=quality)
+    result["terminal_eligible"] = not issues
+    result["baseline_update_allowed"] = not issues
+    result["terminal_eligibility_issues"] = issues
     return result
 
 
