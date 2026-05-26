@@ -1,3 +1,4 @@
+import argparse
 from pathlib import Path
 import sys
 
@@ -6,7 +7,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from senpai import create_task_workspace, gpu_slot, materialize_requests, preflight, summarize_metrics
+from senpai import create_task_workspace, gpu_slot, materialize_requests, preflight, summarize_metrics, validate_result
 
 
 def test_tokenized_length_handles_batchencoding_like_dict() -> None:
@@ -86,6 +87,7 @@ def test_runtime_env_disables_implicit_flashinfer_for_shakedown() -> None:
     assert 'INFERENCE_BENCH_MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-32768}"' in text
     assert 'VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"' in text
     assert 'VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"' in text
+    assert 'PIP_REQUIRE_VIRTUALENV="${PIP_REQUIRE_VIRTUALENV:-true}"' in text
 
 
 def test_create_task_workspace_copies_task_files(tmp_path: Path) -> None:
@@ -146,6 +148,119 @@ def test_summarize_metrics_reads_wrapped_baseline(tmp_path: Path) -> None:
 
     assert result["primary_metric"]["name"] == "scenario/A/speedup_over_pytorch"
     assert result["primary_metric"]["value"] == 2.0
+
+
+def test_summarize_marks_quick_results_ineligible(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics_quick.json"
+    metrics.write_text(
+        '{"scenario":"A","profiles":{"burst":{"request_count":24,"success_count":24,'
+        '"failure_count":0,"failure_rate":0.0,"ttft":{"p50":2.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}},"quality_check":{"pass":true,'
+        '"datasets":{"mmlu_pro":{"observed_accuracy":0.5,"baseline_accuracy":0.5,'
+        '"ratio":1.0,"n":16}}},"eval_mode":{"name":"quick","request_limit":24,"quality_n":16}}',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline_metrics.json"
+    baseline.write_text(
+        '{"baseline":{"profiles":{"burst":{"ttft":{"p50":4.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}}}}',
+        encoding="utf-8",
+    )
+
+    args = argparse.Namespace(
+        metrics_json=str(metrics),
+        scenario="A",
+        baseline_metrics_json=str(baseline),
+        baseline_primary=None,
+        wandb_run_id=["abc123"],
+        status="complete",
+        terminal=True,
+        pending_arms=False,
+    )
+
+    result = summarize_metrics.build_result(args)
+
+    assert result["eval_mode"]["name"] == "quick"
+    assert result["terminal_eligible"] is False
+    assert result["baseline_update_allowed"] is False
+    assert any("eval_mode" in issue for issue in result["terminal_eligibility_issues"])
+
+
+def test_validate_result_accepts_full_terminal_metrics(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics_full.json"
+    metrics.write_text(
+        '{"scenario":"A","profiles":{"burst":{"request_count":128,"success_count":128,'
+        '"failure_count":0,"failure_rate":0.0,"ttft":{"p50":2.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}},"quality_check":{"pass":true,'
+        '"datasets":{"mmlu_pro":{"observed_accuracy":0.5,"baseline_accuracy":0.5,'
+        '"ratio":1.0,"n":500}}}}',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline_metrics.json"
+    baseline.write_text(
+        '{"baseline":{"profiles":{"burst":{"ttft":{"p50":4.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}}}}',
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        metrics_json=str(metrics),
+        scenario="A",
+        baseline_metrics_json=str(baseline),
+        baseline_primary=None,
+        wandb_run_id=["abc123"],
+        status="complete",
+        terminal=True,
+        pending_arms=False,
+        max_failure_rate=0.0,
+        require_wandb=True,
+        require_launcher=False,
+        launcher=None,
+        result_json=None,
+    )
+
+    result = validate_result.validate(args)
+
+    assert result["validation_pass"] is True
+    assert result["baseline_update_allowed"] is True
+
+
+def test_validate_result_rejects_quick_metrics(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics_quick.json"
+    metrics.write_text(
+        '{"scenario":"A","profiles":{"burst":{"request_count":24,"success_count":24,'
+        '"failure_count":0,"failure_rate":0.0,"ttft":{"p50":2.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}},"quality_check":{"pass":true,'
+        '"datasets":{"mmlu_pro":{"observed_accuracy":0.5,"baseline_accuracy":0.5,'
+        '"ratio":1.0,"n":16}}},"eval_mode":{"name":"quick","request_limit":24,"quality_n":16}}',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline_metrics.json"
+    baseline.write_text(
+        '{"baseline":{"profiles":{"burst":{"ttft":{"p50":4.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}}}}',
+        encoding="utf-8",
+    )
+    args = argparse.Namespace(
+        metrics_json=str(metrics),
+        scenario="A",
+        baseline_metrics_json=str(baseline),
+        baseline_primary=None,
+        wandb_run_id=["abc123"],
+        status="complete",
+        terminal=True,
+        pending_arms=False,
+        max_failure_rate=0.0,
+        require_wandb=True,
+        require_launcher=False,
+        launcher=None,
+        result_json=None,
+    )
+
+    result = validate_result.validate(args)
+
+    assert result["validation_pass"] is False
+    assert any("eval_mode" in issue for issue in result["validation_issues"])
+    assert any("request_count=24" in issue for issue in result["validation_issues"])
 
 
 def test_gpu_slot_acquire_release(tmp_path: Path) -> None:
@@ -245,4 +360,29 @@ def test_gpu_slot_refuses_unleased_active_gpu(monkeypatch, tmp_path: Path) -> No
         gpu_slot.acquire(path, Args())
 
     assert "GPU slot has no lease but GPU is busy" in str(exc.value)
+    assert gpu_slot.read_lease(path) is None
+
+
+def test_gpu_slot_refuses_work_too_close_to_deadline(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "C"
+        purpose = "test"
+        ttl_s = 60
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+        ignore_active_gpu = False
+        replace_existing = False
+        deadline_utc = str(gpu_slot.now() + 10)
+        deadline_epoch = None
+        min_remaining_s = 60
+
+    with pytest.raises(SystemExit) as exc:
+        gpu_slot.acquire(path, Args())
+
+    assert "less than required min_remaining_s=60" in str(exc.value)
     assert gpu_slot.read_lease(path) is None

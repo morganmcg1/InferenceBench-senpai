@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -29,6 +30,56 @@ def now() -> float:
 
 def utc(ts: float | None = None) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now() if ts is None else ts))
+
+
+def parse_deadline(raw: str | None) -> float | None:
+    if not raw:
+        return None
+    value = raw.strip().strip("'\"")
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value).astimezone(timezone.utc).timestamp()
+
+
+def deadline_epoch(args: argparse.Namespace) -> float | None:
+    explicit = parse_deadline(getattr(args, "deadline_utc", None))
+    if explicit is not None:
+        return explicit
+    explicit = parse_deadline(getattr(args, "deadline_epoch", None))
+    if explicit is not None:
+        return explicit
+    for key in (
+        "INFERENCE_BENCH_RUN_DEADLINE_UTC",
+        "INFERENCE_BENCH_RUN_DEADLINE_EPOCH",
+        "SENPAI_RUN_DEADLINE_UTC",
+        "SENPAI_RUN_DEADLINE_EPOCH",
+        "KILL_AT_UTC",
+        "KILL_AT_EPOCH",
+    ):
+        parsed = parse_deadline(os.environ.get(key))
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def deadline_issue(args: argparse.Namespace) -> str | None:
+    deadline = deadline_epoch(args)
+    if deadline is None:
+        return None
+    min_remaining = int(getattr(args, "min_remaining_s", 0) or 0)
+    remaining = deadline - now()
+    if remaining < min_remaining:
+        return (
+            f"run deadline {utc(deadline)} leaves {int(max(remaining, 0))}s, "
+            f"less than required min_remaining_s={min_remaining}"
+        )
+    return None
 
 
 def slot_path(raw: str | None) -> Path:
@@ -133,6 +184,7 @@ def lease_summary(lease: dict[str, Any] | None) -> str:
 
 def build_lease(args: argparse.Namespace, command: list[str] | None = None) -> dict[str, Any]:
     started = now()
+    deadline = deadline_epoch(args)
     return {
         "lease_id": uuid.uuid4().hex,
         "owner": args.owner,
@@ -149,15 +201,29 @@ def build_lease(args: argparse.Namespace, command: list[str] | None = None) -> d
         "ttl_s": args.ttl_s,
         "expires_at": started + args.ttl_s,
         "expires_at_utc": utc(started + args.ttl_s),
+        "run_deadline_utc": utc(deadline) if deadline is not None else None,
+        "min_remaining_s": int(getattr(args, "min_remaining_s", 0) or 0),
     }
 
 
 def acquire(path: Path, args: argparse.Namespace, command: list[str] | None = None) -> dict[str, Any]:
-    deadline = None if args.wait else now()
+    issue = deadline_issue(args)
+    if issue:
+        raise SystemExit(issue)
+
+    wait_deadline = None if args.wait else now()
     if args.wait_timeout_s is not None:
-        deadline = now() + args.wait_timeout_s
+        wait_deadline = now() + args.wait_timeout_s
+    run_deadline = deadline_epoch(args)
+    min_remaining = int(getattr(args, "min_remaining_s", 0) or 0)
+    if run_deadline is not None and min_remaining > 0:
+        latest_start = run_deadline - min_remaining
+        wait_deadline = latest_start if wait_deadline is None else min(wait_deadline, latest_start)
 
     while True:
+        issue = deadline_issue(args)
+        if issue:
+            raise SystemExit(issue)
         with locked(path):
             lease = read_lease(path)
             if lease_is_stale(lease):
@@ -185,7 +251,7 @@ def acquire(path: Path, args: argparse.Namespace, command: list[str] | None = No
                 write_lease(path, new_lease)
                 return new_lease
 
-        if not args.wait or (deadline is not None and now() >= deadline):
+        if not args.wait or (wait_deadline is not None and now() >= wait_deadline):
             raise SystemExit(lease_summary(lease))
         print(lease_summary(lease), file=sys.stderr)
         time.sleep(args.poll_s)
@@ -377,6 +443,20 @@ def add_owner_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--scenario", help="Scenario A, B, C, or D")
     parser.add_argument("--purpose", default="benchmark", help="Short purpose shown in status")
     parser.add_argument("--ttl-s", type=int, default=1800, help="Lease TTL refreshed by heartbeat/run")
+    parser.add_argument(
+        "--deadline-utc",
+        help="Optional UTC cutoff time; refuses new work when too little time remains",
+    )
+    parser.add_argument(
+        "--deadline-epoch",
+        help="Optional epoch-second cutoff time; overrides env-derived cutoff only when --deadline-utc is absent",
+    )
+    parser.add_argument(
+        "--min-remaining-s",
+        type=int,
+        default=0,
+        help="Minimum wall-clock seconds that must remain before acquiring the slot",
+    )
     parser.add_argument(
         "--ignore-active-gpu",
         action="store_true",

@@ -14,7 +14,8 @@ What changed for SENPAI:
   management, and LLM inference optimization scope.
 - Added `senpai/` helpers for SENPAI-only functionality:
   `preflight.py`, `materialize_requests.py`, `create_task_workspace.py`,
-  `gpu_slot.py`, `summarize_metrics.py`, and `log_metrics_to_wandb.py`.
+  `gpu_slot.py`, `summarize_metrics.py`, `log_metrics_to_wandb.py`,
+  `validate_result.py`, `runtime_doctor.py`, and `create_engine_venv.py`.
 - Task workspaces created by `senpai/create_task_workspace.py` now include
   `eval_env.sh` and `clean_eval_artifacts.sh` so students inherit the base
   model, scenario, deterministic request file, PyTorch baseline metrics path,
@@ -28,7 +29,12 @@ What changed for SENPAI:
 - `senpai/run_launch_smoke_test_job.sh` runs the exact pod image and target
   branch intended for launch before the 2 hour clock opens. It checks Claude
   config, Weave plugin config, `nvidia-smi`, mounted secrets, and scoring
-  preflight from inside Kubernetes.
+  preflight from inside Kubernetes, then prints the immutable image digest to
+  use for the timed launch.
+- `senpai/validate_result.py` mechanically separates quick research signals
+  from terminal baseline updates. It rejects quick mode, partial request
+  counts, skipped or failed quality, missing W&B IDs, missing PyTorch baselines,
+  and empty launchers before `BASELINE.md` can be updated.
 - The cutoff harvester archives Claude Code logs from `/root` and per-student
   homes under `/workspace/home-*`, plus SENPAI student logs, before deleting
   pods.
@@ -108,7 +114,8 @@ This job runs outside the benchmark budget and should pass before arming
 `senpai/arm_cluster_cutoff.sh`. It catches broken image/runtime wiring such as
 an empty `nvidia-smi` shim, invalid Claude/Weave JSON config, missing launch
 secrets, or absent scoring assets before advisor/student pods start waiting at
-the gate.
+the gate. Use the printed `@sha256:...` image digest in the timed SENPAI launch
+and cutoff commands rather than relying on a mutable tag.
 
 Shared-pod shakedown notes:
 
@@ -121,7 +128,16 @@ Shared-pod shakedown notes:
 - Wrap heavy server/evaluator work with `senpai/gpu_slot.py run --wait` rather
   than ad hoc shell polling. The helper uses a unique lease, blocks when
   `nvidia-smi` shows unleased GPU compute processes, heartbeats active runs, and
-  kills its command process group if the lease is lost.
+  kills its command process group if the lease is lost. When the cutoff time is
+  known, pass `--deadline-utc` or set `INFERENCE_BENCH_RUN_DEADLINE_UTC`, plus
+  `--min-remaining-s`, so late full evaluations refuse to start.
+- Do not mutate the shared system Python in packed pods. The image and runtime
+  helper set `PIP_REQUIRE_VIRTUALENV=true`; optional SGLang/TGI/TensorRT/custom
+  backend installs should use per-PR venvs via `senpai/create_engine_venv.py`
+  or equivalent isolated environments.
+- Run `senpai/validate_result.py` before merging a serving PR as a winner or
+  updating `BASELINE.md`. Quick probes belong in the provisional ledger even
+  when their speedup looks strong.
 - Coordinate teardown carefully in one-GPU multi-student pods. Kill only the
   server process group you launched; avoid broad `pkill` cleanup that can stop
   another student's active benchmark server.
@@ -143,7 +159,7 @@ senpai/arm_cluster_cutoff.sh \
   --budget-hours 2 \
   --harvest-lead-seconds 300 \
   --start-gate-path /mnt/new-pvc/senpai-start-gates/ib-YYYYMMDD-rerun/start \
-  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image ghcr.io/morganmcg1/inferencebench-senpai@sha256:<digest-from-smoke> \
   --image-pull-secret ghcr-morganmcg1-pull
 ```
 

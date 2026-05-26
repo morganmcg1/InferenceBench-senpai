@@ -146,4 +146,6 @@ RUN export LD_LIBRARY_PATH="$(python -c 'import site; from pathlib import Path; 
 RUN cd /opt && \
     git clone --depth=1 https://github.com/rank-and-file/filelock_workarounds.git
 
+ENV PIP_REQUIRE_VIRTUALENV=true
+
 WORKDIR /workspaces

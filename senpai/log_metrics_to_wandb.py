@@ -55,6 +55,9 @@ def main() -> None:
     parser.add_argument("--launcher")
     parser.add_argument("--time-budget-hours", type=float)
     parser.add_argument("--offline", action="store_true", help="Use W&B offline mode")
+    parser.add_argument("--status", default="complete")
+    parser.add_argument("--terminal", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--pending-arms", action=argparse.BooleanOptionalAction, default=False)
     args = parser.parse_args()
 
     try:
@@ -68,9 +71,9 @@ def main() -> None:
         baseline_metrics_json=args.baseline_metrics_json,
         baseline_primary=args.baseline_primary,
         wandb_run_id=[],
-        status="complete",
-        terminal=True,
-        pending_arms=False,
+        status=args.status,
+        terminal=args.terminal,
+        pending_arms=args.pending_arms,
     )
     result = summarize_metrics.build_result(summary_args)
     metrics = json.loads(Path(args.metrics_json).read_text(encoding="utf-8"))

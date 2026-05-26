@@ -84,6 +84,11 @@ if [ -z "$RUN_SLUG" ] || [ -z "$TAGS_CSV" ]; then
   exit 2
 fi
 
+if [[ "$IMAGE" != *@sha256:* ]]; then
+  echo "WARNING: cutoff job image is not pinned by digest: $IMAGE" >&2
+  echo "Use the digest printed by senpai/run_launch_smoke_test_job.sh for timed runs." >&2
+fi
+
 safe_name() {
   python - "$1" <<'PY'
 import re
@@ -184,6 +189,38 @@ deployment_count() {
   kubectl -n "$NAMESPACE" get deployments -l "$SELECTOR" --no-headers 2>/dev/null | wc -l | tr -d ' '
 }
 
+start_gate_waiter_count() {
+  [ -n "$START_GATE_PATH" ] || {
+    echo 0
+    return 0
+  }
+  kubectl -n "$NAMESPACE" get pods -l "$SELECTOR" -o json | START_GATE_PATH="$START_GATE_PATH" NAMESPACE="$NAMESPACE" python -c '
+import json
+import os
+import subprocess
+import sys
+
+data = json.load(sys.stdin)
+needle = f"Waiting for Senpai start gate: {os.environ['START_GATE_PATH']}"
+namespace = os.environ.get("NAMESPACE", "default")
+count = 0
+for item in data.get("items", []):
+    pod = item.get("metadata", {}).get("name")
+    if not pod:
+        continue
+    result = subprocess.run(
+        ["kubectl", "-n", namespace, "logs", pod, "--tail=240"],
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=20,
+    )
+    if needle in result.stdout:
+        count += 1
+print(count)
+'
+}
+
 write_state() {
   local now kill_at kill_at_utc tmp
   now="$(date -u '+%s')"
@@ -234,8 +271,12 @@ wait_for_ready_gate() {
   while true; do
     read -r total ready < <(pod_counts)
     deploys="$(deployment_count)"
-    log "Ready gate poll: ready=${ready}/${EXPECTED_PODS}, pods=${total}/${EXPECTED_PODS}, deployments=${deploys}/${EXPECTED_DEPLOYMENTS}"
-    if [ "$total" = "$EXPECTED_PODS" ] && [ "$ready" = "$EXPECTED_PODS" ] && [ "$deploys" = "$EXPECTED_DEPLOYMENTS" ]; then
+    waiters="0"
+    if [ -n "$START_GATE_PATH" ]; then
+      waiters="$(start_gate_waiter_count)"
+    fi
+    log "Ready gate poll: ready=${ready}/${EXPECTED_PODS}, pods=${total}/${EXPECTED_PODS}, deployments=${deploys}/${EXPECTED_DEPLOYMENTS}, start_gate_waiters=${waiters}/${EXPECTED_PODS}"
+    if [ "$total" = "$EXPECTED_PODS" ] && [ "$ready" = "$EXPECTED_PODS" ] && [ "$deploys" = "$EXPECTED_DEPLOYMENTS" ] && { [ -z "$START_GATE_PATH" ] || [ "$waiters" = "$EXPECTED_PODS" ]; }; then
       write_state
       # shellcheck source=/dev/null
       source "$STATE_FILE"
