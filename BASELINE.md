@@ -36,8 +36,16 @@
 
 ## Quick / partial / failed (research signals only)
 
-_(none yet)_
+| Scenario | PR | Arm | W&B | eval_mode | Speedup vs PyTorch | Quality ratio | Status | Notes |
+|----------|----|----|-----|-----------|-------------------:|--------------:|--------|-------|
+| A | #119 | A1 chunked prefill bt=16384 | `iyb44658` | quick (n=16) | 1.291x | 0.839 (quick noise) | research signal | Beats baseline but no full eval. |
+| A | #119 | A3 no chunked prefill | `g9nnsvx9` | quick (n=16) | 1.292x | 0.839 (quick noise) | research signal | Identical to A1 — chunked prefill knob does not move Sc.A on Blackwell. |
+| B | #120 | B1 CUDA graphs + small max_num_seqs | `ru8ph3t8` | quick (n=16) | 1.439x | 0.839 (quick noise) | research signal | Beats vLLM-default 2.25x reference? No — it's below. Baseline candidate before spec decode. |
+| B | #120 | B2 n-gram spec decode (5,4) | `1uq2xpm4` | quick (n=16) | **3.508x** | 0.839 (quick noise) | research signal | Strongest Sc.B signal. n-gram spec decode +2x over B1. Needs full eval on H100 confirmation. |
+| D | #121 | D1 balanced chunked prefill bt=8192 | `s5rqgnoj` | **full (n=500)** | **1.317x** | **0.993 PASS** | mergeable but missing terminal marker | `baseline_update_allowed=True`; advisor cannot merge without student-posted terminal `SENPAI-RESULT`. |
+| D | #121 | D3 D1 + n-gram spec decode | `revm2p3d` | quick (n=16) | 1.667x | 0.839 (FAIL even adjusted for quick noise) | research signal | Spec decode boosts speed but quality collapses on Sc.D outputs — needs investigation. |
 
 ## Update history
 
-- 2026-05-27: initialized ledger after PVC scoring-asset import + passing preflight; ready to launch first-round assignments.
+- 2026-05-27 ~12:55 UTC: initialized ledger after PVC scoring-asset import + passing preflight; ready to launch first-round assignments.
+- 2026-05-27 ~14:45 UTC: round 1 closed at GPU-slot contention (3 students packed in 1 pod, ~25 min wasted on serialization). Six research signals recorded above. No PR met the merge bar (PR #121 D1 full = closest, missing only the student-posted terminal marker). Round 2 deferred to H100 confirmation hardware. Public-reference comparison (1.96x vLLM default on Sc.D, H100) is consistent with our 1.317x on shakedown Blackwell — Sc.D may have less headroom on this hardware than program.md suggests.

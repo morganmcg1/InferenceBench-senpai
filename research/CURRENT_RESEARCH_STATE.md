@@ -1,47 +1,45 @@
 # SENPAI Research State — ib-20260527-guard2-r1
 
-- **Date/time:** 2026-05-27 ~13:43 UTC (round 1 mid-way)
-- **Hardware:** RTX PRO 6000 shakedown (1 GPU shared, ~96GB VRAM). Results NOT leaderboard-comparable until repeated on H100.
-- **Budget remaining:** ~75 min until 14:59 UTC cutoff
-- **Human research team directives:** None
+- **Date/time:** 2026-05-27 14:45 UTC (round 1 closed; KILL_AT 14:57:56Z)
+- **Hardware:** RTX PRO 6000 Blackwell shakedown (1 GPU shared 3-way pod, ~96GB VRAM). Results NOT leaderboard-comparable until repeated on H100.
+- **Budget remaining:** ~12 min until cluster kill — review/cleanup only, no new evals.
+- **Human research team directives:** None received this round.
 
-## Round 1 status
+## Round 1 — final summary
 
-| Student | PR | Scenario | Quick result | Full result | Notes |
-|---------|-----|----------|--------------|-------------|-------|
-| frieren | #119 | A (input-heavy TTFT) | — (blocked on GPU slot 37+ min) | — | Claude iter_13 alive since 13:05:09; no commits/comments. Advisor sent simplification directive: run ONLY A1 once slot frees. |
-| fern | #120 | B (output-heavy TPOT) | B1=1.439x speedup (W&B `ru8ph3t8`) | — | Has been holding GPU slot continuously since ~13:12 (30+ min). Posted B1 quick at 13:22. Advisor sent slot-release directive. |
-| tanjiro | #121 | D (general balanced) | D1 partial (TTFT 0.193s, TPOT 0.0167s, req/s 0.0376; geomean raw 2.27 reported but conc=1) | — | Claude iter_14 alive since 13:05:51, blocked on `gpu_slot.py run --wait` for D1 full eval. |
+| Student | PR | Scenario | Best result | W&B | eval_mode | Quality | Status |
+|---------|----|----------|------------:|-----|-----------|---------|--------|
+| frieren | #119 | A input-heavy TTFT | A1/A3 ≈ 1.29x | `iyb44658`, `g9nnsvx9` | quick only | n=16 noise | research signal |
+| fern    | #120 | B output-heavy TPOT | B2 = **3.508x** | `1uq2xpm4` | quick only | n=16 noise | research signal (highest-value) |
+| tanjiro | #121 | D balanced | D1 = **1.317x** | `s5rqgnoj` | **full n=500** | **0.993 PASS** | mergeable but no terminal marker posted by student |
 
-## Slot contention (operational issue)
+**Zero terminal merges this round.** PR #121 D1 full is technically merge-eligible (`baseline_update_allowed=True`) but the student-posted terminal `SENPAI-RESULT` JSON marker never arrived despite 4 advisor reminders. Per workflow contract advisor cannot merge from prose alone.
 
-The student pod packs 3 students into one container that serializes Claude sessions. Frieren and tanjiro have been blocked inside `gpu_slot.py run --wait` since 13:05; fern has been holding the slot continuously since ~13:12. Only fern has progressed since iter_15 (13:12).
+## What we learned
 
-Mitigation: directed fern to release the slot promptly (#120 comment 4555100125), tanjiro to run D1 full only once acquired (#121 comment 4555100956), and frieren to simplify to A1-only (#119 comment 4555101750). If this doesn't unblock, we will not have terminal Sc.A and Sc.D results this round.
+1. **Sc.D headroom on Blackwell is smaller than program.md suggests.** D1 at 1.317x (full) lags the H100 vLLM-default reference of 1.96x. Either the launcher needs more aggressive tuning, or this hardware has different tradeoffs than H100.
+2. **n-gram speculative decoding is the most promising Sc.B lever.** B2 quick 3.508x is a ~2.4x improvement over B1's 1.439x — speculation pays off at long single-stream outputs. But quality at quick-eval (n=16) is too noisy to confirm; needs full-eval validation.
+3. **Sc.D + spec decode breaks quality.** D3 quick shows 1.667x speed but quality looks degraded (low MMLU even adjusted for quick-noise). Spec decode may interact badly with Sc.D's burst-concurrency profile.
+4. **Chunked-prefill knob is a no-op on Sc.A on Blackwell.** A1 (bt=16384) and A3 (no chunked prefill) tied at ~1.29x quick. The vLLM default's chunked-prefill behavior is already near-optimal for the 8192-token input profile here.
+5. **3-students-per-pod serialization cost 25-30 min of the 2h budget.** Student Claude sessions block on `gpu_slot.py run --wait`. Fern held the slot continuously from 13:12 onward; tanjiro and frieren made no progress until ~13:45. Future rounds with multi-student pods need a slot-rotation policy enforced in the wrapper or assignments, not just advisor nudges.
 
-## Decisions and decision tree
+## Operational issues to fix before next round
 
-- Accept fern B1 (1.439x) as the round-1 baseline candidate for Sc.B if no better arm lands by cutoff.
-- For terminal merging, ALL of these must hold per `senpai/validate_result.py`: `validation_pass=true`, `baseline_update_allowed=true`, quality gate ≥ 0.95, real full-eval W&B run ID, exact launcher captured.
-- If only quick-eval partials are available at cutoff, no PR can merge as a winner. Document them in `BASELINE.md` as research signals only.
-- Round 2 is unlikely given current contention. Focus on getting at least one clean terminal result.
+- **Slot rotation:** add a hard rotation rule into `gpu_slot.py` or the entrypoint so a single student cannot hold the slot for >12 min before yielding to the next waiter.
+- **Marker enforcement:** when a student's full eval passes in W&B (`baseline_update_allowed=True`), the student-loop should auto-post the terminal `SENPAI-RESULT` marker rather than waiting for the student's Claude session to do it manually. Tanjiro's D1 full result almost certainly would have merged with auto-posting.
+- **Quick-eval quality signal:** n=16 MMLU is too noisy (all 6 quick arms reported 0.25 raw / 0.839 ratio identical). Either drop the quality column from quick-eval reporting or add a "noise floor" annotation so the advisor doesn't read into it.
 
-## Round-1 hypotheses (recap)
+## Round-2 plan (for H100 confirmation hardware)
 
-- **Frieren/Sc.A:** Default vLLM only 1.25x on input-heavy because chunked prefill chunks are too small. A1 = `--max-num-batched-tokens 16384`. Expected 2-4x if it can run.
-- **Fern/Sc.B:** Default vLLM 2.25x on output-heavy. CUDA graphs + small max_num_seqs (B1) already at 1.439x quick; n-gram spec decode (B2/B3) on top could compound. Expected 5-10x with spec decode if it runs.
-- **Tanjiro/Sc.D:** Mixed profile at conc=4. D1 balanced chunked prefill (8192 batched tokens) — quick at conc=1 not representative.
+1. **Sc.B priority:** rerun B2 (n-gram 5,4) AND B3 (n-gram 7,5) as full evals — confirm 3.5x+ on H100. Add B-CUDA-graph-tuned baseline arm for ablation.
+2. **Sc.D:** rerun D1 full eval as baseline reference, then try D2 (bt=16384, max-num-seqs=64) which we didn't have time to run. Investigate why D3 spec decode degrades quality.
+3. **Sc.A:** since chunked-prefill is a no-op on Blackwell, prioritize the A2 (bt=32768) arm on H100 — large VRAM budget may finally move the needle. Also try CUDA-graph-tuned single-stream arm.
+4. **Sc.C:** unexplored this round; needs a fresh assignment.
 
-## Potential next research directions (round 2+ if time)
-
-1. Sc.A with very large chunked prefill (32768 batched tokens) — leveraging 96GB VRAM.
-2. SGLang for Sc.A or Sc.C — diversify engine families.
-3. Cross-scenario confirmation runs on winning Sc.B launcher.
-4. Aggressive `--gpu-memory-utilization 0.94` on shakedown hardware.
-
-## Constraints
+## Constraints (still active)
 
 - All results shakedown only until H100 repeat.
 - FP8 KV + FlashAttention broken on this hardware; do not assign.
 - FlashInfer disabled by `runtime_env.sh`.
 - 1 GPU shared 3 ways = strict slot serialization is mandatory.
+- Per the launch isolation rules: only operate on `ib-20260527-guard2-r1` and the three named student branches (frieren/fern/tanjiro). Do not borrow from other branches or unrelated runs.
