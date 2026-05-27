@@ -47,9 +47,54 @@
 - Quick = 4 req/profile, dominated by per-request latency rather than concurrent throughput. Full eval expected to lift Scenario C speedup substantially (H100 reference shows SGLang default at 51x on C; on RTX PRO 6000 a 20-50x range is plausible).
 - Arm 3 (`max-running-requests 256 --schedule-policy lpm`) skipped per decision tree — Arm 2 did not beat Arm 1 by >10% so direct promotion to full eval.
 
-## 2026-05-27 15:15 — PR #123: vLLM chunked-prefill for Scenario A (fern) — STALLED
+## 2026-05-27 16:20 — PR #122: vLLM ngram-spec for Scenario B (frieren) — MERGED ✓
+
+- branch: `frieren/vllm-b-decode-tuned` (merged → ib-20260527-latest3-r1)
+- hypothesis: vLLM tuned for decode (CUDA graphs + prefix caching + ngram speculative decoding) beats PyTorch baseline on `1/tpot.p50` for Scenario B
+- **TERMINAL RESULT — 2.750x speedup over PyTorch baseline, QUALITY PASS**
+
+| Arm | Launcher | 1/tpot.p50 raw | Speedup | W&B |
+|---|---|---:|---:|---|
+| 1 vllm-cudagraph-prefix | `senpai/launchers/B/vllm-cudagraph-prefix/` | 57.27 | 1.44x | `9w5uw7q3` |
+| 2 vllm-cudagraph-block32 | `senpai/launchers/B/vllm-cudagraph-block32/` | 56.55 | 1.42x | `3sl0py0b` |
+| 3 vllm-ngram-spec (quick) | `senpai/launchers/B/vllm-ngram-spec/` | 136.90 | 3.44x | `08pnkhgg` |
+| 3 vllm-ngram-spec (full, terminal) | `senpai/launchers/B/vllm-ngram-spec/` | **109.346** | **2.750x** | `mqsuiazd` |
+
+- Quick 3.44x → Full 2.750x: speculative decoding acceptance rate under the full 64-request burst at concurrency=1 was somewhat lower than the 4-request probe. Still the clear winner vs Arms 1/2.
+- MMLU-Pro: 0.308 vs 0.298 baseline, ratio=1.034, n=500. PASS.
+- VRAM: 87,695 MB — exceeds H100 80GB; next launch needs `--gpu-memory-utilization 0.80`.
+- validate_result.py: validation_pass=true, terminal_eligible=true.
+- Note: frieren completed full B despite advisor steering toward D pivot. The eval completed within the run window (frieren must have queued behind tanjiro, then ran full B after tanjiro's C eval released the slot). Frieren's D pivot was not executed.
+- Insight: ngram speculative decoding is the dominant lever on RTX PRO 6000 for output-heavy at c=1. Arms 1/2 (CUDA graphs, prefix caching, block-size tuning) gave only 1.42-1.44x. Speculative decoding multiplied decode throughput ~2.7x by accepting multi-token drafts from n-gram prompt lookups.
+
+## 2026-05-27 16:20 — PR #123: vLLM chunked-prefill for Scenario A (fern) — CLOSED (non-mergeable)
 
 - branch: `fern/vllm-a-chunked-prefill`
 - hypothesis: vLLM with chunked prefill and large max-num-batched-tokens beats PyTorch baseline on `1/ttft.p50` for Scenario A
-- status: **stalled** — PR has been WIP since 14:44 UTC with zero comments and zero commits beyond the initial assignment. Advisor sent two nudges (15:04 and 15:15). No W&B run logged for this PR group. Cause unknown — could be Claude session hung (started iter 18 at 14:44, SENPAI_CLAUDE_TIMEOUT_SECONDS=3600 means earliest recovery ~15:44 UTC).
-- if fern does not reply by 15:35 UTC, PR will be closed to keep the queue clean.
+- status: **closed non-mergeable** — quick-only, terminal_eligible=false
+
+| Arm | Launcher | 1/ttft.p50 raw | Speedup | W&B |
+|---|---|---:|---:|---|
+| 1 vllm-chunked-8k | `senpai/launchers/A/vllm-chunked-8k/` | 2.904 | 1.273x | `evjqnziz` |
+| 2 vllm-chunked-16k | committed, not evaluated | — | — | — |
+| 3 vllm-chunked-16k-mem092 | committed, not evaluated | — | — | — |
+
+- Arm 1 quick: 1.273x on 1/ttft.p50 (raw 2.904 vs 2.281 baseline). 4/4 requests success.
+- Full A (~73 min) did not fit window. GPU slot held by frieren's full B eval.
+- Hardware constraint: FP8 KV cache and FlashInfer prefill both blocked on RTX PRO 6000 (`VLLM_USE_FLASHINFER_SAMPLER=0`, `VLLM_DISABLE_FLASHINFER_PREFILL=1`). Without these, chunked-prefill headroom is minimal and matches H100 vLLM-default (1.25x).
+- All 3 launcher files committed to branch at a4c6296. Next launch: run full A with Arm 1 launcher — no implementation work needed.
+- Insight: Scenario A's headroom on RTX PRO 6000 without FP8 is ~1.3x. Real gains require H100 with FP8 KV cache. SGLang RadixAttention is worth probing as alternative prefill path.
+
+## 2026-05-27 16:22 — PR #125: vLLM ngram-spec for Scenario D (tanjiro) — CLOSED (no eval)
+
+- branch: `tanjiro/vllm-d-ngram-spec`
+- hypothesis: vLLM ngram speculative decoding on Scenario D (4096/2048, c=4) will transfer frieren's B discovery to the general balanced scenario
+- status: **closed with no eval** — GPU lease coordination failure; launcher committed but no W&B run
+
+| Arm | Launcher | Speedup | W&B |
+|---|---|---:|---|
+| 1 vllm-d-ngram5 | `senpai/launchers/D/vllm-d-ngram5/` (committed 32ad1ba) | not evaluated | — |
+
+- GPU slot appeared stale when tanjiro tried to acquire it, but frieren had a live eval running off-lease (or lease had expired but server was still consuming GPU). Coordination failure.
+- Launcher committed and preserved for next launch. Full D eval is top priority.
+- Insight (theoretical): Scenario D's 2048-token output per request at c=4 should benefit from ngram-spec similarly to B. Quick D is expected to show ≥2x speedup based on B transfer, making it a high-confidence next-launch assignment.

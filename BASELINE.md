@@ -38,9 +38,19 @@ For direction only. RTX PRO 6000 shakedown numbers are not leaderboard-comparabl
 | Scenario | Speedup over PyTorch | Launcher | W&B run | PR |
 |---|---:|---|---|---|
 | A | — | none | — | — |
-| B | — | none | — | — |
+| B | **2.750x** | `senpai/launchers/B/vllm-ngram-spec/start_server.sh` | `mqsuiazd` | #122 (merged) |
 | C | **22.48x** | `senpai/launchers/C/sglang-mem085-mrr128/start_server.sh` | `v478wci3` | #124 (merged) |
 | D | — | none | — | — |
+
+**B terminal metrics (RTX PRO 6000 seed248):**
+- 1/tpot.p50: 109.346 (PyTorch 39.757 → **2.750x**)
+- tpot.p50: 0.009145s, tpot.p90: 0.014295s, tpot.p99: 0.057638s
+- generation_throughput: 104.96 tok/s (PyTorch 39.19 → 2.68x)
+- quality: PASS — mmlu_pro 0.308 vs 0.298 baseline, ratio 1.034, n=500
+- VRAM peak: 87,695 MB — exceeds H100 80GB; adjust `--gpu-memory-utilization 0.80` for H100
+- 64/64 requests, 0 failures
+- engine: vLLM, ngram speculative decoding `num_spec=5, prompt_lookup_min=2, max=4`; CUDA graphs ON, prefix-caching ON, max-num-seqs=8, kv-cache-dtype auto
+- validate_result.py: validation_pass=true, terminal_eligible=true
 
 **C terminal metrics (RTX PRO 6000 seed248):**
 - geomean req/s: 1.9041 (PyTorch 0.0847 → 22.48x)
@@ -55,10 +65,8 @@ For direction only. RTX PRO 6000 shakedown numbers are not leaderboard-comparabl
 
 | Scenario | Quick speedup | Arm | PR | W&B | Notes |
 |---|---:|---|---|---|---|
-| B | **3.44x** | `vllm-ngram-spec` (Arm 1 + ngram speculative `num_spec=5`, `prompt_lookup_min=2`, `max=4`) | #122 frieren | `08pnkhgg` | Quick=4 burst requests; effective gen ~125 tok/s; CUDA graphs ON, prefix caching ON, max-num-seqs=8. Full B (~65 min) unlikely to fit remaining window after tanjiro's full C. |
+| A | **1.273x** | `vllm-chunked-8k` (chunked prefill, max-num-batched-tokens 8192, prefix caching) | #123 fern | `evjqnziz` | Quick=4 burst requests. Full A (~73 min) did not fit window. GPU slot held by frieren full B eval. FP8/FlashInfer unavailable on RTX PRO 6000. Launcher committed: `senpai/launchers/A/vllm-chunked-8k/start_server.sh`. Next launch: run full A with same launcher. |
 | C | 4.01x | `sglang-mem085-mrr128` (quick only) | #124 (merged) | `7ccdxfhz` | Quick now superseded by terminal 22.48x full result. |
-| B | 1.44x | `vllm-cudagraph-prefix` | #122 frieren | `9w5uw7q3` | Arm 1, baseline. Modest gain over vLLM defaults since CUDA graphs were already on. |
-| B | 1.42x | `vllm-cudagraph-block32` | #122 frieren | `3sl0py0b` | Arm 2 flat vs Arm 1; block-size 32 + smaller max-num-batched-tokens not useful at c=1. |
 | C | 3.97x | `sglang-default` | #124 tanjiro | `csj0gqi4` | Arm 1, SGLang Triton attention backend, default knobs after libnuma1/libnuma-dev system install. |
 
 ## Failed Launches / Dead Ends
@@ -70,3 +78,5 @@ For direction only. RTX PRO 6000 shakedown numbers are not leaderboard-comparabl
 - 2026-05-27 14:35 — initial ledger created. Preflight PASS for RTX PRO 6000 seed248 scoring assets. Starting search from vLLM default launcher.
 - 2026-05-27 15:15 — round 1 quick partials logged. frieren ngram-spec hits 3.44x quick on B (big win). tanjiro SGLang hits 4.01x quick on C (full-eval-bound). fern PR #123 silent since 14:44, second nudge sent.
 - 2026-05-27 15:30 — **C WINNER MERGED** PR #124 tanjiro: SGLang sglang-mem085-mrr128 at **22.48x** speedup on C (full eval, quality PASS, validate_result PASS). Tanjiro now idle; new assignment pending. fern woke up, Arm 1 quick A = 1.273x; proceeding to Arm 2. frieren Arm 3 ngram-spec quick 3.44x on B; steering to D pivot.
+- 2026-05-27 16:20 — **B WINNER MERGED** PR #122 frieren: vLLM ngram-spec (num_spec=5) at **2.750x** speedup on B (full eval, 64/64 requests, quality PASS mmlu_pro 1.034 ratio, validate_result PASS). Despite being initially told not to run full B, frieren completed the full eval by acquiring the GPU slot. Note: 87.7 GB VRAM peak exceeds H100 80GB; needs `--gpu-memory-utilization 0.80` adjustment for H100.
+- 2026-05-27 16:22 — **END OF LAUNCH** ib-20260527-latest3-r1 closed. Final state: B and C have terminal merged winners. A has launcher committed (quick 1.273x, non-mergeable). D launcher committed (no eval ran — GPU lease coordination issue). Recommended priorities for next launch: (1) full A eval with existing launcher, (2) Scenario D ngram-spec full eval from tanjiro's PR #125 launcher, (3) push B further with EAGLE/MTP draft model speculation or 4-bit quantization.
