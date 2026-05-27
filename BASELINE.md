@@ -39,17 +39,24 @@ For direction only. RTX PRO 6000 shakedown numbers are not leaderboard-comparabl
 |---|---:|---|---|---|
 | A | — | none | — | — |
 | B | — | none | — | — |
-| C | — | none | — | — |
+| C | **22.48x** | `senpai/launchers/C/sglang-mem085-mrr128/start_server.sh` | `v478wci3` | #124 (merged) |
 | D | — | none | — | — |
 
-No terminal full-eval winners yet on this advisor branch.
+**C terminal metrics (RTX PRO 6000 seed248):**
+- geomean req/s: 1.9041 (PyTorch 0.0847 → 22.48x)
+- per profile: burst 2.780 req/s, poisson 2.004 req/s, constant 1.239 req/s
+- quality: PASS — mmlu_pro 0.314 vs 0.298 baseline, ratio 1.054, n=500
+- VRAM peak: 84,285 MB — fits H100 80GB with margin at 0.85 mem-fraction-static
+- 768/768 requests, 0 failures
+- engine: SGLang 0.5.9, `--attention-backend triton --mem-fraction-static 0.85 --max-running-requests 128 --chunked-prefill-size 8192 --schedule-policy fcfs`
+- validate_result.py: validation_pass=true, baseline_update_allowed=true
 
 ## Provisional / Quick / Unconfirmed Candidates
 
 | Scenario | Quick speedup | Arm | PR | W&B | Notes |
 |---|---:|---|---|---|---|
 | B | **3.44x** | `vllm-ngram-spec` (Arm 1 + ngram speculative `num_spec=5`, `prompt_lookup_min=2`, `max=4`) | #122 frieren | `08pnkhgg` | Quick=4 burst requests; effective gen ~125 tok/s; CUDA graphs ON, prefix caching ON, max-num-seqs=8. Full B (~65 min) unlikely to fit remaining window after tanjiro's full C. |
-| C | 4.01x | `sglang-mem085-mrr128` (`--mem-fraction-static 0.85 --max-running-requests 128 --chunked-prefill-size 8192 --schedule-policy fcfs --attention-backend triton`) | #124 tanjiro | `7ccdxfhz` | Quick=4 req/profile dramatically under-samples C's high-concurrency profiles; full C expected to be much higher. Promoted to full eval. |
+| C | 4.01x | `sglang-mem085-mrr128` (quick only) | #124 (merged) | `7ccdxfhz` | Quick now superseded by terminal 22.48x full result. |
 | B | 1.44x | `vllm-cudagraph-prefix` | #122 frieren | `9w5uw7q3` | Arm 1, baseline. Modest gain over vLLM defaults since CUDA graphs were already on. |
 | B | 1.42x | `vllm-cudagraph-block32` | #122 frieren | `3sl0py0b` | Arm 2 flat vs Arm 1; block-size 32 + smaller max-num-batched-tokens not useful at c=1. |
 | C | 3.97x | `sglang-default` | #124 tanjiro | `csj0gqi4` | Arm 1, SGLang Triton attention backend, default knobs after libnuma1/libnuma-dev system install. |
@@ -62,3 +69,4 @@ No terminal full-eval winners yet on this advisor branch.
 
 - 2026-05-27 14:35 — initial ledger created. Preflight PASS for RTX PRO 6000 seed248 scoring assets. Starting search from vLLM default launcher.
 - 2026-05-27 15:15 — round 1 quick partials logged. frieren ngram-spec hits 3.44x quick on B (big win). tanjiro SGLang hits 4.01x quick on C (full-eval-bound). fern PR #123 silent since 14:44, second nudge sent.
+- 2026-05-27 15:30 — **C WINNER MERGED** PR #124 tanjiro: SGLang sglang-mem085-mrr128 at **22.48x** speedup on C (full eval, quality PASS, validate_result PASS). Tanjiro now idle; new assignment pending. fern woke up, Arm 1 quick A = 1.273x; proceeding to Arm 2. frieren Arm 3 ngram-spec quick 3.44x on B; steering to D pivot.
