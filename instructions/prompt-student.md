@@ -133,7 +133,7 @@ Default to a quick-only wrapper first:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
-  --wait --ttl-s 1800 --min-remaining-s 900 \
+  --wait --mode quick --ttl-s 1800 --min-remaining-s 900 \
   --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
   bash -lc '
     set -euo pipefail
@@ -159,7 +159,7 @@ work:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
-  --wait --ttl-s 3600 --min-remaining-s 1800 \
+  --wait --mode full --ttl-s 3600 --min-remaining-s 1800 \
   --owner "$STUDENT_NAME" --pr "<assigned-pr>" --scenario <A|B|C|D> -- \
   bash -lc '
     set -euo pipefail
@@ -292,6 +292,12 @@ python "$PROBLEM_DIR/senpai/validate_result.py" metrics_full.json \
   --wandb-run-id "<run-id-from-log-command>" \
   --launcher ./start_server.sh \
   --require-launcher
+python "$PROBLEM_DIR/senpai/finalize_result.py" metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id "<run-id-from-log-command>" \
+  --launcher ./start_server.sh \
+  --post-to-pr --repo "$GITHUB_REPOSITORY" --pr "<assigned-pr>"
 ```
 
 For current RTX PRO 6000 shakedown pods, `runtime_env.sh` disables vLLM's
@@ -305,6 +311,9 @@ Quick launch probes may skip quality only when the PR/advisor allows it; final
 terminal results must run quality with the prepared baseline registry.
 Before reporting a winner, confirm that the final `start_server.sh` launches
 cleanly from a fresh shell or supervised `./test_server.sh` run.
+After a full result validates, use `senpai/finalize_result.py` to post the
+terminal marker, mark the PR ready for review, and swap `status:wip` for
+`status:review`. Do not leave a passing full eval waiting on hand-written JSON.
 Do not start a full evaluation if it is likely to finish inside the final
 review window with no time for reporting and advisor merge/update work; post the
 quick result as partial evidence instead.

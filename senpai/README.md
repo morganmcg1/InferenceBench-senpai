@@ -157,7 +157,7 @@ work without adding a separate runner:
 
 ```bash
 python senpai/gpu_slot.py status --json
-python senpai/gpu_slot.py run --wait --ttl-s 1800 \
+python senpai/gpu_slot.py run --wait --mode quick --ttl-s 1800 \
   --min-remaining-s 900 \
   --owner "$STUDENT_NAME" --pr 123 --scenario C -- \
   bash -lc 'cd /tmp/inferencebench-C/task && source ./eval_env.sh && ./clean_eval_artifacts.sh && ./test_server.sh > agent/server.log 2>&1 & server_pid=$!; trap "kill $server_pid 2>/dev/null || true" EXIT; python evaluate.py --quick --json-output-file metrics_quick.json'
@@ -172,6 +172,9 @@ the lease, refuses to acquire a free-looking slot when `nvidia-smi` still shows
 unleased compute processes, and terminates the command process group if the
 lease is lost. This prevents accidental overlapping full workloads while
 preserving the official `test_server.sh` plus `evaluate.py` evaluation path.
+Use `--mode quick` for screening probes and `--mode full` for confirmation
+runs. Quick mode caps runtime/TTL at 15 minutes; full mode caps runtime/TTL at
+60 minutes.
 
 During search, keep quick and full evaluation as separate slot acquisitions.
 Quick probes should return control so the student can preserve the result,
@@ -188,8 +191,10 @@ finish too late to report and review.
 
 Use `summarize_metrics.py` and `log_metrics_to_wandb.py` for both quick and
 full results. The emitted `SENPAI-RESULT` includes `eval_mode`,
-`terminal_eligible`, and `baseline_update_allowed`; quick probes should have
-`terminal=false,pending_arms=true` and must not update `BASELINE.md`.
+`result_kind`, `quality_evidence`, `terminal_eligible`, and
+`baseline_update_allowed`; quick probes should have
+`result_kind=research_signal`, `terminal=false,pending_arms=true`, and must not
+update `BASELINE.md`.
 
 Before merging a terminal serving PR or updating a current-best baseline row,
 run:
@@ -201,6 +206,18 @@ python senpai/validate_result.py metrics_full.json \
   --wandb-run-id "<run-id>" \
   --launcher ./start_server.sh \
   --require-launcher
+```
+
+For passing full results, use the finalizer to post the exact terminal marker
+and move the PR to review:
+
+```bash
+python senpai/finalize_result.py metrics_full.json \
+  --scenario A \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id "<run-id>" \
+  --launcher ./start_server.sh \
+  --post-to-pr --repo "$GITHUB_REPOSITORY" --pr "<pr-number>"
 ```
 
 Treat any validation failure as provisional evidence, not a benchmark win.

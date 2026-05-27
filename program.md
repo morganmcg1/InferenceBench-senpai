@@ -314,6 +314,10 @@ that output is for human debugging, not a stable machine interface. If
 `status --json` reports active GPU compute processes without a matching lease,
 resolve the orphan before starting a new full workload.
 
+Use `--mode quick` for screening probes and `--mode full` for confirmation
+runs. Quick mode caps a slot at 15 minutes and full mode caps it at 60 minutes,
+which prevents one student from silently consuming the whole shared-GPU round.
+
 When the cutoff time is known, set `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass
 `--deadline-utc` to `gpu_slot.py`, and use `--min-remaining-s` for any full
 evaluation. The slot helper should refuse work that cannot plausibly finish,
@@ -402,6 +406,21 @@ The validator must print `validation_pass=true` and
 `baseline_update_allowed=true`. Quick results, skipped quality, partial request
 counts, missing PyTorch baselines, missing W&B run IDs, and failed quality gates
 are research signals only; keep them out of the terminal current-best rows.
+
+For valid full results, prefer the mechanical finalizer over hand-written PR
+comments:
+
+```bash
+python senpai/finalize_result.py metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id <run-id> \
+  --launcher ./start_server.sh \
+  --post-to-pr --repo "$GITHUB_REPOSITORY" --pr <pr-number>
+```
+
+This posts the exact terminal `SENPAI-RESULT`, marks the PR ready for review,
+and swaps `status:wip` for `status:review` only after validation passes.
 
 ## Metrics And Telemetry
 
@@ -522,14 +541,16 @@ discipline and measurement guidance, not as a mandate to write custom kernels.
 Student result comments must include a single-line marker:
 
 ```markdown
-SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0},"eval_mode":{"name":"full"},"terminal_eligible":true,"baseline_update_allowed":true}
+SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0},"eval_mode":{"name":"full"},"result_kind":"terminal_candidate","quality_evidence":"full_quality_gate","terminal_eligible":true,"baseline_update_allowed":true}
 ```
 
 Partial quick-probe comments should use the same marker with
-`"terminal":false` and `"pending_arms":true`. They are steering signals, not
-mergeable winners. If the PyTorch baseline was available and the helper
-computed a speedup, the partial metric may be a speedup; otherwise use the raw
-metric name and state that the result is non-terminal.
+`"terminal":false`, `"pending_arms":true`,
+`"result_kind":"research_signal"`, and `"quality_evidence":"screening_only"`.
+They are steering signals, not mergeable winners. If the PyTorch baseline was
+available and the helper computed a speedup, the partial metric may be a
+speedup; otherwise use the raw metric name and state that the result is
+non-terminal.
 
 Use the appropriate primary metric name:
 

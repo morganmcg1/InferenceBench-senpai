@@ -7,7 +7,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from senpai import create_task_workspace, gpu_slot, materialize_requests, preflight, summarize_metrics, validate_result
+from senpai import (
+    create_task_workspace,
+    finalize_result,
+    gpu_slot,
+    materialize_requests,
+    preflight,
+    summarize_metrics,
+    validate_result,
+)
 
 
 def test_tokenized_length_handles_batchencoding_like_dict() -> None:
@@ -183,6 +191,8 @@ def test_summarize_marks_quick_results_ineligible(tmp_path: Path) -> None:
     assert result["eval_mode"]["name"] == "quick"
     assert result["terminal_eligible"] is False
     assert result["baseline_update_allowed"] is False
+    assert result["result_kind"] == "research_signal"
+    assert result["quality_evidence"] == "screening_only"
     assert any("eval_mode" in issue for issue in result["terminal_eligibility_issues"])
 
 
@@ -222,6 +232,47 @@ def test_validate_result_accepts_full_terminal_metrics(tmp_path: Path) -> None:
 
     assert result["validation_pass"] is True
     assert result["baseline_update_allowed"] is True
+    assert result["result_kind"] == "terminal_candidate"
+    assert result["quality_evidence"] == "full_quality_gate"
+
+
+def test_finalize_result_builds_terminal_comment(tmp_path: Path) -> None:
+    metrics = tmp_path / "metrics_full.json"
+    metrics.write_text(
+        '{"scenario":"A","profiles":{"burst":{"request_count":128,"success_count":128,'
+        '"failure_count":0,"failure_rate":0.0,"ttft":{"p50":2.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}},"quality_check":{"pass":true,'
+        '"datasets":{"mmlu_pro":{"observed_accuracy":0.5,"baseline_accuracy":0.5,'
+        '"ratio":1.0,"n":500}}}}',
+        encoding="utf-8",
+    )
+    baseline = tmp_path / "baseline_metrics.json"
+    baseline.write_text(
+        '{"baseline":{"profiles":{"burst":{"ttft":{"p50":4.0},"tpot":{"p50":1.0},'
+        '"request_throughput_req_per_s":1.0}}}}',
+        encoding="utf-8",
+    )
+    launcher = tmp_path / "start_server.sh"
+    launcher.write_text("#!/usr/bin/env bash\nexec python -m vllm.entrypoints.openai.api_server\n", encoding="utf-8")
+    args = argparse.Namespace(
+        metrics_json=str(metrics),
+        scenario="A",
+        baseline_metrics_json=str(baseline),
+        baseline_primary=None,
+        wandb_run_id=["abc123"],
+        max_failure_rate=0.0,
+        require_wandb=True,
+        require_launcher=True,
+        launcher=str(launcher),
+    )
+
+    result = finalize_result.finalize(args)
+    body = finalize_result.comment_body(result, str(launcher))
+
+    assert result["validation_pass"] is True
+    assert body.startswith("SENPAI-RESULT: ")
+    assert '"baseline_update_allowed":true' in body
+    assert "status:review" not in body
 
 
 def test_validate_result_rejects_quick_metrics(tmp_path: Path) -> None:
@@ -282,6 +333,58 @@ def test_gpu_slot_acquire_release(tmp_path: Path) -> None:
 
     assert gpu_slot.heartbeat(path, "student-a", pr="123", ttl_s=120) is True
     assert gpu_slot.release(path, "student-a", pr="123") is True
+    assert gpu_slot.read_lease(path) is None
+
+
+def test_gpu_slot_quick_mode_caps_lease_policy(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+
+    class Args:
+        owner = "student-a"
+        pr = "123"
+        scenario = "B"
+        purpose = "quick"
+        mode = "quick"
+        ttl_s = 1800
+        max_runtime_s = None
+        min_remaining_s = 0
+        wait = False
+        wait_timeout_s = None
+        poll_s = 1
+        ignore_active_gpu = False
+        replace_existing = False
+
+    lease = gpu_slot.acquire(path, Args())
+
+    assert lease["mode"] == "quick"
+    assert lease["ttl_s"] == 900
+    assert lease["min_remaining_s"] == 900
+    assert lease["max_runtime_s"] == 900
+
+
+def test_gpu_slot_run_enforces_runtime_limit(tmp_path: Path) -> None:
+    path = tmp_path / "slot.json"
+    args = argparse.Namespace(
+        slot_file=str(path),
+        owner="student-a",
+        pr="123",
+        scenario="B",
+        purpose="test",
+        mode="custom",
+        ttl_s=60,
+        max_runtime_s=1,
+        min_remaining_s=0,
+        wait=False,
+        wait_timeout_s=None,
+        poll_s=1,
+        ignore_active_gpu=True,
+        replace_existing=False,
+        deadline_utc=None,
+        deadline_epoch=None,
+        command=[sys.executable, "-c", "import time; time.sleep(30)"],
+    )
+
+    assert gpu_slot.cmd_run(args) == gpu_slot.RUNTIME_LIMIT_EXIT
     assert gpu_slot.read_lease(path) is None
 
 

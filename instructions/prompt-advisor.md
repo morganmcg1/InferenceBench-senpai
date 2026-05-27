@@ -204,9 +204,12 @@ For shared-pod runs, establish a machine-readable GPU slot at the start of the
 run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status --json` and ask students to
 wrap heavy server/evaluator commands with one `gpu_slot.py run --wait` command
 so ownership, PR, scenario, TTL, and release are visible without relying on
-comment timing alone. The helper now refuses to acquire a free-looking slot when
-`nvidia-smi` reports unleased GPU compute processes; treat that as an orphaned
-server/evaluator that needs cleanup before the next measurement.
+comment timing alone. Require `--mode quick` for screening probes and
+`--mode full` for confirmation runs; these modes cap shared-GPU occupancy and
+force students back to the coordination loop. The helper also refuses to acquire
+a free-looking slot when `nvidia-smi` reports unleased GPU compute processes;
+treat that as an orphaned server/evaluator that needs cleanup before the next
+measurement.
 
 When the cutoff time is known, export it as
 `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass `--deadline-utc` to `gpu_slot.py`.
@@ -269,6 +272,11 @@ Only `validation_pass=true` and `baseline_update_allowed=true` can update the
 terminal baseline. Quick-only results, skipped quality, partial request counts,
 missing W&B, or mismatched `SENPAI-RESULT` payloads stay in the quick/provisional
 ledger even if their speedup looks attractive.
+
+If a student's full metrics validate but the PR is still missing the terminal
+marker, tell them to run `senpai/finalize_result.py`, or run it yourself if you
+have the exact metrics path, W&B run id, launcher path, repo, and PR number. Do
+not let a passing full eval remain blocked on hand-written JSON.
 
 Reject `SENPAI-RESULT` payloads where `primary_metric.name` says
 `speedup_over_pytorch` but `primary_metric.value` is actually a raw objective.

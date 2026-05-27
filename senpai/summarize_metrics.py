@@ -156,6 +156,21 @@ def eligibility_issues(
     return issues
 
 
+def result_kind(mode: dict[str, Any], issues: list[str]) -> str:
+    if not issues:
+        return "terminal_candidate"
+    if mode.get("name") == "quick":
+        return "research_signal"
+    return "invalid_terminal_candidate"
+
+
+def quality_evidence(quality: dict[str, Any]) -> str:
+    qn = quality.get("quality_sample_n")
+    if isinstance(qn, (int, float)) and int(qn) >= FULL_QUALITY_N:
+        return "full_quality_gate"
+    return "screening_only"
+
+
 def _load_metrics(path: str) -> dict[str, Any]:
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if not isinstance(data, dict):
@@ -224,6 +239,8 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
     result["terminal_eligible"] = not issues
     result["baseline_update_allowed"] = not issues
     result["terminal_eligibility_issues"] = issues
+    result["result_kind"] = result_kind(mode, issues)
+    result["quality_evidence"] = quality_evidence(quality)
     return result
 
 

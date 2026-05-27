@@ -22,6 +22,12 @@ from typing import Any, Iterator
 
 DEFAULT_SLOT_FILE = "/tmp/inferencebench-gpu-slot.json"
 LOST_LEASE_EXIT = 75
+RUNTIME_LIMIT_EXIT = 124
+
+MODE_DEFAULTS = {
+    "quick": {"ttl_s": 900, "min_remaining_s": 900, "max_runtime_s": 900},
+    "full": {"ttl_s": 3600, "min_remaining_s": 1800, "max_runtime_s": 3600},
+}
 
 
 def now() -> float:
@@ -66,6 +72,28 @@ def deadline_epoch(args: argparse.Namespace) -> float | None:
         if parsed is not None:
             return parsed
     return None
+
+
+def apply_slot_policy(args: argparse.Namespace) -> None:
+    mode = str(getattr(args, "mode", None) or "custom").lower()
+    if mode not in {"custom", "quick", "full"}:
+        raise SystemExit(f"unknown GPU slot mode: {mode}")
+    args.mode = mode
+
+    ttl_s = int(getattr(args, "ttl_s", None) or 1800)
+    min_remaining_s = int(getattr(args, "min_remaining_s", None) or 0)
+    max_runtime_s = getattr(args, "max_runtime_s", None)
+    max_runtime = int(max_runtime_s) if max_runtime_s is not None else None
+
+    defaults = MODE_DEFAULTS.get(mode)
+    if defaults:
+        ttl_s = min(ttl_s, defaults["ttl_s"])
+        min_remaining_s = max(min_remaining_s, defaults["min_remaining_s"])
+        max_runtime = defaults["max_runtime_s"] if max_runtime is None else min(max_runtime, defaults["max_runtime_s"])
+
+    args.ttl_s = ttl_s
+    args.min_remaining_s = min_remaining_s
+    args.max_runtime_s = max_runtime
 
 
 def deadline_issue(args: argparse.Namespace) -> str | None:
@@ -194,6 +222,7 @@ def build_lease(args: argparse.Namespace, command: list[str] | None = None) -> d
         "pid": os.getpid(),
         "host": socket.gethostname(),
         "command": command or [],
+        "mode": getattr(args, "mode", "custom"),
         "created_at": started,
         "created_at_utc": utc(started),
         "updated_at": started,
@@ -203,10 +232,12 @@ def build_lease(args: argparse.Namespace, command: list[str] | None = None) -> d
         "expires_at_utc": utc(started + args.ttl_s),
         "run_deadline_utc": utc(deadline) if deadline is not None else None,
         "min_remaining_s": int(getattr(args, "min_remaining_s", 0) or 0),
+        "max_runtime_s": getattr(args, "max_runtime_s", None),
     }
 
 
 def acquire(path: Path, args: argparse.Namespace, command: list[str] | None = None) -> dict[str, Any]:
+    apply_slot_policy(args)
     issue = deadline_issue(args)
     if issue:
         raise SystemExit(issue)
@@ -406,6 +437,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         previous_handlers[signum] = signal.getsignal(signum)
         signal.signal(signum, handle_signal)
 
+    runtime_deadline = None
+    if args.max_runtime_s is not None:
+        runtime_deadline = now() + int(args.max_runtime_s)
+
     try:
         proc = subprocess.Popen(args.command, env=child_env, start_new_session=True)
         while proc.poll() is None:
@@ -413,6 +448,15 @@ def cmd_run(args: argparse.Namespace) -> int:
                 print("lost GPU slot lease; terminating command process group", file=sys.stderr, flush=True)
                 terminate_process_group(proc.pid, proc, grace_s=5)
                 return LOST_LEASE_EXIT
+            if runtime_deadline is not None and now() >= runtime_deadline:
+                print(
+                    f"GPU slot {args.mode} runtime limit reached after {args.max_runtime_s}s; "
+                    "terminating command process group",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                terminate_process_group(proc.pid, proc, grace_s=5)
+                return RUNTIME_LIMIT_EXIT
             time.sleep(1)
         return int(proc.returncode)
     finally:
@@ -442,7 +486,18 @@ def add_owner_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--pr", help="PR number or branch for this lease")
     parser.add_argument("--scenario", help="Scenario A, B, C, or D")
     parser.add_argument("--purpose", default="benchmark", help="Short purpose shown in status")
-    parser.add_argument("--ttl-s", type=int, default=1800, help="Lease TTL refreshed by heartbeat/run")
+    parser.add_argument(
+        "--mode",
+        choices=("custom", "quick", "full"),
+        default=os.environ.get("INFERENCE_BENCH_GPU_SLOT_MODE", "custom"),
+        help="Lease policy: quick caps runtime/TTL at 15m, full at 60m, custom uses explicit values",
+    )
+    parser.add_argument("--ttl-s", type=int, default=None, help="Lease TTL refreshed by heartbeat/run")
+    parser.add_argument(
+        "--max-runtime-s",
+        type=int,
+        help="Hard wall-clock limit for run commands; quick/full modes set safe defaults",
+    )
     parser.add_argument(
         "--deadline-utc",
         help="Optional UTC cutoff time; refuses new work when too little time remains",
