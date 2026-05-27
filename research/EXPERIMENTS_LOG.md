@@ -16,6 +16,22 @@
 - Quick mode = 4 burst requests; full B would take ~65 min at the Arm 3 effective gen rate (~125 tok/s). Tanjiro's full C is using the GPU first, so full B likely will not fit the remaining run window.
 - Suggested follow-up: confirm Arm 3 in a follow-up launch with a clean full eval; try `num_speculative_tokens=7` to see if more draft tokens help.
 
+## 2026-05-27 15:30 — PR #124: SGLang throughput-tuned for Scenario C (tanjiro) — MERGED ✓
+
+- branch: `tanjiro/sglang-c-throughput` (merged → ib-20260527-latest3-r1)
+- hypothesis: SGLang with mem-fraction-static 0.85 and max-running-requests 128 beats vLLM defaults on Scenario C
+- **TERMINAL RESULT — 22.48x speedup over PyTorch baseline, QUALITY PASS**
+
+| Arm | Speedup (full eval) | W&B |
+|---|---:|---|
+| 2 sglang-mem085-mrr128 (terminal) | **22.48x** | `v478wci3` |
+
+- Per-profile: burst 2.780 req/s, poisson 2.004 req/s, constant 1.239 req/s, geomean=1.9041
+- MMLU-Pro: 0.314 vs 0.298, ratio=1.054, n=500. PASS.
+- VRAM: 84,285 MB. validate_result.py: validation_pass=true, baseline_update_allowed=true.
+- Insight: quick mode (4 req/profile) dramatically under-samples high-concurrency profiles — 3.97x quick vs 22.48x full. Quick mode for C is only useful for launch-failure screening, not speedup estimation.
+- Launcher: `senpai/launchers/C/sglang-mem085-mrr128/start_server.sh` (merged). SGLang 0.5.9 with triton attention backend. Note: requires `libnuma1 libnuma-dev` apt packages for `sgl_kernel` import on Ubuntu 22.04 + SM120 GPU.
+
 ## 2026-05-27 15:15 — PR #124: SGLang throughput-tuned for Scenario C (tanjiro)
 
 - branch: `tanjiro/sglang-c-throughput`
