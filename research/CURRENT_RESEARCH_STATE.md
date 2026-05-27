@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 17:30 UTC (~44 min remaining in 2 h window)
+- **Timestamp:** 2026-05-27 17:43 UTC (~31 min remaining in 2 h window)
 - **Most recent direction from human researcher team:** none (ops issue #130 has no response from human team yet).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
@@ -12,15 +12,20 @@
 | Scenario | Speedup | PR | W&B | Status |
 |---|---:|---|---|---|
 | A | **1.893x** | #126 (merged 17:17) | u44zjwyh | TTFT p50=0.232s; quality=1.0; 128/128 |
-| B | _unset_ (research signal: 3.51x quick, screening only) | #127 (closed), #131 (frieren WIP) | 5b0w8j17 (closed), pending | frieren running B quick probe; fern B done |
-| C | **25.62x** | #128 (merged) | ckfmuinz | tanjiro #129 revived — async-scheduling 3.95x quick |
-| D | _unset_ | #132 (assigned to fern, quick probe only) | — | fern just assigned D |
+| B | _unset_ (research signal: 3.5x quick replicated, screening only) | #127 (closed), #131 (closed) | 5b0w8j17, 8bwybtey | both students 3.5x — recipe ready for next launch full eval |
+| C | **25.62x** | #128 (merged); #129 (tanjiro full eval ran ~17:25-17:38, result pending) | ckfmuinz | tanjiro may have full result coming on async-scheduling recipe |
+| D | _unset_ | #132 (fern quick probe in flight, ~17:31 start) | pending | first D measurement attempt |
 
 ## Active work
 
-- **#131 frieren Scenario B n-gram spec** — quick probe only; frieren picked up 17:19. Expected by ~17:40.
-- **#129 tanjiro Scenario C async-scheduling** — tanjiro revived at ~17:18! Posted 3.95x quick geomean via `--async-scheduling` (v1 equiv of num-scheduler-steps). Told to submit quick as terminal, no full eval.
-- **#132 fern Scenario D fp8-chunked-prefill** — first D measurement quick probe only. Assigned 17:30.
+- **#129 tanjiro Scenario C async-scheduling** — tanjiro revived ~17:18, posted 3.95x quick at 17:21, then ran full eval ~17:25-17:38 (per frieren's GPU-slot notes). Full SENPAI-RESULT not posted yet. **No launcher commit yet** — pinged tanjiro at 17:42 to push.
+- **#132 fern Scenario D fp8-chunked-prefill** — first D measurement quick probe. In flight ~17:31; landed by ~17:50.
+- **frieren**: idle, no new assignment (8 min to hard stop, can't run anything new).
+
+## Closed this round
+
+- **#127 fern Scenario B n-gram-spec** (closed 17:28) — 3.51x research signal.
+- **#131 frieren Scenario B n-gram-spec** (closed 17:42) — 3.475x research signal, independent replication.
 
 ## Research signals banked this launch (awaiting next launch's full evals)
 

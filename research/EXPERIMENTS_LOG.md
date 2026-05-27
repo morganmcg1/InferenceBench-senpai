@@ -117,3 +117,43 @@ Scenario B is output-heavy (64 requests, c=1, 1K input, 8K output). TPOT is the 
 
 1. **Full eval of `B/ngram-spec/start_server.sh`** (BF16 + ngram k=5, gpu-mem-util=0.75) — should pass quality and yield first measured Scenario B baseline.
 2. **`num_speculative_tokens` sweep** {3, 5, 7} after BF16 base lands.
+
+---
+
+## 2026-05-27 17:41 — PR #131: Scenario B — n-gram spec + FP8 (frieren replication, research signal)
+
+- Branch: `frieren/scenario-b-ngram-spec-fp8`
+- Student: frieren
+- Status: **CLOSED — research signal, terminal_eligible=false (n=6 quick)**
+
+### Hypothesis
+
+Replicate fern's PR #127 n-gram speculative decoding finding from a second student / second GPU slot to confirm reproducibility.
+
+### Results
+
+| Metric | Value | PyTorch baseline | Speedup |
+|---|---:|---:|---:|
+| TPOT p50 | 0.00724 s | 0.02515 s | **3.475x** |
+| TPOT p90 | 0.00988 s | 0.0512 s | 5.18x |
+| TPOT p99 | 0.01065 s | 0.2894 s | 27.17x (small-n) |
+| TTFT p50 | 0.0454 s | 0.0709 s | 1.56x |
+| ITL p50 | 0.01282 s | 0.0146 s | 1.14x |
+| Gen throughput tok/s | 131.02 | 39.19 | 3.34x |
+| Quality (n=6) | 0.167 | 0.298 | 0.559 ratio (n=6 noise) |
+
+- W&B run: 8bwybtey
+- Speed measured on n=6 burst requests (frieren limited to fit GPU slot during contention).
+- VRAM 87.97 GB — matches fern's 87.5 GB (same launcher).
+
+### Analysis
+
+- **Independent replication confirmed**: two students, two GPU slots, two runs → 3.51x (fern) and 3.475x (frieren) on Scenario B n-gram-spec. The n-gram speculative decoding recipe is reliable on this hardware.
+- Estimated mean accepted draft length: ITL/TPOT ≈ 1.77 tokens per server round-trip. Useful for tuning `num_speculative_tokens` next launch.
+- Same closing reasoning as #127: screening-only quality, terminal_eligible=false. Recipe queued for full eval.
+
+### Suggested follow-ups (banked)
+
+1. Same as #127's queue — full eval with BF16 + ngram k=5 + gpu-mem-util=0.75 next launch.
+2. Frieren proposed a `num_speculative_tokens ∈ {3,5,7,9}` × `prompt_lookup_max ∈ {3,4,5,6}` sweep — high-value HPO direction.
+3. EAGLE-style draft model speculation as a higher-acceptance follow-up (requires draft checkpoint).
