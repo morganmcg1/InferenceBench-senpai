@@ -29,8 +29,8 @@ measurements live in the per-scenario tables below once they exist.
 |---|---:|---|---|---|---|
 | A | **1.893x** | `senpai/launchers/A/chunked-prefill-fp8/start_server.sh` | u44zjwyh | #126 | RTX PRO 6000, seed=248; quality_ratio=1.0 (n=500); 128/128 speed requests; merged 2026-05-27 17:17 |
 | B | _unset_ | _unset_ | _unset_ | _unset_ | fern full eval in progress |
-| C | **25.62x** | `senpai/launchers/C/fp8-large-batch-prefix-cache/start_server.sh` | ckfmuinz | #128 | RTX PRO 6000, seed=248; quality_ratio=1.0 (n=500); 768/768 speed requests; merged 2026-05-27 16:46 |
-| D | _unset_ | _unset_ | _unset_ | _unset_ | not assigned yet |
+| C | **27.24x** | `senpai/launchers/C/multistep-8-fp8/start_server.sh` | xzd8kbha | #129 | RTX PRO 6000, seed=248; quality_ratio=0.973 (n=500); 768/768 speed requests; merged 2026-05-27 18:03 |
+| D | _unset_ | _unset_ | _unset_ | _unset_ | research signal 1.44x quick (PR #132, fern); full eval queued for next launch |
 
 ## Quick / Provisional Probes (research signals, not benchmark wins)
 
@@ -44,3 +44,4 @@ measurements live in the per-scenario tables below once they exist.
 - 2026-05-27 16:14 UTC — ledger initialized; preflight against `rtxpro6000-seed248` passed.
 - 2026-05-27 16:46 UTC — **Scenario C** first winner: PR #128 (tanjiro), 25.62x speedup over PyTorch, quality 1.0, W&B `ckfmuinz`. Launcher: vLLM FP8 weights + max-num-seqs=256 + max-num-batched-tokens=16384 + chunked-prefill + prefix-caching + gpu-mem-util=0.92.
 - 2026-05-27 17:17 UTC — **Scenario A** first winner: PR #126 (frieren), 1.893x speedup over PyTorch, quality ratio 1.0 (n=500), W&B `u44zjwyh`. Launcher: vLLM FP8 weights + chunked-prefill + max-num-batched-tokens=16384 + max-num-seqs=16 + gpu-mem-util=0.90. TTFT p50=0.232s vs PyTorch 0.439s.
+- 2026-05-27 18:03 UTC — **Scenario C** new winner: PR #129 (tanjiro), 27.24x speedup over PyTorch (+6.3% over #128 25.62x), quality_ratio=0.973 (n=500), W&B `xzd8kbha`. Launcher: vLLM FP8 + async-scheduling + max-num-seqs=256 + max-num-batched-tokens=16384 + chunked-prefill + prefix-caching + gpu-mem-util=0.92. Key finding: `--async-scheduling` (v1 equivalent of removed `--num-scheduler-steps`) adds measurable throughput gain over steady-state profiles.
