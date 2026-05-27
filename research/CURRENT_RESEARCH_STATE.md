@@ -1,7 +1,7 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 17:19 UTC (~55 min remaining in 2 h window)
-- **Most recent direction from human researcher team:** none (no open issues from the human team; I filed ops issue #130 at 17:09 to surface the silent-student situation).
+- **Timestamp:** 2026-05-27 17:30 UTC (~44 min remaining in 2 h window)
+- **Most recent direction from human researcher team:** none (ops issue #130 has no response from human team yet).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
   - 3 students (frieren, fern, tanjiro) sharing 1 RTX PRO 6000.
@@ -12,15 +12,27 @@
 | Scenario | Speedup | PR | W&B | Status |
 |---|---:|---|---|---|
 | A | **1.893x** | #126 (merged 17:17) | u44zjwyh | TTFT p50=0.232s; quality=1.0; 128/128 |
-| B | _unset_ | #131 (assigned to frieren, quick probe only) | — | frieren running n-gram spec decoding probe |
-| C | **25.62x** | #128 (merged) | ckfmuinz | first row; tanjiro #129 stalled |
-| D | _unset_ | _unassigned_ | — | not on the slate this run |
+| B | _unset_ (research signal: 3.51x quick, screening only) | #127 (closed), #131 (frieren WIP) | 5b0w8j17 (closed), pending | frieren running B quick probe; fern B done |
+| C | **25.62x** | #128 (merged) | ckfmuinz | tanjiro #129 revived — async-scheduling 3.95x quick |
+| D | _unset_ | #132 (assigned to fern, quick probe only) | — | fern just assigned D |
 
 ## Active work
 
-- **#131 frieren Scenario B n-gram spec decoding** — quick probe only (HARD LIMIT: no full eval, time constraint). Will establish first Scenario B measurement on RTX PRO 6000. Assigned 17:19.
-- **#129 tanjiro Scenario C multi-step scheduler** — tanjiro container silent since 16:50:17; no work started.
-- **#127 fern Scenario B n-gram spec** — fern container silent since 16:22:24; no work started.
+- **#131 frieren Scenario B n-gram spec** — quick probe only; frieren picked up 17:19. Expected by ~17:40.
+- **#129 tanjiro Scenario C async-scheduling** — tanjiro revived at ~17:18! Posted 3.95x quick geomean via `--async-scheduling` (v1 equiv of num-scheduler-steps). Told to submit quick as terminal, no full eval.
+- **#132 fern Scenario D fp8-chunked-prefill** — first D measurement quick probe only. Assigned 17:30.
+
+## Research signals banked this launch (awaiting next launch's full evals)
+
+- **Scenario B (BF16 + n-gram k=5)**: 3.51x TPOT speedup quick (n=4 speed, n=16 quality). FP8 weights dominated here — drop FP8, use BF16 + ngram. Recommend full eval with gpu-mem-util=0.75 next launch.
+- **Scenario C (async-scheduling over #128 recipe)**: 3.95x quick geomean. The 2.76x→25.62x amplification precedent from #128 suggests full eval could be significantly higher. High priority for next launch.
+
+## Key lessons banked
+
+- FP8 weights: quality-safe on A (ratio=1.0) and C (ratio=1.0); quality-risky on B (0.629 screening, dominates no speed gain). Do NOT use FP8 on decode-heavy workloads.
+- N-gram spec decoding: `--speculative-config '{"method":"ngram",...}'` JSON form works in vLLM 0.11.0 v1 on RTX PRO 6000. 3.5x TPOT at c=1 output-heavy.
+- `--num-scheduler-steps` was removed in vLLM v1. Use `--async-scheduling` instead on v1.
+- VRAM 88-90 GiB at gpu-mem-util=0.90 exceeds H100 80 GB envelope — reduce to 0.75 for portability.
 
 ## Operational issues
 
@@ -30,10 +42,10 @@
 
 ## Remaining decision points (sequenced by clock)
 
-1. When frieren's #131 quick probe lands (~17:35-17:45): validate the result and merge the PR as a research signal — no full eval needed.
-2. If fern or tanjiro container revives before 17:50: a quick probe is feasible; direct them to their current open PR (fern → #127 Scenario B base, tanjiro → #129 Scenario C multi-step). No full eval.
-3. **Hard stop at 17:50** — do not start any new evaluation of any kind after 17:50 UTC.
-4. 17:50-18:14: finalize, commit final state, ensure all advisors docs are current.
+1. **~17:35-17:45**: #131 (frieren B quick) and #132 (fern D quick) expected to land. Review as research signals.
+2. **~17:35-17:45**: #129 (tanjiro C async-scheduling) may post terminal quick. Review as research signal; do NOT merge without terminal quality gate.
+3. **Hard stop 17:50**: No new eval may be started after 17:50 UTC.
+4. **17:50-18:14**: Finalize all docs, commit updated CURRENT_RESEARCH_STATE and EXPERIMENTS_LOG, ensure BASELINE.md is accurate.
 
 ## Lessons being banked
 

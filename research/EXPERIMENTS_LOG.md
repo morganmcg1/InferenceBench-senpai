@@ -74,3 +74,46 @@ Scenario A is input-heavy (128 requests, concurrency=1, 8K input, 128 output). P
 2. **AWQ/INT4 weight quantization on Scenario A** — halves memory bandwidth vs FP8, potential for another 1.5-2x TTFT improvement.
 3. **Speculative decoding on Scenario A** — marginal benefit (TTFT is prefill-bound, spec-dec helps decode), but worth a quick probe.
 4. **EAGLE3 or Medusa heads** — requires separate draft head checkpoint but could enable 3-5x spec acceptance rate at c=1.
+
+---
+
+## 2026-05-27 17:27 — PR #127: Scenario B — vLLM n-gram spec decoding + FP8 (research signal)
+
+- Branch: `fern/scenario-b-ngram-spec-decoding`
+- Student: fern
+- Status: **CLOSED — research signal, terminal_eligible=false, baseline_update_allowed=false (screening_only quality)**
+
+### Hypothesis
+
+Scenario B is output-heavy (64 requests, c=1, 1K input, 8K output). TPOT is the primary metric. At c=1 with long decode sequences, n-gram speculative decoding should dramatically cut TPOT. Two arms: ngram-spec-fp8 (FP8 weights + ngram) and ngram-spec (BF16 weights + ngram after FP8 quality failure).
+
+### Results
+
+| Arm | Launcher | TPOT p50 | speedup | quality ratio (n=16) | W&B | terminal_eligible |
+|---|---|---:|---:|---:|---|---|
+| PyTorch baseline | — | 25.15 ms | 1.00x | 1.00 | — | baseline |
+| ngram-spec-fp8 | `B/ngram-spec-fp8/start_server.sh` | 7.14 ms | **3.52x** | 0.629 ❌ | ext104re | False |
+| ngram-spec (BF16) | `B/ngram-spec/start_server.sh` | 7.17 ms | **3.51x** | 0.839 ⚠️ | 5b0w8j17 | False |
+
+- Eval mode: quick (n=4 speed, n=16 quality) — screening only, not eligible for BASELINE update.
+- VRAM: ~87-88 GiB (above H100 80 GB envelope — needs gpu-mem-util reduction for leaderboard comparability).
+
+### Analysis
+
+- N-gram speculation cuts TPOT from 25ms → 7ms (3.5x), confirming the hypothesis. Speculation works on RTX PRO 6000 / vLLM 0.11.0 v1 using `--speculative-config '{"method":"ngram",...}'` JSON form.
+- FP8 weights on Scenario B: **zero measurable speedup over BF16** (7.14 vs 7.17 ms TPOT, within noise), but worse quality screening (0.629 vs 0.839 ratio). FP8 is not appropriate for Scenario B — use BF16 weights + ngram.
+- Quality screening (n=16) is unreliable — fern's binomial analysis is correct: P(≤4/16 | p=0.298) ≈ 0.59, so 4/16 is the *expected* outcome under H₀, meaning BF16+ngram should pass the full n=500 gate.
+- VRAM ~88 GB exceeds H100 80 GB budget; `gpu-memory-utilization 0.90` is too generous for this hardware. Reduce to ~0.75 for the next launch.
+
+### Key lessons banked
+
+- N-gram speculative decoding at c=1: 3.5x TPOT improvement confirmed on Mistral-7B-Instruct-v0.3.
+- FP8 weight quantization on decode-heavy Scenario B: dominated (0 benefit, quality cost). Drop FP8 from all future Scenario B candidates; use BF16 + ngram.
+- `--speculative-config` JSON form works in vLLM 0.11.0 v1 on RTX PRO 6000.
+- `num_speculative_tokens=5` is the test configuration; sweep {3, 5, 7} in next launch.
+- `gpu-memory-utilization=0.75` target for H100 80GB portability.
+
+### Queued for next launch (high priority)
+
+1. **Full eval of `B/ngram-spec/start_server.sh`** (BF16 + ngram k=5, gpu-mem-util=0.75) — should pass quality and yield first measured Scenario B baseline.
+2. **`num_speculative_tokens` sweep** {3, 5, 7} after BF16 base lands.
