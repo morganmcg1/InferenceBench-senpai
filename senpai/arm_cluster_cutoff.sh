@@ -201,7 +201,7 @@ import subprocess
 import sys
 
 data = json.load(sys.stdin)
-needle = f"Waiting for Senpai start gate: {os.environ['START_GATE_PATH']}"
+needle = f"Waiting for Senpai start gate: {os.environ[\"START_GATE_PATH\"]}"
 namespace = os.environ.get("NAMESPACE", "default")
 count = 0
 for item in data.get("items", []):
