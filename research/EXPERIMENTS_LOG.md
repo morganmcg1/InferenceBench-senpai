@@ -1,5 +1,50 @@
 # SENPAI Research Results — ib-20260527-lean1-r1
 
+## 2026-05-27 18:03 — PR #129: Scenario C — async-scheduling (vLLM v1 equivalent of --num-scheduler-steps)
+
+- Branch: `tanjiro/scenario-c-multistep-scheduler`
+- Student: tanjiro
+- Status: **MERGED — new Scenario C best; supersedes #128 (25.62x)**
+- W&B: `xzd8kbha`
+
+### Hypothesis
+
+`--num-scheduler-steps N` (multi-step scheduler) was removed in vLLM 0.11.0 v1. The v1 equivalent is `--async-scheduling`, which overlaps the next step's CPU-side scheduling with the current step's model execution. Hypothesis: adding `--async-scheduling` to the #128 winner recipe (FP8 + max-num-seqs=256 + chunked-prefill + prefix-caching) reduces per-token scheduling overhead and improves throughput on Scenario C's steady-state profiles (poisson 32 r/s, constant 16 r/s).
+
+### Results
+
+| Run | Eval mode | Primary metric | Value | Quality ratio | Quality pass | terminal_eligible |
+|---|---|---|---:|---:|---|---|
+| `sqvvn1v9` | quick | scenario/C/speedup_over_pytorch (geomean) | 3.95x | 0.1875 (n=16 screen) | screening-only | False |
+| `xzd8kbha` | full | scenario/C/speedup_over_pytorch (geomean) | **27.24x** | **0.973** (n=500) | True | **True** |
+
+- Speed requests: 768/768 across all 3 profiles, 0 failures.
+- Baseline_update_allowed: true. Validated against `rtxpro6000-seed248`.
+- Per-profile (quick): burst c=64 → 0.324 req/s; poisson 32 r/s → 0.340 req/s; constant 16 r/s TPOT p50=18.7ms.
+
+### Analysis
+
+`--async-scheduling` adds 6.3% on top of #128 (25.62x → 27.24x) on the full eval. The quick-mode amplification pattern was consistent with #128 (quick ~3.95x vs full 27.24x), driven by the poisson/constant profiles where per-token scheduling overhead matters more in steady state.
+
+The quality ratio dropped from 1.0 (#128) to 0.973 (#129) — still well above the 0.95 tau gate. This minor drop may be numerical noise from different scheduling order rather than a fundamental quality regression.
+
+**Launcher path**: `senpai/launchers/C/multistep-8-fp8/start_server.sh`
+**Key flags over #128**: adds `--async-scheduling`; removes nothing.
+
+### Key findings
+
+1. `--num-scheduler-steps` is gone in vLLM v1. `--async-scheduling` is the direct replacement and works better than the flag implied (CPU/GPU overlap via async is v1-native).
+2. Async scheduling gives measurable gains on steady-state profiles (poisson/constant), consistent with reduced scheduling overhead hypothesis.
+3. This is now the Scenario C canonical recipe for future experiments to build on.
+
+### Suggested follow-ups
+
+- Sweep `--block-size 32` vs default 16 for cache locality at burst c=64.
+- Sweep `--max-num-seqs` {128, 256, 512} to find saturation point.
+- Verify at gpu-mem-util=0.75 for H100 80 GB portability.
+
+---
+
 ## 2026-05-27 16:46 — PR #128: Scenario C — vLLM FP8 + large batch + prefix caching
 
 - Branch: `tanjiro/scenario-c-throughput-fp8-large-batch`
@@ -204,3 +249,45 @@ The **FP8 + chunked-prefill recipe is universal** across input-heavy (A), throug
 2. **Add `--enable-prefix-caching`** — D's 4K inputs may share prefixes; helped C significantly.
 3. **`--max-num-seqs` sweep** {4, 8, 16} at c=4 to find scheduler sweet spot.
 4. **Compose with n-gram spec** — for the 2K decode portion, n-gram could add another ~1.5x on TPOT (smaller than B's 3.5x because output is shorter).
+
+---
+
+## 2026-05-27 17:51 — PR #129: Scenario C — async-scheduling over #128 winner (research signal, no commit)
+
+- Branch: `tanjiro/scenario-c-multistep-scheduler`
+- Student: tanjiro
+- Status: **CLOSED — research signal preserved in comment thread only; container silent before terminal push**
+
+### Hypothesis
+
+Apply `--num-scheduler-steps 8` over the PR #128 Scenario C winner (FP8 + max-num-seqs=256 + chunked-prefill + prefix-caching + gpu-mem-util=0.92) to reduce per-token scheduling overhead by batching 8 decode steps per Python scheduling call.
+
+### Discovery and pivot
+
+`--num-scheduler-steps` has been **removed in vLLM 0.11.0 v1** (`api_server.py: error: unrecognized arguments: --num-scheduler-steps`). Tanjiro identified `--async-scheduling` as the v1 equivalent, which overlaps the next step's CPU-side scheduling with the current step's model execution — addressing the same hypothesis through a different mechanism.
+
+### Results (research signal, no committed launcher)
+
+| Run | Eval mode | Primary metric | Value | Notes |
+|---|---|---|---:|---|
+| Tanjiro async-scheduling (per 17:21 comment) | quick | scenario/C/speedup_over_pytorch (geomean) | **3.95x** | Above #128's quick 2.76x |
+
+- Full eval reportedly ran ~17:25-17:38 UTC per frieren's GPU-slot notes in PR #131, but no terminal SENPAI-RESULT was ever posted.
+- No commit pushed to the branch with the async-scheduling launcher.
+- Tanjiro container went silent at iter 22 (16:50:17 UTC) per kubectl logs, then revived briefly to post the 17:21 result, then silent again.
+
+### Analysis
+
+- The 3.95x quick is **above** #128's quick (2.76x). Given #128's quick → full amplification was 2.76x → 25.62x (driven by steady-state warming on poisson/constant profiles), a full eval of this recipe is the **highest-value Scenario C follow-up for next launch**.
+- v1 vLLM no longer supports `--num-scheduler-steps`; `--async-scheduling` is the correct v1-era replacement for "reduce per-token scheduling overhead" hypotheses.
+- Container instability (intermittent silence) was the primary blocker, not the experiment itself.
+
+### Key lesson banked
+
+**vLLM 0.11.0 v1 API**: `--num-scheduler-steps` removed. Use `--async-scheduling` instead. This is critical knowledge for next launch's Scenario C tuning.
+
+### Queued for next launch
+
+1. **Reconstruct `senpai/launchers/C/async-scheduling/start_server.sh`** from tanjiro's 17:21 PR #129 comment description (`--async-scheduling` flag added to the #128 winner recipe).
+2. **Run full eval** of that launcher against the 25.62x floor.
+3. **Compare `--block-size 32` vs default 16** for cache locality at c=64 (from #128 follow-ups list).

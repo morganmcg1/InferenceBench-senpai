@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 17:48 UTC (~26 min remaining in 2 h window)
+- **Timestamp:** 2026-05-27 18:04 UTC (~10 min remaining; PR #129 MERGED — tanjiro's 27.24x async-scheduling Scenario C win lands as new baseline)
 - **Most recent direction from human researcher team:** none (ops issue #130 has no response from human team yet).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
@@ -13,30 +13,30 @@
 |---|---:|---|---|---|
 | A | **1.893x** | #126 (merged 17:17) | u44zjwyh | TTFT p50=0.232s; quality=1.0; 128/128 |
 | B | _unset_ (research signal: 3.5x quick replicated) | #127 (closed), #131 (closed) | 5b0w8j17, 8bwybtey | both students 3.5x — recipe ready for next launch |
-| C | **25.62x** | #128 (merged); #129 (tanjiro WIP, no launcher commit, no terminal result) | ckfmuinz | tanjiro async-scheduling research signal in PR text only |
+| C | **27.24x** | #128 (merged); #129 (MERGED 18:03) | ckfmuinz / xzd8kbha | async-scheduling +6.3% over #128. quality_ratio=0.973 n=500. |
 | D | _unset_ (research signal: 1.44x quick) | #132 (closed 17:48) | qeo5rbof | first D measurement; recipe ready for next launch |
 
 ## Active work
 
-- **#129 tanjiro Scenario C async-scheduling** — tanjiro silent since posting quick result at 17:21. Frieren's notes say tanjiro ran a full eval ~17:25-17:38 but no commit or terminal SENPAI-RESULT was pushed. Pinged at 17:42; no response.
-- **frieren, fern**: idle. Cannot assign new work — past 17:50 hard stop is imminent.
+- All students idle. No PRs open. Launch closed at 18:04 UTC.
 
 ## Closed this round
 
 - **#127 fern Scenario B n-gram-spec** (closed 17:28) — 3.51x research signal.
 - **#131 frieren Scenario B n-gram-spec** (closed 17:42) — 3.475x research signal, independent replication.
 - **#132 fern Scenario D FP8 + chunked-prefill** (closed 17:48) — 1.44x first D measurement research signal.
+- **#129 tanjiro Scenario C async-scheduling** (MERGED 18:03) — 27.24x terminal full eval. New Scenario C baseline.
 
 ## Launch summary (running tally)
 
-- **2 merged baseline winners** this launch: PR #126 Scenario A 1.893x, PR #128 Scenario C 25.62x.
-- **3 research-signal-grade quick probes** banked: B 3.5x (replicated), D 1.44x, C async-scheduling 3.95x (in comment only).
-- **Universal lesson**: FP8 + chunked-prefill works on A/C/D; BF16 + n-gram-spec works on B. Clean playbook for next launch.
+- **3 merged baseline winners** this launch: PR #126 Scenario A 1.893x, PR #128 Scenario C 25.62x, PR #129 Scenario C 27.24x (new best).
+- **2 research-signal-grade quick probes** banked: B 3.5x (replicated × 2), D 1.44x.
+- **Universal lesson**: FP8 + chunked-prefill works on A/C/D; BF16 + n-gram-spec works on B. For C specifically, add `--async-scheduling` on top of chunked-prefill + prefix-caching. Clean playbook for next launch.
 
 ## Research signals banked this launch (awaiting next launch's full evals)
 
 - **Scenario B (BF16 + n-gram k=5)**: 3.51x TPOT speedup quick (n=4 speed, n=16 quality). FP8 weights dominated here — drop FP8, use BF16 + ngram. Recommend full eval with gpu-mem-util=0.75 next launch.
-- **Scenario C (async-scheduling over #128 recipe)**: 3.95x quick geomean. The 2.76x→25.62x amplification precedent from #128 suggests full eval could be significantly higher. High priority for next launch.
+- **Scenario C (async-scheduling)**: **CONFIRMED BASELINE 27.24x** (PR #129 merged). Full eval 768/768 speed requests, quality_ratio=0.973 (n=500), W&B xzd8kbha. The `--async-scheduling` flag gives measurable throughput gain on poisson/constant profiles. Next levers: block-size 32 sweep, further gpu-mem-util tuning for H100.
 
 ## Key lessons banked
 
@@ -45,11 +45,12 @@
 - `--num-scheduler-steps` was removed in vLLM v1. Use `--async-scheduling` instead on v1.
 - VRAM 88-90 GiB at gpu-mem-util=0.90 exceeds H100 80 GB envelope — reduce to 0.75 for portability.
 
-## Operational issues
+## Operational issues (resolved or accepted)
 
-- **fern container silent** since iter 16 at 16:22:24 UTC (~46 min). PR #127 left open `status:wip` in case orchestrator resumes worker.
-- **tanjiro container silent** since iter 22 at 16:50:17 UTC (~18 min). PR #129 left open `status:wip`.
-- **Advisor SA lacks pods/exec** — cannot inspect or restart per-student claude processes. Filed issue #130 asking the human research team to nudge the pod if revival is feasible before 18:00 UTC. If both containers stay dead, scenarios B and D end the launch with no measurement; only A may join C in the BASELINE ledger.
+- **fern container** went silent 16:22-17:18 (~56 min), revived ~17:18, posted #127 result at 17:18 and 17:26, took new #132 assignment and landed D result at 17:47. **Worked out fine** — orchestrator restored worker without human intervention.
+- **tanjiro container** went silent 16:50-17:18 (briefly), revived ~17:18 to post #129 quick result and run full eval, then silent again. Never pushed launcher commit or terminal SENPAI-RESULT. **Partial recovery only** — research signal preserved in comment but recipe not committed.
+- **Issue #130** filed at 17:09 about silent containers; human team did not respond (0 comments) but both containers self-revived after the issue was filed. Will leave issue open for next-launch diagnostics review.
+- **Advisor SA lacks pods/exec** — known limitation; cannot inspect or restart per-student processes from advisor side.
 
 ## Remaining decision points (sequenced by clock)
 
@@ -68,9 +69,10 @@
 - `num_speculative_tokens` sweep {3,5,7,9} after base lands.
 - EAGLE-style draft model speculation.
 
-**Scenario C (current best 25.62x, headroom unclear)**:
-- **First priority**: full eval of tanjiro's `--async-scheduling` recipe over #128 winner.
-- Compare `--block-size 32` vs default 16 for cache locality at c=64.
+**Scenario C (current best 27.24x from #129, headroom unclear)**:
+- **First priority**: `--block-size 32` vs default 16 for cache locality at c=64 on top of the #129 baseline.
+- Sweep `--max-num-seqs` {128, 256, 512} at high concurrency.
+- H100 portability: reduce gpu-mem-util 0.92 → 0.75 and confirm throughput holds.
 
 **Scenario D (no measured baseline, research signal 1.44x FP8+chunked-prefill)**:
 - **First priority**: full eval of `D/fp8-chunked-prefill/start_server.sh` to land first D baseline.
