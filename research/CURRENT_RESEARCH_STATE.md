@@ -1,6 +1,6 @@
 # SENPAI Research State — ib-20260527-latest3-r1
 
-- **As of:** 2026-05-27 15:30 UTC (55 min into 2h run, ~65 min remaining)
+- **As of:** 2026-05-27 15:58 UTC (83 min into 2h run, ~37 min until 16:35 review cutoff)
 - **Last human directive:** none (no open GitHub Issues from research team)
 
 ## Research focus
@@ -15,13 +15,15 @@ Reference table shows where the headroom lives:
 - **C (high-load):** **MERGED WINNER: SGLang 22.48x** (PR #124). SGLang 0.5.9 with triton backend, mem-fraction-static 0.85, max-running-requests 128.
 - **D (general):** PyTorch 1.0x → vLLM default 1.96x → SMAC3 best 5.69x. Balanced workload. ngram-spec from B transferring here now.
 
-## Current portfolio (as of 15:30 UTC)
+## Current portfolio (as of 15:58 UTC)
 
-One confirmed winner merged. Two D-bound experiments racing for GPU:
+One confirmed winner merged. Three terminal-stage nudges out at 15:57 UTC:
 
-1. **frieren → PR #122 → Scenario D pivot (vLLM ngram-spec)** — Arm 3 ngram-spec hit 3.44x quick on B. Full B doesn't fit (~65 min). Pivoting the same launcher to Scenario D (4096 in / 2048 out / c=4), full D ~26-35 min. Target: ≥2x terminal.
-2. **fern → PR #123 → Scenario A wrap-up** — woke up late; Arm 1 quick = 1.273x. Full A doesn't fit (~73 min). Wrapping up with best quick as terminal-non-mergeable; notes FP8/FlashInfer unavailability as the limiting factor.
-3. **tanjiro → PR #125 → Scenario D (vLLM ngram-spec)** — new assignment adapting frieren's B discovery to D. Racing frieren for GPU slot via gpu_slot.py FCFS.
+1. **frieren → PR #122** — silent since 15:36. Pivot to D was instructed but no W&B group `frieren-vllm-d-ngram` exists yet. GPU shows 96% util / 87GB used (likely a stale loaded server). Asked to either salvage with terminal SENPAI-RESULT (B 3.44x quick, non-mergeable) or post the D quick if pivoted.
+2. **fern → PR #123** — silent since 15:15 (Arm 1 quick 1.273x). Asked to commit launcher and post terminal-non-mergeable now; no Arm 2, no full A.
+3. **tanjiro → PR #125** — claimed GPU lease was held by frieren until 16:44, but `gpu_slot.py status` shows no active lease (slot stale). Asked to retry the GPU acquisition with a short min-remaining-s (10 min). If quick D >=2x AND >=30 min remain, run full D; else commit launcher + terminal-non-mergeable quick.
+
+Latest W&B activity: nothing logged since 15:26 (tanjiro's full C heartbeat). No D group has emerged for either frieren or tanjiro.
 
 ## Coordination
 
