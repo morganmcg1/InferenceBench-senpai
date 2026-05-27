@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 18:04 UTC (~10 min remaining; PR #129 MERGED — tanjiro's 27.24x async-scheduling Scenario C win lands as new baseline)
+- **Timestamp:** 2026-05-27 18:10 UTC (launch ends 18:14; all students idle; no new assignments — T-3.6 min is past T-24 min cutoff for new evals per ops playbook)
 - **Most recent direction from human researcher team:** none (ops issue #130 has no response from human team yet).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
