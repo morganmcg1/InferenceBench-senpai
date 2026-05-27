@@ -46,7 +46,13 @@ No terminal full-eval winners yet on this advisor branch.
 
 ## Provisional / Quick / Unconfirmed Candidates
 
-(none yet)
+| Scenario | Quick speedup | Arm | PR | W&B | Notes |
+|---|---:|---|---|---|---|
+| B | **3.44x** | `vllm-ngram-spec` (Arm 1 + ngram speculative `num_spec=5`, `prompt_lookup_min=2`, `max=4`) | #122 frieren | `08pnkhgg` | Quick=4 burst requests; effective gen ~125 tok/s; CUDA graphs ON, prefix caching ON, max-num-seqs=8. Full B (~65 min) unlikely to fit remaining window after tanjiro's full C. |
+| C | 4.01x | `sglang-mem085-mrr128` (`--mem-fraction-static 0.85 --max-running-requests 128 --chunked-prefill-size 8192 --schedule-policy fcfs --attention-backend triton`) | #124 tanjiro | `7ccdxfhz` | Quick=4 req/profile dramatically under-samples C's high-concurrency profiles; full C expected to be much higher. Promoted to full eval. |
+| B | 1.44x | `vllm-cudagraph-prefix` | #122 frieren | `9w5uw7q3` | Arm 1, baseline. Modest gain over vLLM defaults since CUDA graphs were already on. |
+| B | 1.42x | `vllm-cudagraph-block32` | #122 frieren | `3sl0py0b` | Arm 2 flat vs Arm 1; block-size 32 + smaller max-num-batched-tokens not useful at c=1. |
+| C | 3.97x | `sglang-default` | #124 tanjiro | `csj0gqi4` | Arm 1, SGLang Triton attention backend, default knobs after libnuma1/libnuma-dev system install. |
 
 ## Failed Launches / Dead Ends
 
@@ -54,4 +60,5 @@ No terminal full-eval winners yet on this advisor branch.
 
 ## Update History
 
-- 2026-05-27 — initial ledger created. Preflight PASS for RTX PRO 6000 seed248 scoring assets. Starting search from vLLM default launcher.
+- 2026-05-27 14:35 — initial ledger created. Preflight PASS for RTX PRO 6000 seed248 scoring assets. Starting search from vLLM default launcher.
+- 2026-05-27 15:15 — round 1 quick partials logged. frieren ngram-spec hits 3.44x quick on B (big win). tanjiro SGLang hits 4.01x quick on C (full-eval-bound). fern PR #123 silent since 14:44, second nudge sent.
