@@ -27,16 +27,19 @@ measurements live in the per-scenario tables below once they exist.
 
 | Scenario | Speedup over PyTorch | Launcher | W&B run | PR | Notes |
 |---|---:|---|---|---|---|
-| A | _unset_ | _unset_ | _unset_ | _unset_ | awaiting first valid full eval |
-| B | _unset_ | _unset_ | _unset_ | _unset_ | awaiting first valid full eval |
-| C | _unset_ | _unset_ | _unset_ | _unset_ | awaiting first valid full eval |
-| D | _unset_ | _unset_ | _unset_ | _unset_ | not assigned yet this run |
+| A | _unset_ | _unset_ | _unset_ | _unset_ | frieren full eval in progress |
+| B | _unset_ | _unset_ | _unset_ | _unset_ | fern full eval in progress |
+| C | **25.62x** | `senpai/launchers/C/fp8-large-batch-prefix-cache/start_server.sh` | ckfmuinz | #128 | RTX PRO 6000, seed=248; quality_ratio=1.0 (n=500); 768/768 speed requests; merged 2026-05-27 16:46 |
+| D | _unset_ | _unset_ | _unset_ | _unset_ | not assigned yet |
 
 ## Quick / Provisional Probes (research signals, not benchmark wins)
 
-_(updated as students post `terminal=false` checkpoints)_
+| Student | PR | Scenario | Quick speedup | W&B run | Notes |
+|---|---|---|---:|---|---|
+| frieren | #126 | A | 1.91x | u2dxy31b | chunked prefill + FP8 weights; quality n=16 screen only |
+| tanjiro | #128 | C | 2.76x geomean | ocz25mgd | cold-start burst dominated; steady-state 3.86x; full confirmed |
 
 ## Update History
 
-- 2026-05-27 16:14 UTC — ledger initialized at start of `ib-20260527-lean1-r1` run; preflight against
-  `rtxpro6000-seed248` PVC assets passed.
+- 2026-05-27 16:14 UTC — ledger initialized; preflight against `rtxpro6000-seed248` passed.
+- 2026-05-27 16:46 UTC — **Scenario C** first winner: PR #128 (tanjiro), 25.62x speedup over PyTorch, quality 1.0, W&B `ckfmuinz`. Launcher: vLLM FP8 weights + max-num-seqs=256 + max-num-batched-tokens=16384 + chunked-prefill + prefix-caching + gpu-mem-util=0.92.
