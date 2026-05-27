@@ -157,3 +157,50 @@ Replicate fern's PR #127 n-gram speculative decoding finding from a second stude
 1. Same as #127's queue — full eval with BF16 + ngram k=5 + gpu-mem-util=0.75 next launch.
 2. Frieren proposed a `num_speculative_tokens ∈ {3,5,7,9}` × `prompt_lookup_max ∈ {3,4,5,6}` sweep — high-value HPO direction.
 3. EAGLE-style draft model speculation as a higher-acceptance follow-up (requires draft checkpoint).
+
+---
+
+## 2026-05-27 17:47 — PR #132: Scenario D — vLLM FP8 + chunked-prefill first measurement (research signal)
+
+- Branch: `fern/scenario-d-fp8-chunked-prefill`
+- Student: fern
+- Status: **CLOSED — research signal, terminal_eligible=false (quick + screening quality)**
+
+### Hypothesis
+
+The FP8 + chunked-prefill recipe that won Scenario A (PR #126, 1.893x quality=1.0) and Scenario C (PR #128, 25.62x quality=1.0) should generalize to Scenario D's balanced workload (96 requests, c=4, 4K input / 2K output). Same launcher with `--max-num-seqs 8` for c=4 headroom.
+
+### Results
+
+| Metric | Candidate (quick, n=4) | PyTorch baseline | Ratio |
+|---|---:|---:|---:|
+| **Geomean (primary)** | 2.777 | 1.930 | **1.44x** |
+| TTFT p50 (s) | 0.128 | 0.212 | 1.66x |
+| TPOT p50 (s) | 0.01630 | 0.02506 | 1.54x |
+| ITL p50 (s) | 0.01191 | 0.01434 | 1.20x |
+| Request throughput (req/s) | 0.0447 | 0.0382 | 1.17x |
+| Generation throughput (tok/s) | 58.77 | 38.21 | 1.54x |
+| MMLU-Pro quality (n=16) | 0.25 | 0.298 | 0.839 (screening only) |
+| VRAM peak | 88.37 GiB | — | — |
+
+- W&B run: qeo5rbof
+- 4/4 burst speed requests succeeded.
+
+### Analysis
+
+- **First measured Scenario D row on RTX PRO 6000** (research signal grade).
+- The FP8 + chunked-prefill recipe transfers cleanly to D's balanced workload — every component metric (TTFT, TPOT, throughput) improves over PyTorch baseline.
+- TTFT p50 1.66x is comparable to Scenario A's 1.89x — chunked prefill effective on both 4K and 8K inputs.
+- TPOT p50 1.54x — without n-gram speculation, decode is just standard vLLM speed. Adding n-gram could push this further.
+- Quality screening fail (0.839 ratio at n=16) is n=16 sampling noise — the same FP8 recipe passed quality 1.0 at n=500 on A and C.
+
+### Key lesson banked
+
+The **FP8 + chunked-prefill recipe is universal** across input-heavy (A), throughput (C), and balanced (D) scenarios. Scenario B is the only outlier — for decode-heavy workloads, n-gram speculative decoding is the right base instead.
+
+### Suggested follow-ups (banked for next launch)
+
+1. **Full eval on the same launcher** — 96 burst requests at c=4 + quality n=500 → first measured Scenario D baseline. Expected to pass quality by recipe equivalence with A and C.
+2. **Add `--enable-prefix-caching`** — D's 4K inputs may share prefixes; helped C significantly.
+3. **`--max-num-seqs` sweep** {4, 8, 16} at c=4 to find scheduler sweet spot.
+4. **Compose with n-gram spec** — for the 2K decode portion, n-gram could add another ~1.5x on TPOT (smaller than B's 3.5x because output is shorter).

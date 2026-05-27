@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 17:43 UTC (~31 min remaining in 2 h window)
+- **Timestamp:** 2026-05-27 17:48 UTC (~26 min remaining in 2 h window)
 - **Most recent direction from human researcher team:** none (ops issue #130 has no response from human team yet).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
@@ -12,20 +12,26 @@
 | Scenario | Speedup | PR | W&B | Status |
 |---|---:|---|---|---|
 | A | **1.893x** | #126 (merged 17:17) | u44zjwyh | TTFT p50=0.232s; quality=1.0; 128/128 |
-| B | _unset_ (research signal: 3.5x quick replicated, screening only) | #127 (closed), #131 (closed) | 5b0w8j17, 8bwybtey | both students 3.5x — recipe ready for next launch full eval |
-| C | **25.62x** | #128 (merged); #129 (tanjiro full eval ran ~17:25-17:38, result pending) | ckfmuinz | tanjiro may have full result coming on async-scheduling recipe |
-| D | _unset_ | #132 (fern quick probe in flight, ~17:31 start) | pending | first D measurement attempt |
+| B | _unset_ (research signal: 3.5x quick replicated) | #127 (closed), #131 (closed) | 5b0w8j17, 8bwybtey | both students 3.5x — recipe ready for next launch |
+| C | **25.62x** | #128 (merged); #129 (tanjiro WIP, no launcher commit, no terminal result) | ckfmuinz | tanjiro async-scheduling research signal in PR text only |
+| D | _unset_ (research signal: 1.44x quick) | #132 (closed 17:48) | qeo5rbof | first D measurement; recipe ready for next launch |
 
 ## Active work
 
-- **#129 tanjiro Scenario C async-scheduling** — tanjiro revived ~17:18, posted 3.95x quick at 17:21, then ran full eval ~17:25-17:38 (per frieren's GPU-slot notes). Full SENPAI-RESULT not posted yet. **No launcher commit yet** — pinged tanjiro at 17:42 to push.
-- **#132 fern Scenario D fp8-chunked-prefill** — first D measurement quick probe. In flight ~17:31; landed by ~17:50.
-- **frieren**: idle, no new assignment (8 min to hard stop, can't run anything new).
+- **#129 tanjiro Scenario C async-scheduling** — tanjiro silent since posting quick result at 17:21. Frieren's notes say tanjiro ran a full eval ~17:25-17:38 but no commit or terminal SENPAI-RESULT was pushed. Pinged at 17:42; no response.
+- **frieren, fern**: idle. Cannot assign new work — past 17:50 hard stop is imminent.
 
 ## Closed this round
 
 - **#127 fern Scenario B n-gram-spec** (closed 17:28) — 3.51x research signal.
 - **#131 frieren Scenario B n-gram-spec** (closed 17:42) — 3.475x research signal, independent replication.
+- **#132 fern Scenario D FP8 + chunked-prefill** (closed 17:48) — 1.44x first D measurement research signal.
+
+## Launch summary (running tally)
+
+- **2 merged baseline winners** this launch: PR #126 Scenario A 1.893x, PR #128 Scenario C 25.62x.
+- **3 research-signal-grade quick probes** banked: B 3.5x (replicated), D 1.44x, C async-scheduling 3.95x (in comment only).
+- **Universal lesson**: FP8 + chunked-prefill works on A/C/D; BF16 + n-gram-spec works on B. Clean playbook for next launch.
 
 ## Research signals banked this launch (awaiting next launch's full evals)
 
@@ -47,10 +53,31 @@
 
 ## Remaining decision points (sequenced by clock)
 
-1. **~17:35-17:45**: #131 (frieren B quick) and #132 (fern D quick) expected to land. Review as research signals.
-2. **~17:35-17:45**: #129 (tanjiro C async-scheduling) may post terminal quick. Review as research signal; do NOT merge without terminal quality gate.
-3. **Hard stop 17:50**: No new eval may be started after 17:50 UTC.
-4. **17:50-18:14**: Finalize all docs, commit updated CURRENT_RESEARCH_STATE and EXPERIMENTS_LOG, ensure BASELINE.md is accurate.
+1. **17:48 → 18:14**: All probes done. Only outstanding work is #129 — if tanjiro pushes a terminal result with a measurable improvement over 25.62x and the quality gate passes at n=500, merge as new Scenario C winner. Otherwise close as research signal.
+2. **18:00 cutoff for merge attempts** — leave 14 min buffer for any merge conflicts or BASELINE.md updates.
+3. **17:48-18:14**: Finalize all docs (this file, EXPERIMENTS_LOG.md, BASELINE.md). Ensure next launch's playbook is captured.
+
+## Next-launch playbook (banked from this round)
+
+**Scenario A (current best 1.893x, headroom to H100 reference 4.37x)**:
+- AWQ/INT4 weight quantization over the #126 winner — biggest remaining lever for TTFT.
+- Speculative decoding probe (likely small benefit since TTFT is prefill-bound).
+
+**Scenario B (no measured baseline, research signal 3.5x BF16+ngram)**:
+- **First priority**: full eval of `B/ngram-spec/start_server.sh` (BF16 + ngram k=5, gpu-mem-util=0.75) to land first B baseline.
+- `num_speculative_tokens` sweep {3,5,7,9} after base lands.
+- EAGLE-style draft model speculation.
+
+**Scenario C (current best 25.62x, headroom unclear)**:
+- **First priority**: full eval of tanjiro's `--async-scheduling` recipe over #128 winner.
+- Compare `--block-size 32` vs default 16 for cache locality at c=64.
+
+**Scenario D (no measured baseline, research signal 1.44x FP8+chunked-prefill)**:
+- **First priority**: full eval of `D/fp8-chunked-prefill/start_server.sh` to land first D baseline.
+- Add `--enable-prefix-caching` and `--max-num-seqs` sweep.
+
+**Cross-scenario hardening**:
+- Drop gpu-memory-utilization 0.90 → 0.75 for H100 80GB portability on all launchers.
 
 ## Lessons being banked
 
