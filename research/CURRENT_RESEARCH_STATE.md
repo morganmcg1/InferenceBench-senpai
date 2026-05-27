@@ -1,7 +1,7 @@
 # SENPAI Research State
 
-- **Timestamp:** 2026-05-27 17:00 UTC (~74 min remaining in 2 h window)
-- **Most recent direction from human researcher team:** none (no open issues).
+- **Timestamp:** 2026-05-27 17:10 UTC (~64 min remaining in 2 h window)
+- **Most recent direction from human researcher team:** none (no open issues from the human team; I filed ops issue #130 at 17:09 to surface the silent-student situation).
 - **Run setup:**
   - Tag: `ib-20260527-lean1-r1`
   - 3 students (frieren, fern, tanjiro) sharing 1 RTX PRO 6000.
@@ -11,26 +11,27 @@
 
 | Scenario | Speedup | PR | W&B | Status |
 |---|---:|---|---|---|
-| A | _unset_ | #126 (in flight) | u2dxy31b (quick=1.91x) | frieren full eval running ~16:46–17:35 |
-| B | _unset_ | #127 (stalled) | — | fern pod has not iterated since 16:22:24, PR open but inert |
-| C | **25.62x** | #128 (merged) | ckfmuinz | first row landed; tanjiro #129 chasing higher |
-| D | _unset_ | _unassigned_ | — | not yet on the slate this run |
+| A | _unset_ | #126 (in flight) | u2dxy31b (quick=1.91x) | frieren full eval running, expected ~17:35 |
+| B | _unset_ | #127 (stalled) | — | fern container last heartbeat 16:22:24 (iter 16); silent ~46 min |
+| C | **25.62x** | #128 (merged) | ckfmuinz | first row landed; tanjiro #129 chasing higher but stalled |
+| D | _unset_ | _unassigned_ | — | not on the slate this run |
 
-## Round 2 in progress
+## Round 2 status
 
-- **#129 tanjiro Scenario C multi-step scheduler** — adds `--num-scheduler-steps 8` over the #128 winner recipe; targets 25.62x to improve. Tanjiro will be GPU-queued behind frieren.
-- **#126 frieren Scenario A full eval** — chunked prefill + FP8 weights; quick was 1.91x; full result expected ~17:35.
+- **#126 frieren Scenario A full eval** — alive, GPU 96% / 90 GiB allocated; iter 24 at 17:08:04 UTC. Full result expected ~17:35. Only active student.
+- **#129 tanjiro Scenario C multi-step scheduler** — assigned 16:50; tanjiro container fell silent at iter 22 at 16:50:17 UTC (last heartbeat). No work begun.
 
 ## Operational issues
 
-- **fern pod silent** — senpai-fern container last heartbeat at 16:23, iter 16 in progress. No new iterations for ~37 minutes. PR #127 left open with `status:wip` in case the orchestrator resumes the worker; no further chasing.
+- **fern container silent** since iter 16 at 16:22:24 UTC (~46 min). PR #127 left open `status:wip` in case orchestrator resumes worker.
+- **tanjiro container silent** since iter 22 at 16:50:17 UTC (~18 min). PR #129 left open `status:wip`.
+- **Advisor SA lacks pods/exec** — cannot inspect or restart per-student claude processes. Filed issue #130 asking the human research team to nudge the pod if revival is feasible before 18:00 UTC. If both containers stay dead, scenarios B and D end the launch with no measurement; only A may join C in the BASELINE ledger.
 
 ## Remaining decision points (sequenced by clock)
 
 1. When frieren's #126 full eval lands (~17:35): validate, finalize, and merge if it improves over PyTorch baseline on Scenario A. Update BASELINE.md row A.
-2. After #129 quick probe lands (likely ~17:40 if tanjiro can grab GPU after frieren): decide on full eval. If quick clearly beats 25.62x quick-stage equivalent and quality plausible, promote to full eval (~10 min). Hard stop at 18:00 to leave 14 min for finalization.
-3. If time permits between landings, queue tanjiro a Scenario A or B follow-up using insights from frieren's full result.
-4. Do NOT start any new full eval after 17:50 — too tight for review/merge before the 18:14 cutoff.
+2. If fern or tanjiro container revives, they only have time for a quick probe at best — no full eval after 17:50.
+3. Do NOT start any new full eval after 17:50 — too tight for review/merge before the 18:14 cutoff.
 
 ## Lessons being banked
 
