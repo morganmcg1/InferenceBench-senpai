@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 18:35 UTC
+- **As of:** 2026-05-28 19:10 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,9 +22,9 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #172 | C | SGLang FP8 weights composition on PR #151 winner (3-arm ablation: fp8wt+fp8kv mem0.85, +mem0.92, fp8wt-only BF16KV control) | **quick probes done 18:18 UTC; arm1 full eval running** |
-| frieren | #166 | B | n-gram `prompt_lookup_min=1` sweep — arm1 quick 5.601x (+44%), arm1 full eval running | **full eval in progress since 18:18 UTC, ETA ~19:18 UTC** |
-| tanjiro | #179 | B | FP8 weights composition on PR #149 spec25 winner (3-arm: fp8+spec25, fp8+spec20, fp8+spec30) | **assigned 18:35 UTC** |
+| fern | #172 | C | SGLang FP8 weights composition on PR #151 winner (3-arm ablation: fp8wt+fp8kv mem0.85, +mem0.92, fp8wt-only BF16KV control) | **arm1 full eval running, ETA ~19:20 UTC** |
+| frieren | #180 | A | `--max-num-batched-tokens` sweep beyond 8192 (3-arm: 16384, 32768, 65536) on PR #156 base | **assigned 19:10 UTC** |
+| tanjiro | #179 | B | FP8 weights composition: arm1 fp8+spec25 = 3.856x (tied PR #149), arm2 fp8+spec20 = **7.789x** quick (suspect!), arm3 fp8+spec30 = 5.909x | **arm2 full eval running** |
 
 All 3 student GPUs occupied.
 
@@ -32,6 +32,7 @@ All 3 student GPUs occupied.
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #166 | frieren | B | spec25/min=1: quick 5.601x (+44%), full **3.329x (-14.4%)** | CLOSED — quick→full collapse; rule #17 established |
 | #156 | fern | A | **1.881x** FP8+seqs=1+tok=8192 (+0.78% over 1.866x) | MERGED — new Sc A best |
 | #164 | tanjiro | D | FP8 KV arm1/arm2 -10%, arm3 BF16 control tied 2.208x | CLOSED — did_not_improve; rule #16 established |
 | #173 | tanjiro | D | Prefill scheduling sweep: all arms tied within 0.15%, +0.5-0.6% over PR #152 quick | CLOSED — did_not_improve; Sc D scheduling exhausted |
@@ -71,27 +72,29 @@ All 3 student GPUs occupied.
 
 11. **Sc B spec depth: spec25 = peak.** spec5→15 was +32%; spec15→25 only +9.5%; spec30 saturates. Depth ceiling is output-length-dependent (8192-out Sc B tolerates 25; 2048-out Sc D caps at 10).
 
-12. **Sc A is TTFT-scored only.** N-gram spec improves TPOT -27% but is metric-invisible. All vLLM 0.11 Sc A levers exhausted.
+12. **Sc A is TTFT-scored only.** N-gram spec improves TPOT -27% but is metric-invisible. PR #156 took Sc A to 1.881x with FP8+seqs=1+tok=8192.
+
+13. **Rule #17 — Sc B quick→full mapping UNRELIABLE for n-gram lookup behavior changes** (PR #166: quick 5.601x → full 3.329x, -41% collapse). With `lookup_min=1`, every history token seeds a 25-token speculative branch; at n=4 burst rare lucky matches dominate, at n=128 burst rejected branches dominate. Quality DID absorb the precision loss (ratio 1.054) — only speed mechanism failed. Spec depth changes (PR #149) remain stable quick→full; only lookup_min/max changes shift acceptance rate distributions.
 
 ## Current research focus
 
-**Priority ranking: Sc B (26% of SMAC3 ceiling, biggest gap) > Sc D (39%) > Sc A (42%) > Sc C (59%).**
+**Priority ranking: Sc B (26% of SMAC3 ceiling) > Sc D (39%) > Sc A (42%) > Sc C (59%).**
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B frieren #166 (CRITICAL — arm1 full eval ETA 19:18 UTC):** spec25/lookup12/min=1 quick = **5.601x = +44%** over PR #149. If n=500 quality ≥ 0.95: new Sc B winner at ~5.6x. If fails: falsifies rule #15's output-length insulation implication; fallback arm2 (spec25/lookup15/min=2 = 4.187x = +7.7%).
+1. **Sc B tanjiro #179 (HIGH PRIORITY — arm2 full eval running):** FP8 + spec20/lookup10 quick = **7.789x** (+100% over PR #149!). But rule #17 flags Sc B quick→full unreliability for any change that alters n-gram dynamics; arm2 changes spec depth AND adds FP8 — high risk of quick→full collapse. Quality at n=16 floor (3/16). Full eval will decide. Fallback: arm1 (fp8+spec25 = 3.856x ≈ PR #149, no improvement).
 
-2. **Sc B tanjiro #179 (NEW — assigned 18:35 UTC):** FP8 weights composition on PR #149 spec25 winner. 3-arm: arm1 fp8+spec25 (direct composition), arm2 fp8+spec20 (quality margin), arm3 fp8+spec30 (aggressive). Key test: does FP8 × n-gram compose multiplicatively on Sc B as on Sc D? Untested combination.
+2. **Sc C fern #172 (full eval running ETA ~19:20 UTC):** SGLang FP8 weights + FP8 KV composition. Quick arm1=3.991x, arm3 (FP8wt-only BF16KV control) 4.040x — full eval at 256-conc needed to see real composition benefit.
 
-3. **Sc C fern #172 (full eval running):** SGLang FP8 weights + FP8 KV composition. Quick arm1=3.991x, arm3 (FP8wt-only BF16KV control) 4.040x — full eval needed at 256-conc to see real FP8 KV benefit. Expected: FP8 weights + FP8 KV at high concurrency composes (both bandwidth reductions).
+3. **Sc A frieren #180 (NEW — assigned 19:10 UTC):** `--max-num-batched-tokens` sweep beyond 8192 (16384, 32768, 65536). PR #156's 8192 budget exactly matches Sc A input length — at-the-limit budget may force conservative kernel selection. Pure scheduling/memory tuning, no quality risk.
 
 ### Next experiments (after current round)
 
-1. **Sc A: vLLM 0.12+ per-PR venv** — All vLLM 0.11 levers exhausted. vLLM 0.12 fixes the FlashInfer cascade (potential 20%+ TTFT gain).
+1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed (PR #173). Draft model (if Mistral-compatible checkpoint exists) could push beyond spec10 quality cliff. High-risk high-value.
 
-2. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. Draft model (if Mistral-compatible checkpoint exists) could push beyond spec10 quality cliff. High-risk high-value.
+2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #180 outcome. If batched-tokens push exhausts vLLM 0.11 Sc A levers, vLLM 0.12 unblocks FlashInfer cascade.
 
-3. **Sc B: compound with PR #166 + PR #179** — If both min=1 and FP8 win independently, compose them on the merged winner. Could stack to 5.6x × 1.1x ≈ 6.2x.
+3. **Sc B: compound winners** — If tanjiro #179 arm2 holds at full eval AND fern's Sc C #172 wins, propagate FP8 weights pattern to remaining scenarios. Sc B is the cleanest next target.
 
 ## Operational notes
 

@@ -1,5 +1,43 @@
 # SENPAI Research Results
 
+## 2026-05-28 19:05 UTC — PR #166: Sc B prompt_lookup_min=1 sweep (CLOSED — did_not_improve, quick→full collapse)
+
+- **Branch:** `frieren/sc-b-prompt-lookup-min1`
+- **Student:** frieren
+- **Hypothesis:** PR #149 (Sc B winner, 3.888x) uses `prompt_lookup_min=2`. Lowering to `min=1` permits single-token-context lookups → richer n-gram matching → higher acceptance rate → lower TPOT. Rule #15 (output-length insulation) predicted Sc B's 8192-token decode would absorb the precision loss that broke Sc D at 2048-out.
+
+### Quick-screen (n=4 burst, n=16 quality)
+arm1 (spec25/lookup12/min=1) quick = **5.601x** (+44% over PR #149). Quality 3/16 at floor — diagnosed by student as unreliable signal (binomial SE ~11.5pp at n=16). Advisor approved arm1 full eval.
+
+### Full eval (n=64 burst + n=500 MMLU-Pro)
+
+| Metric | Value | vs PR #149 (3.888x) | Δ |
+|---|---:|---:|---:|
+| **scenario/B/speedup_over_pytorch** | **3.329x** | **3.888x** | **−14.4% ❌** |
+| 1/TPOT.p50 | 132.36 | 154.55 | −14.4% |
+| TPOT.p50 | 0.00755s | 0.00647s | +17% slower |
+| Quality (MMLU-Pro n=500) | 0.314 (ratio 1.054) | 0.298 baseline | **PASSES gate** ✓ |
+| Speed success | 64/64 ✓ | 128/128 ✓ | — |
+| W&B | 0yg6s6c9 | wkedminm | — |
+
+### Analysis
+
+**Quick→full mapping collapsed.** Quick 5.601x → Full 3.329x = -41% relative drop. The opposite direction of the stable +8% quick→full gap observed elsewhere on Sc B.
+
+**Mechanism:** With `lookup_min=1`, every single token in history seeds a 25-token speculative branch. At n=4 burst (3 unique requests per profile), rare lucky matches in the small history dominate. At n=128 burst (32 unique requests per profile), the wasted compute on rejected branches dominates. The n-gram acceptance rate is fundamentally distribution-dependent on the request volume.
+
+**Quality DID absorb the precision loss** (ratio 1.054 — better than PR #149's ratio). But the speed mechanism failed independently of quality.
+
+### New rule (rule #17)
+
+**Sc B quick→full mapping is UNRELIABLE for hyperparameter changes that alter n-gram acceptance rate distributions.** PR #149 (spec depth sweep) showed stable +8% quick→full. PR #166 (lookup_min change) collapsed -41% quick→full. Future Sc B sweeps that alter the n-gram lookup *behavior* (not just spec depth) must validate at full eval before promoting on quick signal. The lookup_min lever is exhausted at min=2.
+
+### Decision
+
+CLOSED — Sc B baseline remains PR #149 at 3.888x. Frieren reassigned to Sc A `--max-num-batched-tokens` sweep on PR #156 base (PR #180).
+
+---
+
 ## 2026-05-28 18:30 UTC — PR #173: Sc D chunked-prefill vs one-shot + batched-tokens sweep (CLOSED — did_not_improve)
 
 - **Branch:** `tanjiro/sc-d-prefill-sweep`
