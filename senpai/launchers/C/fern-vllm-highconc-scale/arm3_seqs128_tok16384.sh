@@ -9,7 +9,7 @@ exec python3 -m vllm.entrypoints.openai.api_server \
   --max-model-len "${MAX_MODEL_LEN}" \
   --gpu-memory-utilization 0.92 \
   --max-num-seqs 128 \
-  --max-num-batched-tokens 8192 \
+  --max-num-batched-tokens 16384 \
   --enable-chunked-prefill \
   --no-enable-prefix-caching \
   --kv-cache-dtype auto \
