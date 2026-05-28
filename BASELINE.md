@@ -31,7 +31,7 @@ baselines):
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
-| **C** | scenario/C/speedup_over_pytorch | **21.052x** | `senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh` | tebmnnza | #140 |
+| **C** | scenario/C/speedup_over_pytorch | **21.098x** | `senpai/launchers/C/fern-vllm-highconc-scale/arm1_seqs128_tok8192.sh` | 2jw0s5lk | #142 |
 | **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
 
 ### Scenario D — current winner (PR #139, merged 2026-05-28) — supersedes PR #138
@@ -50,19 +50,27 @@ baselines):
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 - **Key insight:** FP8 + n-gram compose additively: FP8 attacks the 4096-token prefill stage (TTFT -45%), n-gram attacks the 2048-token decode stage (TPOT -59%). Both levers target independent bottlenecks in balanced Sc D, producing clean multiplicative lift.
 
-### Scenario C — current winner (PR #140, merged 2026-05-28)
+### Scenario C — current winner (PR #142, merged 2026-05-28) — supersedes PR #140
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, BF16 weights, BF16 KV cache (no FP8, no prefix caching)
+- **Key flags:** `--max-num-seqs 128 --max-num-batched-tokens 8192 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
+- **Geomean req/s:** ~1.788 (PyTorch 0.0847) across burst/poisson/constant profiles
+- **Per-profile req/s:** burst 2.618, poisson 1.857, constant 1.175 (all 256/256 ✓)
+- **Speedup:** 21.098x (vs PR #140's 21.052x = +0.22% — confirms seqs=128 is marginally better than seqs=64)
+- **Quality:** MMLU-Pro 0.314 obs / 0.298 baseline = ratio 1.054 (gate 0.95, n=500) ✓
+- **Speed success:** 768/768 (failure_rate 0.0) ✓
+- **VRAM peak:** 90923 MiB / 97887 MiB
+- **W&B run:** 2jw0s5lk
+- **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-vllm-highconc-scale/arm1_seqs128_tok8192.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** +0.22% gain from doubling `max-num-seqs` 64→128 is at the noise floor. The Sc C vLLM concurrency plateau has been reached — quick-probe spread across all 4 arms was <0.8%, and the full eval confirms the architecture is saturated. Next Sc C lever must be at a different level: engine (SGLang, which hits 51.12x on H100), model precision (FP8 KV-cache), or prefill backend.
+
+### Scenario C — prior winner (PR #140, merged 2026-05-28, superseded by PR #142)
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, BF16 weights, BF16 KV cache (no FP8, no prefix caching)
 - **Key flags:** `--max-num-seqs 64 --max-num-batched-tokens 8192 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
-- **Geomean req/s:** 1.783 (PyTorch 0.0847) across burst/poisson/constant profiles
-- **Per-profile req/s:** burst 2.605, poisson 1.854, constant 1.175 (all 256/256 ✓)
 - **Speedup:** 21.052x
-- **Quality:** MMLU-Pro 0.298 obs / 0.298 baseline = ratio 1.000 (gate 0.95, n=500) ✓
-- **Speed success:** 768/768 (failure_rate 0.0) ✓
-- **VRAM peak:** 90815 MiB / 97887 MiB
+- **Quality:** ratio 1.000 (observed 0.298, n=500) ✓
 - **W&B run:** tebmnnza
-- **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
-- **Key insight:** Sc C is KV-cache-memory-bound and scheduler-overhead-bound (not weight-read-bound). FP8 dequant overhead *hurts* (-3.3% vs BF16); prefix caching gives +1% noise. Setting `--max-num-seqs 64` matched to burst concurrency is the key lever; PyTorch at 0.0847 req/s is serialized; vLLM batching 64 concurrent streams achieves 2.60 req/s in burst.
 
 ### Scenario D — prior winner (PR #138, merged 2026-05-28, superseded by PR #139)
 
@@ -159,6 +167,12 @@ research signal only and must not be used to update the current-best row.
   768/768 speed success across burst/poisson/constant profiles. All 4 scenarios
   now have baseline entries. Key insight: Sc C is scheduler-bound (not
   bandwidth-bound), so FP8 hurts; concurrency matching is the main lever.
+- 2026-05-28 13:44 UTC — Merged PR #142 (fern). Scenario C new best:
+  21.098x (vLLM 0.11, BF16, max-num-seqs=128, chunked-prefill at 8192 tokens,
+  no FP8, no prefix caching). Supersedes PR #140 (21.052x, +0.22% gain).
+  Quality ratio 1.054 (observed 0.314, n=500), 768/768 speed success.
+  Delta is at noise floor — Sc C vLLM concurrency scaling saturated.
+  Next lever: SGLang engine or FP8 KV-cache.
 - 2026-05-28 13:19 UTC — Merged PR #139 (frieren). Scenario D new best:
   2.073x (vLLM 0.11, FP8+n-gram composition, max-num-seqs=32).
   Supersedes PR #138 SGLang 1.247x (+66%). Quality ratio 0.953 (observed 0.284,
