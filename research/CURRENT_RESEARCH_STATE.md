@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 12:51 UTC
+- **As of:** 2026-05-28 13:04 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -25,7 +25,8 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 | Student | Scenario | Engine | Hypothesis | PR | Status |
 |---|---|---|---|---:|---|
 | fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B best 2.687x** |
-| fern | C (high-load throughput) | vLLM 0.11 | high-conc BF16 + prefix caching (3 quick arms done; arm1 promoted to full) | #140 | **WIP — full eval in flight (arm1 BF16 high-conc, quick 3.888x)** |
+| fern | C (high-load throughput) | vLLM 0.11 | high-conc BF16 + prefix caching (arm1 BF16 high-conc, full 21.052x) | #140 | **MERGED 13:03 UTC — Sc C first winner 21.052x** |
+| fern | C (high-load throughput) | vLLM 0.11 | scale to max-num-seqs 128/256, batched-tokens 16384 | #142 | **assigned 13:04 UTC** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **MERGED 12:50 UTC — Sc D first winner 1.247x** |
 | tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **assigned 12:51 UTC** |
@@ -53,7 +54,7 @@ only and not terminal.
 | frieren | A | **arm3 FP8 weights** | **1.901x** | full eval 1.866x merged | eyvyj8oz |
 | tanjiro | D | arm1 sglang_default | 1.167x | full eval 1.2506x (relaunch-safe, in review) | 2nfds9ud → nf10i0y2 |
 | tanjiro | D | arm2 sglang_tuned | 1.183x | dropped per simplicity tiebreak | 8zul6lqz |
-| fern | C | arm1 BF16 high-conc | **3.888x** | promoted to full eval | qvcrnc4s |
+| fern | C | arm1 BF16 high-conc | **3.888x** | full eval **21.052x merged** | qvcrnc4s → tebmnnza |
 | fern | C | arm2 + prefix cache | 3.928x | within 1% of arm1; arm1 preferred | 2rtv6gxb |
 | fern | C | arm3 + FP8 | 3.798x | FP8 hurts on high-conc throughput (-3.3%) | wuvd1ycq |
 | frieren | D | arm1 fp8 only | 1.326x | quick done | (no W&B) |

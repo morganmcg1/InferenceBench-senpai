@@ -31,8 +31,22 @@ baselines):
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
-| C | scenario/C/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+| **C** | scenario/C/speedup_over_pytorch | **21.052x** | `senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh` | tebmnnza | #140 |
 | **D** | scenario/D/speedup_over_pytorch | **1.247x** | `senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh` | nf10i0y2 | #138 |
+
+### Scenario C — current winner (PR #140, merged 2026-05-28)
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, BF16 weights, BF16 KV cache (no FP8, no prefix caching)
+- **Key flags:** `--max-num-seqs 64 --max-num-batched-tokens 8192 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
+- **Geomean req/s:** 1.783 (PyTorch 0.0847) across burst/poisson/constant profiles
+- **Per-profile req/s:** burst 2.605, poisson 1.854, constant 1.175 (all 256/256 ✓)
+- **Speedup:** 21.052x
+- **Quality:** MMLU-Pro 0.298 obs / 0.298 baseline = ratio 1.000 (gate 0.95, n=500) ✓
+- **Speed success:** 768/768 (failure_rate 0.0) ✓
+- **VRAM peak:** 90815 MiB / 97887 MiB
+- **W&B run:** tebmnnza
+- **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** Sc C is KV-cache-memory-bound and scheduler-overhead-bound (not weight-read-bound). FP8 dequant overhead *hurts* (-3.3% vs BF16); prefix caching gives +1% noise. Setting `--max-num-seqs 64` matched to burst concurrency is the key lever; PyTorch at 0.0847 req/s is serialized; vLLM batching 64 concurrent streams achieves 2.60 req/s in burst.
 
 ### Scenario D — current winner (PR #138, merged 2026-05-28)
 
@@ -123,3 +137,9 @@ research signal only and must not be used to update the current-best row.
   speed success. Relaunch-safe via bundled libnuma + uv venv auto-bootstrap.
   Open research question: frieren PR #139 has FP8+n-gram composition quick at
   1.810x — if full eval confirms ≥1.247x, that will supersede this row.
+- 2026-05-28 13:03 UTC — Merged PR #140 (fern). Scenario C first winner:
+  21.052x (vLLM 0.11, BF16, max-num-seqs=64, chunked-prefill at 8192 tokens,
+  no FP8, no prefix caching). Quality ratio 1.000 (observed 0.298, n=500),
+  768/768 speed success across burst/poisson/constant profiles. All 4 scenarios
+  now have baseline entries. Key insight: Sc C is scheduler-bound (not
+  bandwidth-bound), so FP8 hurts; concurrency matching is the main lever.
