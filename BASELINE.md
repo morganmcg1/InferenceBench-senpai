@@ -31,7 +31,7 @@ baselines):
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **3.550x** | `senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh` | 8656lf5w | #141 |
-| **C** | scenario/C/speedup_over_pytorch | **24.305x** | `senpai/launchers/C/fern-sglang-sc-c/arm3_sglang_radix.sh` | ifj6fcec | #144 |
+| **C** | scenario/C/speedup_over_pytorch | **27.497x** | `senpai/launchers/C/frieren-sglang-fp8kv/arm1_fp8kv_mem085.sh` | kk6shiqh | #151 |
 | **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
 
 ### Scenario D — current winner (PR #139, merged 2026-05-28) — supersedes PR #138
@@ -50,7 +50,21 @@ baselines):
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 - **Key insight:** FP8 + n-gram compose additively: FP8 attacks the 4096-token prefill stage (TTFT -45%), n-gram attacks the 2048-token decode stage (TPOT -59%). Both levers target independent bottlenecks in balanced Sc D, producing clean multiplicative lift.
 
-### Scenario C — current winner (PR #144, merged 2026-05-28) — supersedes PR #142
+### Scenario C — current winner (PR #151, merged 2026-05-28) — supersedes PR #144
+
+- **Engine:** SGLang 0.5.12.post1, Triton attention backend, BF16 weights, **FP8 KV cache** (fp8_e5m2), radix cache ON, LPM scheduler
+- **Key flags:** `--mem-fraction-static 0.85 --chunked-prefill-size 8192 --schedule-policy lpm --max-running-requests 256 --attention-backend triton --kv-cache-dtype fp8_e5m2`
+- **Geomean req/s:** ~2.329 (PyTorch 0.0847) across burst/poisson/constant profiles
+- **Speedup:** 27.497x (+13.1% over PR #144's 24.305x)
+- **Quality:** MMLU-Pro 0.298 obs / 0.298 baseline = ratio **1.000** (gate 0.95, n=500) ✓
+- **Speed success:** 768/768 (failure_rate 0.0) ✓
+- **VRAM peak:** 84.4 GiB / 97.9 GiB (FP8 KV halves block size; max_total_num_tokens doubled vs BF16)
+- **W&B run:** kk6shiqh
+- **Reproduce (from task workspace):** `cp senpai/launchers/C/frieren-sglang-fp8kv/arm1_fp8kv_mem085.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** FP8 KV cache (`--kv-cache-dtype fp8_e5m2`) halves per-request KV memory, doubling the KV-token capacity (545k → 1,090k tokens). At Sc C's 256-request concurrency, this frees more in-flight request slots especially under burst profile. Unlike Sc A (compute-bound conc=1 where FP8 KV regressed), Sc C is KV-bandwidth-bound at high concurrency — dequant overhead is fully amortised. Quality improved to ratio 1.000 (from 1.027 in PR #144, now exactly matching baseline). arm2 (mem 0.92) and arm3 (chunk 16k) were within 0.3% of arm1 in quick eval — mem-fraction headroom adds negligible benefit once KV is already halved.
+- **Relaunch contract:** bundled `lib/libnuma.so.1` at `senpai/launchers/C/frieren-sglang-fp8kv/lib/`; per-PR venv at `/tmp/inferencebench-engine-venvs/sglang-pr-151` auto-bootstrapped via `uv venv` + `pip install sglang[all]`.
+
+### Scenario C — prior winner (PR #144, merged 2026-05-28) — supersedes PR #142
 
 - **Engine:** SGLang 0.5.12.post1, Triton attention backend, BF16 weights, BF16 KV cache (radix cache ON by default)
 - **Key flags:** `--mem-fraction-static 0.85 --chunked-prefill-size 8192 --schedule-policy lpm --max-running-requests 256 --attention-backend triton`
