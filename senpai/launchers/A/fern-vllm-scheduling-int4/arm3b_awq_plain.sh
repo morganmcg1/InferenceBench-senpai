@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# arm3b: AWQ plain (non-marlin) fallback if awq_marlin kernel rejects SM120.
+set -euo pipefail
+MODEL_ID="solidrust/Mistral-7B-Instruct-v0.3-AWQ"
+SERVED_NAME="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
+HOST="${HOST:-0.0.0.0}"; PORT="${PORT:-8000}"
+MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-16384}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
+exec python3 -m vllm.entrypoints.openai.api_server \
+  --model "${MODEL_ID}" --served-model-name "${SERVED_NAME}" \
+  --host "${HOST}" --port "${PORT}" \
+  --max-model-len "${MAX_MODEL_LEN}" \
+  --gpu-memory-utilization 0.92 \
+  --max-num-seqs 1 \
+  --max-num-batched-tokens 8192 \
+  --no-enable-chunked-prefill \
+  --no-enable-prefix-caching \
+  --kv-cache-dtype auto \
+  --quantization awq \
+  --trust-remote-code --disable-log-stats
