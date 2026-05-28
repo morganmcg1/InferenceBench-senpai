@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 11:45 UTC
+- **As of:** 2026-05-28 11:55 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -20,13 +20,14 @@ room. RTX PRO 6000 has known constraints around FlashAttention + FP8 KV
 combinations; default to BF16 KV with FlashAttention unless a PR explicitly
 tests the hardware-specific path.
 
-Round 1 portfolio (PRs #136, #137, #138):
+Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139):
 
-| Student | Scenario | Engine | Hypothesis | PR |
-|---|---|---|---|---:|
-| fern | B (output-heavy TPOT) | vLLM 0.11 | 3-arm: BF16 tuned baseline vs FP8 weights vs n-gram speculative | #136 |
-| frieren | A (input-heavy TTFT) | vLLM 0.11 | 3-arm: one-shot prefill vs chunked prefill vs FP8 weights | #137 |
-| tanjiro | D (general geomean) | SGLang (per-PR venv) | 2-arm SGLang default vs tuned; vLLM fallback if SGLang fails to install | #138 |
+| Student | Scenario | Engine | Hypothesis | PR | Status |
+|---|---|---|---|---:|---|
+| fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x) | #136 | **full eval in progress (~60 min cap)** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A new best 1.866x** |
+| tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default (full eval 1.247x) | #138 | **WIP — sent back: launcher not relaunch-safe (missing libnuma auto-bootstrap)** |
+| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram speculative composition | #139 | **just assigned** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a
