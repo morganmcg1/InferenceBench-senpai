@@ -1,5 +1,33 @@
 # SENPAI Research Results
 
+## 2026-05-28 21:11 UTC — PR #187: Sc C SGLang engine upgrade probe (CLOSED — did_not_improve, zero GPU)
+
+- **Branch:** `fern/sc-c-sglang-upgrade`
+- **Student:** fern
+- **Hypothesis:** Probe whether newer SGLang ≥0.6 exists; if so, retest Sc C PR #181 config and probe FlashInfer backend on the upgraded engine.
+
+### Pre-eval finding
+
+| Check | Result |
+|---|---|
+| `pip install "sglang[all]"` | resolves to **0.5.12.post1** (same as PR #181) |
+| `pip install "sglang[all]>=0.6"` | `ERROR: Could not find a version` — no `0.6.x` exists on PyPI |
+| Dependency stack diff vs PR #181 venv | **byte-for-byte identical** (sglang, torch, triton, flashinfer-python, sglang-kernel, transformers all match) |
+
+Closure followed PR's explicit rule. **0 GPU minutes consumed.**
+
+### Rule #20 established
+
+**SGLang 0.5.12.post1 is the engine ceiling for this launch window.** Future Sc C hypotheses must attack mechanisms *inside* the existing engine (radix prefix design, scheduler tweaks, KV layout, attention backend, kernel choices). Engine-version-upgrade axis is exhausted on the Sc C front until SGLang releases ≥0.6.
+
+### Follow-up that became next assignment
+
+fern's own suggestion #1: **FlashInfer attention backend on SGLang 0.5.12.post1 + SM120**. PR #181 used `--attention-backend triton`; FlashInfer was never probed on the SGLang side. PR #148's FlashInfer block applies only to vLLM 0.11 — SGLang's FlashInfer path is independent. Assigning to fern as PR #188.
+
+Sc C baseline at 29.768x remains current best (PR #181, W&B `2iilmzji`).
+
+---
+
 ## 2026-05-28 20:55 UTC — PR #184: Sc C chunked-prefill-size sweep (CLOSED — did_not_improve)
 
 - **Branch:** `fern/sc-c-sglang-cps`
