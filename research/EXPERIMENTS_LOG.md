@@ -590,4 +590,49 @@ on RTX PRO 6000 and should be the default for all future SGLang Sc C experiments
 - **SGLang mem-fraction tuning:** bump `--mem-fraction-static` from 0.85 to 0.90–0.92 to
   match vLLM's VRAM allocation and test if more KV blocks improve throughput further.
 - **SGLang on Sc D:** Sc D's 4096in/2048out balanced workload would benefit from both the
-  radix cache (shared 4096-token prefill prefixes) and LPM reordering.
+  radix cache (shared 4096-token prefill prefixes) and LPM reordering. ← **assigned to fern as PR #147**
+
+---
+
+## 2026-05-28 14:55 UTC — PR #145: Scenario A FP8 weights + FP8 KV cache (CLOSED — did not improve)
+
+- **Branch:** `frieren/sc-a-fp8-kv-cache`
+- **Student:** frieren
+- **Hypothesis:** Adding `--kv-cache-dtype fp8` to the PR #137 FP8-weights winner would halve
+  KV-cache attention bandwidth during the 8192-token prefill scan, cutting TTFT further.
+
+### Quick probe results (all 3 arms)
+
+| Arm | seqs | batched-tokens | Quick speedup | TTFT.p50 | W&B |
+|---|---:|---:|---:|---:|---|
+| arm1 FP8W + FP8KV | 8 | 10240 | 1.4215x | 0.3085s | ehxisw8g |
+| arm2 + batched=16384 | 8 | 16384 | 1.4251x | 0.3077s | x211iaca |
+| arm3 + seqs=4 | 4 | 16384 | **1.4283x** | 0.3070s | 4pryw5vx |
+
+Reference (PR #137 FP8W only): quick 1.901x (TTFT 0.2306s), full 1.866x (TTFT 0.2349s).
+
+All 3 arms within 0.5% of each other — tighter than noise floor. All ~25% slower than PR #137.
+
+### Full eval results (arm1 — 128 requests, burst profile)
+
+| Metric | Value | vs PR #137 | Δ |
+|---|---:|---:|---:|
+| **scenario/A/speedup_over_pytorch** | **1.3804x** | **1.866x** | **−26.0% ❌** |
+| TTFT.p50 | 0.3177 s | 0.2349 s | +35% (much slower) |
+| TPOT.p50 | 0.01682 s | 0.01750 s | −4% (faster, irrelevant for Sc A) |
+| Quality (MMLU-Pro n=500) | 0.288 (ratio 0.966) | 0.288 (ratio 0.966) | 0.0% |
+| Speed success | 128/128 ✓ | 128/128 ✓ | — |
+| VRAM peak | 93,313 MiB | 93,267 MiB | ≈ same |
+| W&B | 488cszk6 | izg22lch | — |
+
+**Closed:** Yes — −26% regression is well outside the >5% close threshold. Baseline remains PR #137 1.866x.
+
+### Analysis
+
+- **FP8 KV cache adds dequantization work to the prefill attention kernel (QK^T / AV matmuls).** At concurrency 1, Sc A's attention is compute-bound, not KV-bandwidth-bound. Halving KV bytes never translates to faster attention; the dequant overhead dominates instead.
+- **All three arms within 0.5%.** The batched-tokens (10240 vs 16384) and seqs (4 vs 8) axes are completely masked once FP8 KV is on — confirming that the bottleneck is the FP8 KV attention kernel itself, not prefill chunking or sequence count.
+- **Quality unchanged at 0.966 ratio.** FP8 KV is numerically safe on SM120; the regression is purely a performance cost, not a correctness issue.
+- **Learning: vLLM FP8 bandwidth levers on Sc A are now exhausted.** FP8 weights: +1.866x. FP8 KV: −26%. The kernel-level approach is FlashInfer (PR #148).
+- **Pattern reinforced: scenario-hardware alignment matters.** The same FP8 KV trick that might help decode-bound scenarios (Sc B/D) is actively harmful on a single-stream prefill-dominated workload at concurrency 1 on SM120.
+
+**Next experiment for frieren:** FlashInfer prefill attention backend on Sc A (PR #148) — attack the 8192-token prefill at the kernel level rather than the memory/quantisation level.
