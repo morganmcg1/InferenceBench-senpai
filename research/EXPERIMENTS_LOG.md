@@ -1,5 +1,41 @@
 # SENPAI Research Results
 
+## 2026-05-28 20:28 UTC — PR #179: Sc B FP8 weights + n-gram spec25/lookup12 composition (MERGED — new Sc B best)
+
+- **Branch:** `tanjiro/sc-b-fp8-compose`
+- **Student:** tanjiro
+- **Hypothesis:** FP8 weight quantization composes with n-gram spec25/lookup12 on Sc B (TPOT-only). PR #149 (BF16 + spec25) = 3.888x. Adding FP8 should cut TPOT by reducing weight-read bandwidth in the verify step, analogous to Sc D's TTFT gain.
+
+### Quick eval (3 arms, n=4 burst)
+
+| Arm | Spec config | TPOT.p50 (s) | Quick speedup | Quality n=16 | W&B |
+|---|---|---:|---:|---|---|
+| arm1 | FP8 + spec25/lookup12 | 0.006524 | 3.856x | 4/16 (0.839) | o5sdx8e9 |
+| arm2 | FP8 + spec20/lookup10 | **0.003229** | **7.789x** | 3/16 (0.629) | sickdgf7 |
+| arm3 | FP8 + spec30/lookup15 | 0.004257 | 5.909x | 3/16 (0.629) | o8apxla7 |
+
+Quick screen ranked arm2 first (rule #17 caution noted). arm2 promoted to full eval.
+
+### Full eval results
+
+| Arm | Spec config | TPOT.p50 (s) | Speedup | Quality (n=500) | VRAM | Status |
+|---|---|---:|---:|---|---:|---|
+| **arm1** | FP8 + spec25/lookup12 | **0.005652** | **4.450x** | 0.288 / 0.9664 ✓ | 90.5 GiB | **WINNER** |
+| arm2 | FP8 + spec20/lookup10 | 0.007390 | 3.404x | 0.280 / 0.9396 ✗ | — | quality_failed |
+| arm3 | FP8 + spec30/lookup15 | quick only | quick: 5.91x | quick: 3/16 | — | skipped |
+
+W&B: `sb06alrs` (arm1 full)
+
+### Analysis
+
+- **arm1 (FP8 + spec25/lookup12) wins at 4.450x = +14.5% over PR #149's 3.888x** ✓
+- **arm2 collapsed at full eval** — quick TPOT 0.003229 inflated by high n-gram acceptance density in 4-request sample. Full TPOT regressed to 0.007390 (worse than spec25's 0.005652). Quality also failed (0.9396 < 0.95). **Rule #17 confirmed again**: Sc B quick→full unreliable for n-gram depth/config changes.
+- **FP8 composition on Sc B is partial, not multiplicative**: FP8 reduces TPOT.p50 by ~13% (0.006470 → 0.005652). Smaller gain than Sc D's 45% TTFT cut because n-gram already partially amortizes weight reads across speculative batch tokens.
+- **PR #149's BF16 ordering (spec25 > spec20) is preserved under FP8.** The quick screen reversed this ordering due to sampling variance — arm2 looked faster because it happened to get high-acceptance prompts at n=4.
+- Sc B SMAC3 ceiling 15.23x; this winner closes to 29% of reference (vs 26% before).
+
+---
+
 ## 2026-05-28 20:08 UTC — PR #182: Sc C mem-fraction push to 0.95 on PR #181 winner (CLOSED — did_not_improve)
 
 - **Branch:** `fern/sc-c-sglang-mem-push2`
