@@ -59,6 +59,7 @@ _None yet._
 
 ## Update history
 
+- 2026-05-28 18:12: **PR #174 merged** — SGLang launcher recipe-preservation cleanup. Hardcoded PR #163 winning fallback defaults (mem_fraction_static=0.88, max_running_requests=256, schedule_policy=fcfs, chunked_prefill_size=4096) into `senpai/launchers/C/sglang-fern/start_server.sh`. **Not a baseline update** — metric unchanged at 23.98x (PR #165). The rank-2 SGLang launcher is now self-contained matching PR #165's pattern.
 - 2026-05-28 17:54: **PR #165 merged** — vLLM + n-gram speculative decoding wins with 23.98x (+8.1% over SGLang). Quality ratio 1.000 (n=500, exactly matches torch baseline). 768/768 succeeded. Launcher is self-contained — no env-var dependency. W&B: mj8f07f0.
 - 2026-05-28 17:31: **PR #163 merged** — SGLang takes the lead with 22.18x (+6.4% over vLLM Arm A). Quality PASS (ratio 1.054, n=500, observed=0.314), 768/768 requests, validation_pass=true. W&B: b4xhsfby.
 - 2026-05-28 17:19: **PR #161 merged** — first terminal Scenario C result. vLLM Arm A full eval: 20.84x speedup, quality PASS (ratio=1.027, n=500, MMLU-Pro observed=0.306), 768/768 requests, validation_pass=true. W&B: btpqa2rl.
