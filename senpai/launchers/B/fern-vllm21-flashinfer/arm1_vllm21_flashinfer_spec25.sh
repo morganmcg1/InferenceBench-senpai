@@ -33,12 +33,38 @@ export VIRTUAL_ENV="${VLLM21_VENV}"
 export PATH="${VLLM21_VENV}/bin:${PATH}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
+# Add the venv's nvidia/*/include and nvidia/*/lib paths to CPATH and
+# LD_LIBRARY_PATH so flashinfer JIT compilation at startup can find curand.h
+# (and other CUDA 13 headers). The parent shell's runtime_env.sh discovery
+# ran against the *system* python's site-packages, which does not include
+# CUDA 13 headers from this per-PR venv.
+_vllm21_site="${VLLM21_VENV}/lib/python3.10/site-packages/nvidia"
+if [ -d "${_vllm21_site}" ]; then
+    _venv_includes=""
+    _venv_libs=""
+    for _inc in "${_vllm21_site}"/*/include; do
+        [ -d "${_inc}" ] && _venv_includes="${_venv_includes:+${_venv_includes}:}${_inc}"
+    done
+    for _lib in "${_vllm21_site}"/*/lib; do
+        [ -d "${_lib}" ] && _venv_libs="${_venv_libs:+${_venv_libs}:}${_lib}"
+    done
+    if [ -n "${_venv_includes}" ]; then
+        export CPATH="${_venv_includes}${CPATH:+:${CPATH}}"
+        export C_INCLUDE_PATH="${_venv_includes}${C_INCLUDE_PATH:+:${C_INCLUDE_PATH}}"
+        export CPLUS_INCLUDE_PATH="${_venv_includes}${CPLUS_INCLUDE_PATH:+:${CPLUS_INCLUDE_PATH}}"
+    fi
+    if [ -n "${_venv_libs}" ]; then
+        export LD_LIBRARY_PATH="${_venv_libs}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    fi
+fi
+unset _vllm21_site _venv_includes _venv_libs _inc _lib
+
 export HF_HOME="${HF_HOME:-${HOME}/hf_cache}"
 export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 export HUGGINGFACE_HUB_CACHE="${HUGGINGFACE_HUB_CACHE:-${HF_HOME}/hub}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 
-# FlashInfer prefill enabled (match PR #186 arm2 exactly)
+# FlashInfer prefill enabled (match PR #186 arm2 exactly).
 export VLLM_USE_FLASHINFER_SAMPLER=0
 export VLLM_DISABLE_FLASHINFER_PREFILL=0
 
