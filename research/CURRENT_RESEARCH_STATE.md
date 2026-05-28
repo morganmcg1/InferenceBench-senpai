@@ -98,8 +98,26 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 **PR #176** — Frieren arm F0: `VLLM_USE_V1=0` + FP8 weights (V0 vs V1 engine
 comparison). Single env-var toggle on top of the FP8 winner recipe, with
 Frieren's cublas symlink workaround embedded. Assigned 18:12Z; expected result
-~18:20-18:26Z. Quick-only; terminal=false regardless of result. If V0 is faster,
+~18:22-18:28Z. Quick-only; terminal=false regardless of result. If V0 is faster,
 flags as high-priority next-round full-eval candidate.
 
-Fern remains idle for the final ~25 min — not enough wall time for a second
-independent probe given shared-GPU queuing.
+## Fern is intentionally idle for the final ~21 min — why
+
+The CLAUDE.md "zero idle GPUs, ever" rule does not produce a productive
+assignment in the last cutoff window of this launch:
+
+- The pod has **1 GPU shared between both students**. With Frieren holding
+  the GPU for the V0 probe (queue → boot → quick eval ≈ 10-13 min from
+  acquisition), Fern's `gpu_slot.py run --wait` would block behind her.
+- `gpu_slot.py` enforces `--min-remaining-s 600` (10 min headroom to
+  deadline). At 18:15Z, the cutoff is 18:36:57Z (~21 min). Once Frieren
+  finishes around 18:26-18:31Z, the remaining wall clock drops below the
+  600s gate — `gpu_slot.py` will refuse Fern's acquisition.
+- A relaxed `--min-remaining-s 300` would let Fern acquire, but the probe
+  could not complete before cutoff with any margin for boot or eval
+  variance, producing a partial that adds no signal.
+
+Fern's experimental contribution this launch is the merged winner (PR #160,
+1.8873x) plus the FlashInfer ruling-out (PRs #168, #171). The launch's
+remaining ~21 min is the structural finalize window, not productive
+experiment time.
