@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 15:50 UTC
+- **As of:** 2026-05-28 16:25 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -15,7 +15,7 @@
 |---|---|---:|---|---:|---:|
 | A | 1/ttft.p50 | **1.866x** | vLLM FP8 weights | #137 | 42% of 4.48x |
 | B | 1/tpot.p50 | **3.550x** | vLLM n-gram spec15/8 | #141 | 23% of 15.23x |
-| C | geomean req/s | **24.305x** | SGLang LPM + radix | #144 | 52% of 46.70x |
+| C | geomean req/s | **27.497x** | SGLang LPM + radix + FP8 KV | #151 | 59% of 46.70x |
 | D | geomean (1/ttft, 1/tpot, req/s) | **2.073x** | vLLM FP8 + n-gram | #139 | 36% of 5.69x |
 
 ## Active experiments
@@ -23,7 +23,7 @@
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
 | fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | **assigned 15:55 UTC** |
-| frieren | #151 | C | SGLang FP8 KV cache (`fp8_e5m2`) + mem-fraction push (0.85→0.92) — extend PR #144 | **assigned 15:40 UTC** |
+| frieren | #153 | C | SGLang FP8 weights + FP8 KV composition (extend PR #151) — ablation arm3 isolates weight contribution | **assigned 16:25 UTC** |
 | tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
 
 All 3 student GPUs occupied.
@@ -47,7 +47,8 @@ All 3 student GPUs occupied.
 | #148 | frieren | A | 1.484x Triton fallback (did_not_improve) | CLOSED — FlashInfer blocked on vLLM 0.11/FlashInfer 0.6 stack (5-layer cascade) |
 | #149 | tanjiro | B | spec20/25/30 BF16 — quick probes pending | **assigned 15:15 UTC** |
 | #150 | frieren | C | SGLang FP8 KV + mem 0.92 — auto-merged by GH due to branch collision | CLOSED — reissued as #151 |
-| #151 | frieren | C | SGLang FP8 KV + mem 0.92 — quick probes pending | **assigned 15:40 UTC** |
+| #151 | frieren | C | 27.497x SGLang FP8 KV (fp8_e5m2) — MERGED new Sc C best +13.1% |
+| #153 | frieren | C | SGLang FP8 weights + FP8 KV composition | **assigned 16:25 UTC** |
 
 ## Key learnings
 
@@ -71,6 +72,8 @@ All 3 student GPUs occupied.
 
 10. **FlashInfer attention is blocked on vLLM 0.11 + FlashInfer 0.6.x stack** (PR #148). Five-layer SM120 incompatibility cascade (plan() arg drift, cudagraph fast-path mismatch, FP8 GEMM linker failure). Triton fallback regressed -20% vs FA2 baseline. vLLM ≥ 0.12 would unblock this. All vLLM 0.11 Sc A levers are now exhausted.
 
+11. **FP8 KV cache wins at high concurrency** (PR #151, +13.1% on Sc C). Halves KV memory footprint → doubles in-flight KV token capacity (545k → 1,090k). Regime-specific: wins at Sc C (256 concurrent requests, KV-bandwidth-bound), regresses at Sc A (conc=1, compute-bound). `fp8_e5m2` accepted by SGLang 0.5.12.post1 on SM120 Blackwell.
+
 ## Current research focus
 
 **Primary focus: close the gaps to H100 SMAC3 ceilings, especially Sc B (23%) and Sc D (36%).**
@@ -79,9 +82,9 @@ All 3 student GPUs occupied.
 
 1. **Sc B tanjiro #149:** Deeper spec sweep (spec20/25/30 BF16). The superlinear depth scaling from PR #141 (spec5→spec15: +32%) hasn't hit saturation. If spec20-30 continues the trend, Sc B could reach 5-7x. Low risk. Most important experiment in flight.
 
-2. **Sc C frieren #150:** SGLang FP8 KV (`fp8_e5m2`) + mem-fraction push (0.85→0.92). PR #144 left 15 GiB unused VRAM. FP8 KV halves KV block size → more concurrent states at high concurrency. Different regime from Sc A's FP8 KV regression. Expected +8-15% → ~26-28x.
+2. **Sc C frieren #153:** SGLang FP8 weights composed with FP8 KV (extend PR #151 winner). PR #151 confirmed FP8 KV +13.1% (24.305x→27.497x). Testing whether SGLang FP8 weight quantization adds further weight-bandwidth reduction. 3-arm ablation: arm1 FP8wt+FP8KV, arm2 arm1+mem0.92, arm3 FP8wt only (no FP8KV — isolates weight contribution). Key question: does vLLM-style "FP8 weights hurt at high concurrency" apply to SGLang's Triton kernels?
 
-3. **Sc D fern #152:** vLLM spec depth upgrade (researcher H1). Extend PR #139 winner (FP8 + spec5/lookup4) to spec15/lookup8 — two integer changes. PR #141 showed spec5→spec15 gave +32% on Sc B. Expected +15-20% on Sc D → ~2.4x. 3-arm sweep: BF16+spec15 (quality control), FP8+spec10 (intermediate), FP8+spec15 (full upgrade). Quality risk lower than Sc B (4× less verify-step exposure with 2048 vs 8192 output tokens).
+3. **Sc D fern #152:** vLLM spec depth upgrade (researcher H1). Extend PR #139 winner (FP8 + spec5/lookup4) to spec15/lookup8 — two integer changes. PR #141 showed spec5→spec15 gave +32% on Sc B. Expected +15-20% on Sc D → ~2.4x. 3-arm sweep: FP8+spec15 (full upgrade), FP8+spec10 (intermediate), BF16+spec15 (quality control). Quality risk lower than Sc B (4× less verify-step exposure with 2048 vs 8192 output tokens).
 
 ### Next experiments (after current round)
 
