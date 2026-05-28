@@ -11,12 +11,9 @@
 #     base images that ship without libnuma) is shipped in this PR under
 #     `senpai/launchers/D/tanjiro-sglang/lib/`. The launcher locates that dir
 #     even when copied to a task workspace's `start_server.sh`.
-#   * The launcher requires the SGLang venv. Recreate it from a clean
-#     container with:
-#         python "$PROBLEM_DIR/senpai/create_engine_venv.py" --engine sglang --pr 138
-#     or, when ensurepip is missing, with uv:
-#         uv venv /tmp/inferencebench-engine-venvs/sglang-pr-138 --python 3.10 --seed
-#         /tmp/inferencebench-engine-venvs/sglang-pr-138/bin/pip install "sglang[all]"
+#   * The launcher auto-creates the SGLang venv at ${SGLANG_VENV} on first
+#     boot if it is missing, preferring `uv venv` (Ubuntu base images often
+#     lack `python3.10-venv` so `python3 -m venv` cannot be the primary path).
 set -euo pipefail
 
 MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
@@ -26,9 +23,22 @@ MAX_MODEL_LEN="${INFERENCE_BENCH_MAX_MODEL_LEN:-16384}"
 SGLANG_VENV="${SGLANG_VENV:-/tmp/inferencebench-engine-venvs/sglang-pr-138}"
 
 if [ ! -x "${SGLANG_VENV}/bin/python" ]; then
-    echo "FATAL: SGLang venv not found at ${SGLANG_VENV}." >&2
-    echo "Recreate with: uv venv ${SGLANG_VENV} --python 3.10 --seed && ${SGLANG_VENV}/bin/pip install 'sglang[all]'" >&2
-    exit 1
+    echo "[bootstrap] SGLang venv not found at ${SGLANG_VENV}; creating now..." >&2
+    mkdir -p "$(dirname "${SGLANG_VENV}")"
+    if command -v uv >/dev/null 2>&1; then
+        uv venv "${SGLANG_VENV}" --python 3.10 --seed
+        PIP_REQUIRE_VIRTUALENV=false "${SGLANG_VENV}/bin/pip" install --upgrade pip wheel setuptools
+        PIP_REQUIRE_VIRTUALENV=false "${SGLANG_VENV}/bin/pip" install "sglang[all]"
+    elif python3 -c "import ensurepip" >/dev/null 2>&1; then
+        python3 -m venv "${SGLANG_VENV}"
+        PIP_REQUIRE_VIRTUALENV=false "${SGLANG_VENV}/bin/pip" install --upgrade pip wheel setuptools
+        PIP_REQUIRE_VIRTUALENV=false "${SGLANG_VENV}/bin/pip" install "sglang[all]"
+    else
+        echo "FATAL: cannot bootstrap SGLang venv: neither 'uv' nor python3 ensurepip is available." >&2
+        echo "Install uv (recommended) or python3.10-venv, then retry." >&2
+        exit 1
+    fi
+    echo "[bootstrap] SGLang venv ready at ${SGLANG_VENV}." >&2
 fi
 export VIRTUAL_ENV="${SGLANG_VENV}"
 export PATH="${SGLANG_VENV}/bin:${PATH}"
