@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# SGLang + chunked prefill + LPM scheduler + radix cache for Scenario C (PR #144).
-# Radix cache is on by default in SGLang 0.5.x (controlled by --disable-radix-cache).
-# This arm exploits the radix cache by switching to the longest-prefix-match (LPM)
-# scheduler, which orders requests to maximize cross-request prefix sharing across
-# the 256-request stream. Also bumps max-running-requests to 256 to expose the
-# entire request set to the LPM scheduler at once.
+# SGLang default arm for Scenario C (PR #144).
+# Replicates the tanjiro PR #138 libnuma bundling pattern.
 set -euo pipefail
 
 MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
@@ -52,7 +48,7 @@ for candidate in "${LIB_CANDIDATES[@]}"; do
     fi
 done
 if [ -z "${SGLANG_LIB_DIR}" ]; then
-    echo "FATAL: bundled libnuma.so.1 not found." >&2
+    echo "FATAL: bundled libnuma.so.1 not found. Searched:" >&2
     for candidate in "${LIB_CANDIDATES[@]}"; do
         [ -n "${candidate}" ] && echo "  - ${candidate}/libnuma.so.1" >&2
     done
@@ -60,22 +56,19 @@ if [ -z "${SGLANG_LIB_DIR}" ]; then
 fi
 export LD_LIBRARY_PATH="${SGLANG_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-echo "=== SGLang Inference Server (arm3 radix — Sc C) ==="
+echo "=== SGLang Inference Server (arm1 default — Sc C) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "SGLANG_VENV=${SGLANG_VENV}"
 echo "SGLANG_LIB_DIR=${SGLANG_LIB_DIR}"
-echo "===================================================="
+echo "====================================================="
 
 exec python3 -m sglang.launch_server \
     --model-path "${MODEL_ID}" \
     --host "${HOST}" \
     --port "${PORT}" \
     --context-length "${MAX_MODEL_LEN}" \
-    --mem-fraction-static 0.85 \
-    --chunked-prefill-size 8192 \
-    --schedule-policy lpm \
-    --max-running-requests 256 \
+    --mem-fraction-static 0.80 \
     --attention-backend triton \
     --trust-remote-code
