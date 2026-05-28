@@ -30,9 +30,20 @@ baselines):
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
-| B | scenario/B/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+| **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
 | C | scenario/C/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
 | D | scenario/D/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+
+### Scenario B — current winner (PR #136, merged 2026-05-28)
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding, BF16 KV cache
+- **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --gpu-memory-utilization 0.92`
+- **TPOT.p50:** 0.00936 s (PyTorch 0.0252 s) — exact verification, zero quality risk from speculation
+- **Speedup:** 2.687x (inverse_tpot_p50: 106.84 vs 39.76 tok/s)
+- **Quality:** MMLU-Pro 0.300 obs / 0.298 baseline = ratio 1.007 (gate 0.95, n=500) ✓
+- **Speed success:** 64/64 (failure_rate 0.0) ✓
+- **VRAM peak:** 90305 MiB / 97887 MiB
+- **Reproduce (from task workspace):** `cp senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 
 ### Scenario A — current winner (PR #137, merged 2026-05-28)
 
@@ -84,3 +95,7 @@ research signal only and must not be used to update the current-best row.
 - 2026-05-28 11:53 UTC — Merged PR #137 (frieren). Scenario A new best:
   1.866x (FP8 weight quantization, vLLM 0.11, FlashAttention). Quality 0.966,
   128/128 speed success. First terminal win on this branch.
+- 2026-05-28 12:19 UTC — Merged PR #136 (fern). Scenario B new best:
+  2.687x (n-gram speculative decoding, num_speculative_tokens=5, prompt_lookup_max=4,
+  vLLM 0.11, FlashAttention). Quality ratio 1.007 (observed 0.300, n=500),
+  64/64 speed success. Beats H100 vLLM default (2.25x) and SGLang default (1.77x).

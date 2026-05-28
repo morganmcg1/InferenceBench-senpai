@@ -56,3 +56,68 @@
 
 **Next experiment:** frieren assigned PR #139 (Scenario D, vLLM FP8 + n-gram speculative
 composition — testing whether both Round-1 winning levers stack on the balanced scenario).
+
+---
+
+## 2026-05-28 12:19 UTC — PR #136: Scenario B vLLM decode TPOT arms (FP8 weights, n-gram spec, BF16 baseline)
+
+- **Branch:** `fern/sc-b-vllm-decode-tpot-arms`
+- **Student:** fern
+- **Hypothesis:** Scenario B (1024-token input, 8192-token decode, concurrency 1 burst) is output-heavy
+  and TPOT-dominated. Two levers were tested: FP8 weight quantization (reduces weight-read bandwidth
+  during decode matmuls) and n-gram prompt-lookup speculative decoding (reduces decode steps via exact
+  speculative token acceptance from the input prompt).
+
+**Quick-probe results:**
+
+| Arm | Config | TPOT.p50 (s) | Speedup (quick) | Notes |
+|---|---|---:|---:|---|
+| arm1 BF16 tuned | `--max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching` | 0.01749 | 1.438x | BF16 baseline with tuned seqs/batch |
+| arm2 FP8 weights | arm1 + `--quantization fp8` | 0.01706 | 1.474x | Within 5% of arm1 — FP8 is not bandwidth-bound on decode-heavy Sc B |
+| **arm3 n-gram spec** | arm1 + `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}'` | **0.00715** | **3.518x** | Exact speculation — promoted to full eval |
+
+**W&B quick runs:** ex8p5t6j (arm1), ycwnvt87 (arm2), du9y0jz8 (arm3)
+
+**Full eval result (arm3 n-gram speculative):**
+
+| Metric | Value |
+|---|---|
+| `scenario/B/speedup_over_pytorch` | **2.6874** |
+| `scenario/B/inverse_tpot_p50` | 106.84 tok/s (PyTorch 39.76 tok/s) |
+| TPOT.p50 | ~0.00936 s (PyTorch 0.0252 s) |
+| Generation throughput | 128.4 tok/s (quick) → 106.8 tok/s (full, 64-req average) |
+| Request throughput | ~0.0286 req/s |
+| MMLU-Pro accuracy | 0.300 (baseline 0.298, ratio 1.007, n=500) |
+| Quality gate | **PASS** (ratio 1.007 ≥ tau 0.95) |
+| Speed success | 64/64 (failure_rate 0.0) |
+| VRAM peak | 90305 MiB / 97887 MiB |
+| W&B run | **dav3txgq** |
+
+**Merged:** Yes — squash-merged to `ib-20260528-12h-r2` at 12:19 UTC.
+
+**Analysis and conclusions:**
+
+- N-gram (prompt-lookup) speculative decoding gives a decisive 2.687x TPOT speedup on Scenario B.
+  The speculative token acceptance is exact (the draft tokens are greedily sampled from the prompt
+  window and verified by the same model logits), so quality is structurally guaranteed — confirmed
+  by 0.300 observed (ratio 1.007 > 1.00, even slightly *better* than BF16 possibly due to scheduling
+  order under the speculative batch path).
+- The quick speedup (3.518x, 4 requests) drops to a full-eval speedup (2.687x, 64 requests) because
+  longer runs include harder Sc B prompts with less lexical reuse from the prefix — the speculative
+  acceptance rate falls for prompts where the output diverges from the input context. Still 2.7x is
+  a strong and robust win.
+- **FP8 is surprisingly weak on Sc B** (1.474x vs 1.438x BF16 — within 5%). Sc B is output-heavy at
+  concurrency 1: each forward pass processes 1–5 speculative tokens, not a large batched prefill.
+  At single-sequence decode, the compute bottleneck shifts from weight-read bandwidth to latency,
+  where FP8 weight quantization's bandwidth advantage is diluted by Mistral-7B's small decode batch.
+- Both levers confirm the independence principle: FP8 wins on prefill-heavy (Sc A, 1.87x) while
+  speculative decoding wins on decode-heavy (Sc B, 2.69x). The next logical test is combining both
+  on Sc D (balanced 4096in/2048out), which is exactly what PR #139 (frieren) is testing.
+- **Sc B H100 reference context:** H100 leaderboard shows vLLM default at 2.25x, SMAC3 at 15.23x.
+  Our RTX PRO 6000 result of 2.687x already beats the H100 vLLM default (2.25x), though the
+  hardware/time-budget difference makes direct comparison invalid. The SMAC3 ceiling at 15x likely
+  comes from longer speculative depth (larger num_speculative_tokens) and multi-sequence batching
+  optimizations not yet explored.
+
+**Next speculative tuning axis (for future PR):** `num_speculative_tokens ∈ {7, 10, 15}` and
+`prompt_lookup_max ∈ {4, 6, 8}` — cheap quick-probe sweep, likely to push speedup toward 4–5x.
