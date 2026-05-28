@@ -163,7 +163,29 @@ explicit exports.
   SM_120, or (c) a different engine family (SGLang FP8, TensorRT-LLM) that
   bypasses vLLM's FlashInfer wrapper entirely.
 
-## 2026-05-28 18:18 — PR #176 (CLOSED): vLLM V0 engine + FP8 (engine-version probe)
+## 2026-05-28 18:28 — PR #177 (CLOSED): FP8 + --max-num-batched-tokens=32768 (aborted at gate)
+
+- `scen-a-fern/fern-batched-tokens`
+- **Hypothesis:** B1 only tested `--max-num-batched-tokens=16384` with other
+  tightenings; isolating the flag at 32768 ensures the entire 8192-token
+  Scenario A input + Mistral chat-template overhead lands in a single
+  prefill chunk vs the default 8192 cap which may split into 2.
+- **Result:** **Aborted at GPU-slot acquisition.** Launcher committed and
+  pushed (`senpai/launchers/A/fern-batched-tokens/arm_g0_fp8_batched32k.sh`),
+  but `gpu_slot.py run --mode quick` refused the slot at 18:26:16Z with
+  `run deadline 2026-05-28T18:36:57Z leaves 641s, less than required
+  min_remaining_s=900`. The PR's `--min-remaining-s 480` was silently raised
+  to the mode-default floor at `senpai/gpu_slot.py:91`. No W&B run, no
+  metrics, no GPU lease taken.
+- **Conclusion:** Hypothesis untested (no eval ran). Launcher preserved for
+  next-launch retry. The G0 question — does single-chunk prefill alone
+  reproduce B1's +0.5% quick-mode delta — remains open.
+- **Critical next-launch finding (Fern):** `senpai/gpu_slot.py --mode quick`
+  hardcodes `min_remaining_s` to a **900s floor**. Any quick-only arm
+  assigned late in a launch window must have ≥15 min of slack **at the
+  moment of slot acquisition**, not just at assignment time. Add ~3-5 min
+  for assignment → student-pickup → workspace-prep → smoke-check on top of
+  the 900s floor.
 
 - `scen-a-frieren/frieren-v0-fp8`
 - **Hypothesis:** V0 vs V1 engine comparison via `VLLM_USE_V1=0` on top of

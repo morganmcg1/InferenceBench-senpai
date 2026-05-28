@@ -24,6 +24,7 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 | #169 | scen-a-frieren | D0 FP8 + enforce_eager | Closed | -4.1% TTFT vs winner; cudagraphs are net-positive at burst concurrency 1 |
 | #171 | scen-a-fern | E0 FlashInfer + FP8 + enforce_eager (rescue) | Closed | Same `_sm_scale` assertion with cudagraphs off — wrapper-construction path itself is broken |
 | #176 | scen-a-frieren | F0 V0 engine + FP8 | Closed | failed_to_boot — vLLM 0.11.0 hard-asserts V1 in OpenAI API server; V0 unreachable on this image |
+| #177 | scen-a-fern | G0 `--max-num-batched-tokens=32768` | Closed (aborted) | gpu_slot.py raised `--min-remaining-s 480` to 900s floor; 641s remained → slot refused. Launcher preserved. Hypothesis untested. |
 
 ## Key findings (carry forward)
 
@@ -60,15 +61,26 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
   launcher and `runtime_env.sh` will crash on any fresh JIT cache. Frieren's
   workaround (symlink to unversioned `.so` + prepend `LIBRARY_PATH`) is
   embedded in `senpai/launchers/A/frieren-eager-fp8/arm_d0_fp8_eager.sh`.
-  Next-launch task: patch `senpai/runtime_env.sh` to apply the same fix
-  upstream of every launcher.
+  Frieren's PR #178 is in flight to bake this fix into `senpai/runtime_env.sh`
+  upstream of every launcher; if it lands before cutoff it carries this fix
+  into the merged advisor branch.
+- **gpu_slot.py quick-mode min-remaining floor is 900s** (Fern PR #177):
+  `senpai/gpu_slot.py:91` does `min_remaining_s = max(min_remaining_s,
+  defaults["min_remaining_s"])`, and quick-mode's default is **900s (15 min)**.
+  Any `--min-remaining-s` flag in the launcher block is silently raised to
+  this floor. **Late-window quick probes need ≥15 min of slack at the moment
+  of acquisition**, plus an additional ~3-5 min budget for assignment →
+  student-pickup → workspace-prep → smoke-check before that. Future advisor
+  scheduling must respect this hardcoded floor when assigning quick probes
+  near a launch cutoff. Fern correctly aborted G0 rather than bypassing the
+  gate.
 
-## Time budget (as of 18:20Z)
+## Time budget (as of 18:29Z)
 
-- Cutoff: `2026-05-28T18:36:57Z` → **~17 min remaining**.
-- GPU freed early at 18:16:47Z when PR #176 F0 crashed in 15s.
-- One more Fern quick probe is feasible now that the GPU is free; assigned
-  as PR #178 below.
+- Cutoff: `2026-05-28T18:36:57Z` → **~8 min remaining**.
+- GPU never reacquired after PR #176 — Fern's G0 (PR #177) was refused by
+  the 900s quick-mode floor. GPU has been idle since 18:16:47Z.
+- Only Frieren's PR #178 (non-GPU cublas-fix infra patch) is in flight.
 
 ## Next-round directions (priority-ordered)
 
