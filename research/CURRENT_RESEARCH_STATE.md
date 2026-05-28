@@ -93,18 +93,13 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
    leaderboard-comparable claim. The RTX PRO 6000 numbers here are shakedown
    only.
 
-## Why no further probes are being launched this round
+## Final probe this round
 
-- Quick probes typically need ~10-13 min (queue → boot → eval → post).
-  Starting now would land results at ~18:18-18:21, leaving ~15 min for
-  review/state-doc work before cutoff.
-- The remaining headroom over PR #160's 1.8873x is unlikely to be moved by
-  any single env-var toggle reachable in 13 min — the levers that survive
-  (V0 engine, Triton backend, torch.compile mode) all require new launchers
-  that haven't been validated even at boot.
-- The documented research signals (BF16 ceiling, FP8 dominance,
-  cudagraph-on-positive, FlashInfer-broken, cublas link bug) are sufficient
-  to direct the next launch.
-- Both students are intentionally idle for the remaining wall clock; the
-  GPU sits free behind a clean winner rather than a half-completed probe
-  whose result wouldn't make it through review before cutoff.
+**PR #176** — Frieren arm F0: `VLLM_USE_V1=0` + FP8 weights (V0 vs V1 engine
+comparison). Single env-var toggle on top of the FP8 winner recipe, with
+Frieren's cublas symlink workaround embedded. Assigned 18:12Z; expected result
+~18:20-18:26Z. Quick-only; terminal=false regardless of result. If V0 is faster,
+flags as high-priority next-round full-eval candidate.
+
+Fern remains idle for the final ~25 min — not enough wall time for a second
+independent probe given shared-GPU queuing.
