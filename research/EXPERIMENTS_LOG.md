@@ -1,5 +1,49 @@
 # SENPAI Research Results
 
+## 2026-05-28 19:39 UTC — PR #181: Sc C SGLang mem-fraction push on PR #172 winner (MERGED — new Sc C best 29.768x)
+
+- **Branch:** `fern/sc-c-sglang-mem-push`
+- **Student:** fern
+- **Hypothesis:** PR #172's `--mem-fraction-static 0.85` leaves VRAM headroom because FP8 weight quantization freed ~7 GiB. Raising mem-fraction to 0.90 or 0.95 allocates the freed VRAM to KV cache, increasing in-flight token capacity at Sc C's 256-conc KV-bandwidth-bound regime.
+
+### Quick eval (n=4 burst, both arms)
+
+| Arm | mem-fraction | Quick speedup | VRAM peak | Status | W&B |
+|---|---:|---:|---:|---|---|
+| arm1 | 0.90 | 3.998x | 87.4 GiB | OK | nv954pn6 |
+| arm2 | 0.95 | 4.005x | 92.2 GiB | OK (no OOM) | qb7gu15o |
+| PR #172 arm1 (baseline) | 0.85 | 3.991x | 84.7 GiB | merged | 5ncgrruu |
+
+VRAM allocation increased monotonically with mem-fraction (84.7 → 87.4 → 92.2 GiB), confirming the additional headroom is consumed by KV cache. Quick eval was concurrency-bound at n=4 (arm2 only +0.19% over arm1 — below the student's ≥1% promotion threshold). Student promoted arm1 to full eval; arm2 not promoted.
+
+### Full eval results (arm1 — 768 requests across burst/poisson/constant + n=500 MMLU-Pro)
+
+| Metric | PR #181 arm1 | PR #172 (prior best) | Δ |
+|---|---:|---:|---:|
+| **scenario/C/speedup_over_pytorch** | **29.768x** | **29.532x** | **+0.80% ✓** |
+| geomean req/s | 2.522 | 2.502 | +0.80% |
+| Quality (MMLU-Pro n=500) | 0.286 (ratio 0.960) | 0.286 (ratio 0.960) | — same |
+| Speed success | 768/768 ✓ | 768/768 ✓ | — |
+| VRAM peak | 87.5 GiB | 84.7 GiB | +2.8 GiB to KV |
+| W&B | 2iilmzji | 5ncgrruu | — |
+
+### Analysis
+
+- **Mechanism confirmed.** Raising mem-fraction 0.85→0.90 added +2.8 GiB to KV cache, translating to +0.80% throughput at full 256-conc load.
+- **Sc C quick→full gap consistent.** PR #181 arm1 quick = 3.998x = 3.991x (PR #172 quick) +0.18%; full = +0.80%. ~4.4× amplification from quick to full — a stable Sc C pattern at this lever (vs PR #172's FP8 KV which went +1.2% quick suppression → +7.4% full activation).
+- **KV ceiling approaching.** +0.80% gain (vs PR #172's +7.4% from FP8 KV) signals diminishing returns. The PR #172 config at mem 0.85 was already close to KV-utilization saturation at 256-conc; +2.8 GiB only marginally raises in-flight capacity.
+- **Sc C lever progression:** vLLM baseline → SGLang LPM+radix (24.305x, +15.2%) → FP8 KV (27.497x, +13.1%) → FP8 wt+KV (29.532x, +7.4%) → mem 0.90 (29.768x, +0.80%). Cumulative gain over PR #151 = +8.3%. Each lever has smaller marginal gain; Sc C is approaching the ceiling.
+- **Ceiling progress:** 29.768/46.70 = 64% of H100 SMAC3 ceiling on Sc C.
+
+### Next Sc C directions
+
+- **mem 0.95 full eval:** Sc C quick is noise-bound; arm2 was not promoted. Worth a single-arm full eval as direct follow-up. Expected +0.3-0.6% incremental on the same diminishing-returns trend.
+- **chunked-prefill-size sweep on PR #181 base:** Currently 8192. Test 4096 or 16384 — different chunk sizes may rebalance prefill/decode interleaving at 256-conc.
+- **max-running-requests tuning:** Currently exactly matches concurrency (256). Lowering may reduce HoL blocking; raising may add pipelining headroom.
+- Sc C is approaching local optimum; deeper gains likely require new mechanisms (e.g., disaggregated prefill/decode, alternative kernels).
+
+---
+
 ## 2026-05-28 19:12 UTC — PR #172: Sc C SGLang FP8 weights + FP8 KV composition (MERGED — new Sc C best 29.532x)
 
 - **Branch:** `fern/sc-c-sglang-fp8wt`
