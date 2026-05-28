@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 11:55 UTC
+- **As of:** 2026-05-28 12:16 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -24,10 +24,10 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139):
 
 | Student | Scenario | Engine | Hypothesis | PR | Status |
 |---|---|---|---|---:|---|
-| fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x) | #136 | **full eval in progress (~60 min cap)** |
+| fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **terminal landed (2.687x, q=1.007); sent back 12:12 UTC for start_server.sh rebase, then merge** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A new best 1.866x** |
-| tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default (full eval 1.247x) | #138 | **WIP — sent back: launcher not relaunch-safe (missing libnuma auto-bootstrap)** |
-| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram speculative composition | #139 | **just assigned** |
+| tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default (full eval 1.247x; not yet relaunch-safe) | #138 | **WIP — Path A (bundle libnuma + auto-bootstrap venv) in progress** |
+| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram speculative composition | #139 | **WIP — quick probes pending (assigned 11:56 UTC)** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a
@@ -55,8 +55,13 @@ only and not terminal.
 ### Key learnings so far
 
 - **n-gram (prompt-lookup) speculative on Scenario B is a huge win** (3.5x quick
-  vs 1.4x BF16 baseline). Verification is exact so the quality gate should hold
-  at n=500. Pending full-eval confirmation from PR #136.
+  → full eval landed at **2.687x speedup_over_pytorch** with quality 0.300/0.298
+  = 1.007 ratio, n=500, 64/64 speed success, VRAM peak 90.3 GB; W&B `dav3txgq`).
+  The full-eval speedup is below the quick-mode 3.5x because the full eval's
+  primary-metric scoring (inverse_tpot_p50) averages over 64 requests, while
+  the quick probe used 4 requests and saw a tighter distribution. PR #136 is
+  a clear winner; sent back at 12:12 UTC for a `start_server.sh` rebase
+  conflict against the merged PR #137 — re-merge expected next cycle.
 - **FP8 weight-only quantization is the strongest single lever for Scenario A
   TTFT** (1.90x quick vs 1.28x BF16). It boots cleanly on Blackwell with vLLM
   0.11 + FlashAttention. Pending full-eval confirmation from PR #137. We have
