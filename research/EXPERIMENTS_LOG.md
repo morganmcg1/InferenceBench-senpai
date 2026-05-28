@@ -1028,3 +1028,32 @@ Sc B's tolerance for deep specs (25 vs Sc D's 10) is plausibly explained by long
 - Sc C FP8-weights-on-SGLang remains an open scientific question — PR #147 arm2 had confirmed SGLang FP8 weights work on SM120 Blackwell at Sc D's 4-concurrency. The Sc C 256-concurrency regime composition is still to be tested.
 
 **Reassignment:** frieren → PR #166 (Sc B prompt_lookup_min=1 sweep on PR #149 spec25/lookup12 winner). Tests rule #15 implication that Sc B's 8192-out absorbs min=1 quality drift.
+
+## 2026-05-28 17:57 UTC — PR #156: Sc A scheduling fine-tune (MERGED — new Sc A best)
+
+- **Branch:** `fern/sc-a-vllm-scheduling-int4`
+- **Student:** fern
+- **Hypothesis:** Reducing `max-num-seqs` from 8 (PR #137) to 1 eliminates phantom-sequence KV reservation overhead at conc=1. Also tested INT4 AWQ quantization as a secondary arm.
+
+**Results:**
+
+| Arm | TTFT.p50 | Speedup | Quality (n=500) | W&B |
+|---|---:|---:|---:|---|
+| **arm1 fp8/seqs=1/tok=8192** | **0.2332s** | **1.881x** | 0.953 ✓ | ds519cur |
+| arm2 fp8/seqs=2/tok=8192 | 0.22758s | 1.927x quick | 0.839 quick | zan9g0vh (quick only) |
+| arm3 AWQ Marlin/seqs=1/tok=8192 | 0.36636s quick | 1.197x quick | 0.000 (broken) | 7vk7zutt (quick) |
+| PR #137 baseline | 0.2349s | 1.866x | 0.966 | izg22lch |
+
+**Decision:** arm1 promoted to full eval (lowest TTFT.p50, matches conc=1 phantom-sequence hypothesis). arm3 AWQ discarded — `solidrust/Mistral-7B-Instruct-v0.3-AWQ` has chat-template incompatibility (conversation-roles alternation error) AND awq_marlin kernel regresses TTFT -56% vs FP8 on Blackwell SM120.
+
+**Full eval arm1:** 1.881x (+0.78% over PR #137's 1.866x), quality 0.953 (n=500, passes gate ✓), 128/128 speed success. Terminal result submitted and merged.
+
+**Analysis:** Gain is real but modest (+0.78%). This confirms the phantom-sequence hypothesis: vLLM reserves KV blocks for max-num-seqs requests even at conc=1, and reducing to 1 frees that capacity. However, Sc A is compute-bound (FP8 dequant) not KV-bandwidth-bound, so the savings are marginal. The FP8 dequant is the irreducible bottleneck at conc=1. All vLLM 0.11 Sc A levers now exhausted.
+
+**Key finding — AWQ on Blackwell SM120:**
+- `solidrust/Mistral-7B-Instruct-v0.3-AWQ` (AWQ gemm 4bit g128) has a chat-template incompatibility: "Conversation roles must alternate user/assistant/user/assistant" — breaks all quality evaluation.
+- Even if chat-template were fixed, awq_marlin kernel performance (-56% TTFT) is worse than FP8 on SM120. AWQ is not a viable Sc A direction on this hardware.
+
+**Informs rule #16:** INT4 AWQ on SM120 Blackwell with `solidrust/Mistral-7B-Instruct-v0.3-AWQ` is not viable — both correct chat-template and kernel performance fail. Future INT4 investigation requires a compatible checkpoint (GPTQ-int4 or AWQ with matching instruct chat template).
+
+**Next for fern:** PR #172 — Sc C SGLang FP8 weights composition (the unfinished business from stuck PR #153).

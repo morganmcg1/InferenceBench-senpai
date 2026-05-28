@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 17:30 UTC
+- **As of:** 2026-05-28 18:00 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -13,7 +13,7 @@
 
 | Scenario | Metric | Best speedup | Engine | PR | vs H100 SMAC3 ceiling |
 |---|---|---:|---|---:|---:|
-| A | 1/ttft.p50 | **1.866x** | vLLM FP8 weights | #137 | 42% of 4.48x |
+| A | 1/ttft.p50 | **1.881x** | vLLM FP8 weights + max-num-seqs=1 | #156 | 42% of 4.48x |
 | B | 1/tpot.p50 | **3.888x** | vLLM n-gram spec25/12 | #149 | 26% of 15.23x |
 | C | geomean req/s | **27.497x** | SGLang LPM + radix + FP8 KV | #151 | 59% of 46.70x |
 | D | geomean (1/ttft, 1/tpot, req/s) | **2.218x** | vLLM FP8 + n-gram spec10 | #152 | 39% of 5.69x |
@@ -22,9 +22,9 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #156 | A | Scheduling fine-tune (max-num-seqs=1, batched-tokens=8192) + optional INT4 AWQ probe | **arm1 quick 1.931x (q=0.839), promoted to full** |
-| frieren | #166 | B | n-gram `prompt_lookup_min=1` on PR #149 winner (spec25/lookup12) — tests rule #15 output-length insulates min drift | **assigned 17:30 UTC** |
-| tanjiro | #164 | D | FP8 KV cache composition with PR #152 (fp8_e5m2, fp8_e4m3, mem 0.95 control) | **assigned 17:20 UTC** |
+| fern | #172 | C | SGLang FP8 weights composition on PR #151 winner (3-arm ablation: fp8wt+fp8kv, +mem0.92, fp8wt-only control) | **assigned 18:00 UTC** |
+| frieren | #166 | B | n-gram `prompt_lookup_min=1` on PR #149 winner (spec25/lookup12) — arm1 full eval running (quick 5.601x = +44%) | **arm1 full eval running 17:53 UTC** |
+| tanjiro | #164 | D | FP8 KV cache composition with PR #152 (fp8_e5m2, fp8_e4m3, mem 0.95 control) | **3 quick crashes (1-2s), heartbeat sent 17:56 UTC** |
 
 All 3 student GPUs occupied.
 
@@ -51,7 +51,8 @@ All 3 student GPUs occupied.
 | #149 | tanjiro | B | spec20/25/30 BF16 — quick probes pending | **assigned 15:15 UTC** |
 | #150 | frieren | C | SGLang FP8 KV + mem 0.92 — auto-merged by GH due to branch collision | CLOSED — reissued as #151 |
 | #151 | frieren | C | 27.497x SGLang FP8 KV (fp8_e5m2) | MERGED — current Sc C best (+13.1%) |
-| #153 | frieren | C | SGLang FP8 weights + FP8 KV composition | CLOSED — 85+ min stuck/abandoned, no GPU usage, no heartbeat response, reclaimed slot for PR #166 |
+| #153 | frieren | C | SGLang FP8 weights + FP8 KV composition | CLOSED — 85+ min stuck/abandoned, no GPU usage, reclaimed for PR #166 |
+| #156 | fern | A | 1.881x fp8/seqs=1/tok=8192 (+0.78%) | MERGED — new Sc A best |
 
 ## Key learnings
 
@@ -91,23 +92,21 @@ All 3 student GPUs occupied.
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc A fern #156 (full eval running):** arm1 fp8/seqs=1/tok=8192 — quick probe **TTFT.p50 0.22758s = 1.931x speedup** (vs PR #137 0.23495s = 1.866x), quality_ratio 0.839 at n=16 (above 0.80 threshold). Promoted to full eval. AWQ arm3 discarded — `solidrust/Mistral-7B-Instruct-v0.3-AWQ` chat template incompatible (Conversation roles must alternate error, quality 0.000) AND TTFT regresses 56% — awq_marlin kernel slower than FP8 on Blackwell SM120. Chunked-prefill auto-enables in vLLM 0.11 when max_model_len > max_num_batched_tokens despite the `--no-enable-chunked-prefill` flag (applies to PR #137 too, so not the differentiator).
+1. **Sc B frieren #166 (HIGH PRIORITY — arm1 full eval running):** spec25/lookup12/min=1 quick probe = **5.601x TPOT = +44% over PR #149's 3.888x**. Quality 0.629/n=16 is statistical noise (binomial SE 11.5pp — confirmed unreliable by student analysis). Advisor approved arm1 full eval at n=500 MMLU-Pro. If quality ≥0.95: new Sc B winner at 5.6x (+44%). If fails: falsifies rule #15, then arm2 (spec25/lookup15/min=2 = 4.187x = +7.7%) as fallback.
 
-2. **Sc D tanjiro #164:** FP8 KV cache composition with PR #152 winner. PR #154 confirmed n-gram is exhausted on Sc D — testing whether FP8 KV (+13.1% on Sc C at 256-conc, -26% on Sc A at conc=1) is net-positive at Sc D's intermediate conc=4 regime. 3-arm: fp8_e5m2, fp8_e4m3, and mem-util 0.95 control.
+2. **Sc C fern #172 (NEW):** SGLang FP8 weights composition on PR #151 winner. 3-arm ablation: arm1 FP8wt+FP8KV, arm2 +mem0.92, arm3 FP8wt-only (ablation control). Retries the goal of stuck PR #153 using fern's SGLang experience (PR #147). Key question: does SGLang's Triton FP8 kernels avoid the dequant overhead that hurt vLLM FP8 at high concurrency?
 
-3. **Sc B frieren #166:** `prompt_lookup_min=1` sweep on PR #149 winner (spec25/lookup12/min=2 = 3.888x). Rule #15 hypothesis: Sc B's 8192-out absorbs min=1 quality drift that broke Sc D's 2048-out. If wins, refines rule #15 and gains a few % on Sc B. If fails quality at n=16, falsifies rule #15's "output length insulates" implication and we close cleanly. Replaces stuck PR #153.
+3. **Sc D tanjiro #164 (PROBLEMATIC):** 3 quick-probe runs all crashed in 1-2s. Heartbeat sent 17:56 UTC requesting error details. Most likely culprit: wrong `--kv-cache-dtype` flag syntax (try `fp8_e5m2` vs bare `fp8`) or vLLM FP8 weights + FP8 KV dtype combination issue.
 
 ### Next experiments (after current round)
 
-1. **Sc D: vLLM spec15/lookup8 upgrade** — PR #139 Sc D winner uses spec5/lookup4. Upgrading to spec15/lookup8 (two integer changes) gave +32% on Sc B. Should give ~+15% on Sc D → ~2.4x. LOW risk.
+1. **Sc A: vLLM 0.12+ per-PR venv** — All vLLM 0.11 Sc A levers are now exhausted (FP8 weights=1.881x, max-num-seqs tuned, FlashInfer blocked). vLLM 0.12 fixes layers 2-3 of the PR #148 cascade. Could unblock FlashInfer attention with potential for 20%+ gain.
 
-2. **Sc B: `prompt_lookup_min=1`** — Quick add-on to tanjiro's depth sweep (PR #149 arm3). Single-token lookback allows matching shorter n-grams, may increase accept rate at depth=20+.
+2. **Sc B frieren #166 fallback arm2** — Only if arm1 fails quality at n=500. spec25/lookup15/min=2 = 4.187x = +7.7% safe fallback. Confirm before assigning a new Sc B experiment.
 
-3. **Sc A: INT4 weight quantization via Marlin** — 4x bandwidth reduction vs BF16 (vs FP8's 2x). Requires pre-quantized AWQ/GPTQ checkpoint of Mistral-7B-Instruct-v0.3. Higher quality risk but could push 1.866x toward 2.5x.
+3. **Sc D: FP8 KV composition** — Being tested by tanjiro #164. If tanjiro PR crashes can be diagnosed and fixed, the result could push Sc D past 2.218x.
 
-4. **Sc A: vLLM 0.12+ per-PR venv** — Unblocks FlashInfer attention (layers 2-3 of the PR #148 cascade fixed in vLLM 0.12+). Same install approach as SGLang's per-PR venv.
-
-5. **Sc D: Sc C SGLang FP8 KV transfer** — If frieren's PR #150 wins on Sc C, apply the same FP8 KV + mem-fraction mechanism to SGLang on Sc D.
+4. **Sc A: INT4 GPTQ/AWQ** — solidrust AWQ is incompatible (chat template broken). Needs a Mistral-7B-Instruct-v0.3 GPTQ-int4 checkpoint with correct system prompt handling. Low priority until compatible checkpoint identified.
 
 ## Operational notes
 
