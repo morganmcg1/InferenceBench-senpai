@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 13:20 UTC
+- **As of:** 2026-05-28 13:39 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -26,12 +26,12 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 |---|---|---|---|---:|---|
 | fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B best 2.687x** |
 | fern | C (high-load throughput) | vLLM 0.11 | high-conc BF16 + prefix caching (arm1 BF16 high-conc, full 21.052x) | #140 | **MERGED 13:03 UTC — Sc C first winner 21.052x** |
-| fern | C (high-load throughput) | vLLM 0.11 | scale to max-num-seqs 128/256, batched-tokens 16384 | #142 | **assigned 13:04 UTC** |
+| fern | C (high-load throughput) | vLLM 0.11 | scale to max-num-seqs 128/256, batched-tokens 16384 | #142 | **terminal 21.098x (+0.22% over #140), rebase requested 13:39 UTC** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **MERGED 12:50 UTC — Sc D first winner 1.247x** |
-| tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **assigned 12:51 UTC** |
+| tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **arm3 (spec15/lookup8) quick 6.918x — full eval running** |
 | frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram composition (arm3 full 2.073x) | #139 | **MERGED 13:19 UTC — Sc D new best 2.073x (supersedes #138)** |
-| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 + n-gram spec on Sc A (extend #137 winner) | #143 | **assigned 13:20 UTC** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 + n-gram spec on Sc A (extend #137 winner) | #143 | **arm1 quick 1.9115x / arm2 1.9143x (tie within 5%) — arm1 full eval running** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a
@@ -118,6 +118,42 @@ only and not terminal.
     supervised relaunch contract. tanjiro PR #138 is sent back with a fix
     direction (bundle libnuma.so.1 into the launcher PR, or pivot to vLLM
     fallback) before any SGLang full eval can become terminal.
+
+## Round-2 quick-probe signals (in flight)
+
+| Student | Scenario | Arm | Quick speedup | Status | W&B run |
+|---|---|---|---:|---|---|
+| fern | C | arm1 seqs128/tok8192 | 3.9017x | full eval **21.098x** (rebase blocked, +0.22% vs #140) | 2jw0s5lk |
+| fern | C | arm2 seqs64/tok16384 | 3.8991x | within 0.1% of arm1 | (logged) |
+| fern | C | arm3 seqs128/tok16384 | 3.9005x | within 0.04% of arm1 | (logged) |
+| fern | C | arm4 seqs256/tok16384 | 3.8704x | -0.8% vs arm1 | (logged) |
+| tanjiro | B | arm1 spec7/lookup4 | 2.121x | quick done | cwbiqekn |
+| tanjiro | B | arm2 spec10/lookup6 | 2.857x | quick done; +35% vs arm1 | ahowy8xt |
+| tanjiro | B | **arm3 spec15/lookup8** | **6.918x** | promoted to full eval (VRAM 90.16 GB) | rdmg3q7u |
+| frieren | A | arm1 FP8+spec5/lookup4 | 1.9115x | promoted to full eval (simpler within 5%) | quc7zeij |
+| frieren | A | arm2 FP8+spec10/lookup6 | 1.9143x | +0.14% vs arm1 — wins TPOT but Sc A is TTFT only | 3gp3w4s5 |
+
+### Round-2 key learnings
+
+- **Sc C concurrency scaling has hit a plateau.** All 4 fern arms within 0.8%
+  at quick — burst concurrency=64 fits in every `max-num-seqs >= 64` config.
+  Only the full eval (256 reqs/profile) shows the +0.22% from doubling seqs
+  to 128 — at noise floor. **Implication:** further vLLM concurrency tuning
+  on Sc C is exhausted; next Sc C lever is engine (SGLang) or model-side
+  (larger batches via dtype FP8 KV-cache, prefix caching for poisson profile).
+- **N-gram speculative depth on Sc B scales aggressively.** arm1 (depth 7) →
+  arm2 (depth 10) → arm3 (depth 15) returned 2.121x → 2.857x → 6.918x quick —
+  superlinear. Sc B's 8192-token outputs give long horizons for n-gram
+  match-and-accept. Even with full-eval haircut (PR #136 saw 3.5x quick →
+  2.687x full, ~24% drop), arm3 should land ~5.2x — a **2x improvement** over
+  the current Sc B baseline.
+- **Sc A speculative composition is prefill-limited.** arm1 (spec5) and arm2
+  (spec10) tie at TTFT (1.91x both) but diverge on TPOT (-17% in arm2's
+  favor). Sc A primary metric is `1/ttft.p50`, so the deeper window doesn't
+  help. Frieren correctly promoted arm1 (simpler within 5%). Composition
+  still beats FP8-only quick (1.901x → 1.911x — +0.5% from n-gram on the
+  1024-token decode tail), so the FP8+n-gram pattern is genuinely
+  cross-scenario and not just a Sc D coincidence.
 
 ## Themes worth exploring next
 
