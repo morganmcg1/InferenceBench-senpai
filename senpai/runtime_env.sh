@@ -59,4 +59,23 @@ export PIP_REQUIRE_VIRTUALENV="${PIP_REQUIRE_VIRTUALENV:-true}"
 export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export VLLM_DISABLE_FLASHINFER_PREFILL="${VLLM_DISABLE_FLASHINFER_PREFILL:-1}"
 
+# cublas symlink workaround for cold FlashInfer JIT cache.
+# vLLM's Fp8LinearOp on SM_120 routes to flashinfer_w8a8_scaled_mm which
+# JIT-compiles gemm.so and links against -lcublas / -lcublasLt. The
+# nvidia pip cublas package only ships .so.12; without unversioned .so
+# files on LIBRARY_PATH, the link fails. Create stub symlinks once and
+# prepend their dir to LIBRARY_PATH.
+if [ -z "${INFERENCE_BENCH_CUBLAS_STUBS_DONE:-}" ]; then
+  _stub_dir="/tmp/inferencebench-cublas-stubs"
+  mkdir -p "$_stub_dir" 2>/dev/null || true
+  _nv_cublas_dir="$(python3 -c 'import os, site; paths=[os.path.join(p, "nvidia/cublas/lib") for p in site.getsitepackages()+[site.getusersitepackages()]]; print(next((p for p in paths if os.path.isdir(p)), ""))' 2>/dev/null || true)"
+  if [ -n "$_nv_cublas_dir" ] && [ -d "$_nv_cublas_dir" ]; then
+    ln -sf "$_nv_cublas_dir/libcublas.so.12"   "$_stub_dir/libcublas.so"   2>/dev/null || true
+    ln -sf "$_nv_cublas_dir/libcublasLt.so.12" "$_stub_dir/libcublasLt.so" 2>/dev/null || true
+    export LIBRARY_PATH="${_stub_dir}:${LIBRARY_PATH:-}"
+    export INFERENCE_BENCH_CUBLAS_STUBS_DONE=1
+  fi
+  unset _stub_dir _nv_cublas_dir
+fi
+
 mkdir -p "$XDG_CACHE_HOME" "$TRITON_CACHE_DIR" "$CUDA_CACHE_PATH" "$VLLM_CACHE_ROOT"
