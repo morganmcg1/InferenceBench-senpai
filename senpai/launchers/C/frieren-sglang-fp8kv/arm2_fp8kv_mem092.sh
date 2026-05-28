@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Sc C arm1 (PR #151): PR #144 winner + FP8 KV cache (fp8_e5m2).
-# Single-lever change over PR #144 to isolate the FP8 KV effect at the same
-# mem-fraction=0.85. Sc C is concurrency>>1 / KV-bandwidth-bound, so halving
-# the KV footprint should amortise dequant overhead and free space for more
-# concurrent requests.
+# Sc C arm2 (PR #151): PR #144 winner + FP8 KV cache (fp8_e5m2) + mem-fraction
+# pushed 0.85 → 0.92 to consume the ~15 GiB VRAM headroom seen in PR #144.
+# Goal: with FP8 KV halving per-block KV cost, the higher mem-fraction should
+# yield substantially more in-flight requests during the burst profile.
 set -euo pipefail
 
 MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
@@ -60,7 +59,7 @@ if [ -z "${SGLANG_LIB_DIR}" ]; then
 fi
 export LD_LIBRARY_PATH="${SGLANG_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-echo "=== SGLang Inference Server (Sc C arm1 — FP8 KV e5m2 @ mem 0.85) ==="
+echo "=== SGLang Inference Server (Sc C arm2 — FP8 KV e5m2 @ mem 0.92) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
@@ -73,7 +72,7 @@ exec python3 -m sglang.launch_server \
     --host "${HOST}" \
     --port "${PORT}" \
     --context-length "${MAX_MODEL_LEN}" \
-    --mem-fraction-static 0.85 \
+    --mem-fraction-static 0.92 \
     --chunked-prefill-size 8192 \
     --schedule-policy lpm \
     --max-running-requests 256 \
