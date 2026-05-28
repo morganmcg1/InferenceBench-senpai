@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 22:05 UTC
+- **As of:** 2026-05-28 22:27 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -23,13 +23,14 @@
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
 | fern | #190 | B | vLLM 0.21 + FlashInfer on PR #179 winner — arm1 quick **5.227x** (+35.6% over PR #179 quick); arm1 full eval running | **arm1 full running ~21:58 UTC; ETA 22:58 (past close)** |
-| frieren | #191 | D | Spec depth push (spec12, spec14) on PR #189 winner (vLLM 0.21 + FlashInfer) — screen if FlashInfer shifts quality cliff vs FA2 | **assigned 22:02 UTC; quick ETA 22:15; launch close 22:38** |
-| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (+113% over PR #179 quick); arm1 full eval running | **partial result 20:59 UTC; full ETA 22:00-22:30 UTC** |
+| frieren | #191 | D | Spec depth push (spec12, spec14) on PR #189 winner (vLLM 0.21 + FlashInfer) — screen if FlashInfer shifts quality cliff vs FA2 | **assigned 22:02 UTC; quick ETA 22:25** |
+| tanjiro | #192 | D | FP8 KV cache (e5m2) probe on PR #189 winner (vLLM 0.21 + FlashInfer) — Rule #16 re-test under FlashInfer SM120 tensor cores | **assigned 22:27 UTC; quick-only screening** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #185 | tanjiro | B | arm1 4.370x (-1.8%), arm2 4.292x (-3.5%) at full; both ~8.2x quick (Rule #17 -47% divergence) | CLOSED — did_not_improve; Rule #17 extended to scheduler flags |
 | #189 | frieren | D | **3.158x** vLLM 0.21 + FlashInfer + FP8 + spec10 (+42.4% over PR #152 2.218x) | MERGED — new Sc D best; H100 SMAC3 gap 39%→55% |
 | #188 | fern | C | flashinfer -1.61%, fa3 +0.14% (both <+0.5%) quick only | CLOSED — SGLang attention-kernel surface saturated for Sc C on PR #181 winning knobs |
 | #186 | frieren | A | **1.935x** vLLM 0.21 + FlashInfer (+2.9% over PR #156 1.881x; quality 0.993) | MERGED — new Sc A best; vLLM 0.21+FlashInfer proven on SM120 |

@@ -1,5 +1,38 @@
 # SENPAI Research Results
 
+## 2026-05-28 22:25 UTC — PR #185: Sc B max-num-seqs=1 on PR #179 winner (CLOSED — did_not_improve, Rule #17 amplified)
+
+- **Branch:** `tanjiro/sc-b-seqs1-optimization`
+- **Student:** tanjiro
+- **Hypothesis:** max-num-seqs=1 eliminates continuous-batching scheduler overhead at conc=1 (analogous to PR #156 Sc A win, +0.78%). Expected +0.5-2% TPOT improvement.
+
+### Full eval comparison
+
+| Arm | Speedup | TPOT.p50 (s) | Quality ratio (n=500) | Speed | W&B |
+|---|---:|---:|---:|---:|---|
+| PR #179 (baseline) | **4.450x** | 0.005652 | 0.9664 ✓ | 64/64 ✓ | sb06alrs |
+| arm1 (seqs=1 only) | 4.3698x (**-1.8%**) | 0.005756 | 0.9732 ✓ | 64/64 ✓ | hm0k8rqz |
+| arm2 (seqs=1 + no-chunked + tokens=8192) | 4.2922x (**-3.5%**) | 0.005860 | 0.9732 ✓ | 64/64 ✓ | ypi8666y |
+
+### Quick→full divergence
+
+| Arm | Quick | Full | Delta |
+|---|---:|---:|---:|
+| arm1 | 8.2056x | 4.3698x | **-47%** |
+| arm2 | 8.1726x | 4.2922x | **-47%** |
+
+### Analysis
+
+**Rule #17 extended.** Scheduler-flag changes on Sc B exhibit the same quick→full collapse as n-gram lookup changes (PR #166). The +84% quick gain (vs PR #179 quick) at n=4 burst over-counts the per-step scheduler-skip benefit because at n=4 only ~1 in-flight request exists. At n=64 burst the 63 queued requests force serialization and the gain doesn't survive contention + spec25 verify cost dominating decode.
+
+**Mechanism:** max-num-seqs=1 vs 16 changes the logical slot count but not bytes-per-token (gpu_mem_util=0.92 is the cap). VRAM dropped slightly (~2 GB) but unlocked no throughput. The continuous-batching scheduler iteration is sub-millisecond at TPOT 5.7ms/token.
+
+**Conclusion:** Sc A's max-num-seqs=1 win (PR #156) does NOT translate to Sc B's TPOT.p50 metric — the lever is metric-orthogonal: helps TTFT at compute-bound conc=1, neutral-to-harmful for TPOT under spec25 verify. Speed_success 64/64 on both — the serialization timeout concern did not materialize. PR #179 (4.450x) remains Sc B record.
+
+**Rule #17 refinement:** Treat ALL Sc B quick results at n=4 burst as upper bounds. The mechanism is small-burst dynamics that don't survive n=64 contention, applies broadly across scheduler/spec flag categories.
+
+---
+
 ## 2026-05-28 22:01 UTC — PR #189: Sc D vLLM 0.21 + FlashInfer engine upgrade (MERGED — new Sc D best +42.4%)
 
 - **Branch:** `frieren/sc-d-vllm21-flashinfer`
