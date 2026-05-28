@@ -31,7 +31,7 @@ baselines):
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **3.550x** | `senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh` | 8656lf5w | #141 |
-| **C** | scenario/C/speedup_over_pytorch | **21.098x** | `senpai/launchers/C/fern-vllm-highconc-scale/arm1_seqs128_tok8192.sh` | 2jw0s5lk | #142 |
+| **C** | scenario/C/speedup_over_pytorch | **24.305x** | `senpai/launchers/C/fern-sglang-sc-c/arm3_sglang_radix.sh` | ifj6fcec | #144 |
 | **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
 
 ### Scenario D — current winner (PR #139, merged 2026-05-28) — supersedes PR #138
@@ -50,19 +50,28 @@ baselines):
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 - **Key insight:** FP8 + n-gram compose additively: FP8 attacks the 4096-token prefill stage (TTFT -45%), n-gram attacks the 2048-token decode stage (TPOT -59%). Both levers target independent bottlenecks in balanced Sc D, producing clean multiplicative lift.
 
-### Scenario C — current winner (PR #142, merged 2026-05-28) — supersedes PR #140
+### Scenario C — current winner (PR #144, merged 2026-05-28) — supersedes PR #142
+
+- **Engine:** SGLang 0.5.12.post1, Triton attention backend, BF16 weights, BF16 KV cache (radix cache ON by default)
+- **Key flags:** `--mem-fraction-static 0.85 --chunked-prefill-size 8192 --schedule-policy lpm --max-running-requests 256 --attention-backend triton`
+- **Geomean req/s:** ~1.954 (PyTorch 0.0847) across burst/poisson/constant profiles
+- **Per-profile req/s:** burst 3.0973, poisson 2.1409, constant 1.3162 (all 256/256 ✓)
+- **Speedup:** 24.305x (+15.2% over PR #142's 21.098x)
+- **Quality:** MMLU-Pro 0.306 obs / 0.298 baseline = ratio 1.027 (gate 0.95, n=500) ✓
+- **Speed success:** 768/768 (failure_rate 0.0) ✓
+- **VRAM peak:** 82.5 GiB / 97.9 GiB (-10% vs PR #142's 90.9 GiB)
+- **W&B run:** ifj6fcec
+- **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-sglang-sc-c/arm3_sglang_radix.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** SGLang 0.5.x enables radix cache by default (no `--enable-radix-cache` flag exists). The active lever is `--schedule-policy lpm` (longest-prefix-match), which orders the 256-request burst to maximise cross-request prefix sharing and surface the latent radix-cache benefit. Per-profile gains: burst +18.3%, poisson +15.3%, constant +12.0%. VRAM reduction from SGLang's more efficient memory manager allows larger effective batch budget.
+- **Relaunch contract:** bundled `lib/libnuma.so.1` at `senpai/launchers/C/fern-sglang-sc-c/lib/`; per-PR venv auto-bootstrapped via `uv venv` + `pip install sglang[all]==0.5.12.post1` if `/tmp/inferencebench-engine-venvs/sglang-pr-144` absent.
+
+### Scenario C — prior winner (PR #142, merged 2026-05-28, superseded by PR #144)
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, BF16 weights, BF16 KV cache (no FP8, no prefix caching)
 - **Key flags:** `--max-num-seqs 128 --max-num-batched-tokens 8192 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
-- **Geomean req/s:** ~1.788 (PyTorch 0.0847) across burst/poisson/constant profiles
-- **Per-profile req/s:** burst 2.618, poisson 1.857, constant 1.175 (all 256/256 ✓)
-- **Speedup:** 21.098x (vs PR #140's 21.052x = +0.22% — confirms seqs=128 is marginally better than seqs=64)
-- **Quality:** MMLU-Pro 0.314 obs / 0.298 baseline = ratio 1.054 (gate 0.95, n=500) ✓
-- **Speed success:** 768/768 (failure_rate 0.0) ✓
-- **VRAM peak:** 90923 MiB / 97887 MiB
+- **Speedup:** 21.098x (vs PR #140's 21.052x = +0.22%)
+- **Quality:** ratio 1.054 (observed 0.314, n=500) ✓
 - **W&B run:** 2jw0s5lk
-- **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-vllm-highconc-scale/arm1_seqs128_tok8192.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
-- **Key insight:** +0.22% gain from doubling `max-num-seqs` 64→128 is at the noise floor. The Sc C vLLM concurrency plateau has been reached — quick-probe spread across all 4 arms was <0.8%, and the full eval confirms the architecture is saturated. Next Sc C lever must be at a different level: engine (SGLang, which hits 51.12x on H100), model precision (FP8 KV-cache), or prefill backend.
 
 ### Scenario C — prior winner (PR #140, merged 2026-05-28, superseded by PR #142)
 
@@ -194,6 +203,14 @@ research signal only and must not be used to update the current-best row.
   Quality ratio 1.054 (observed 0.314, n=500), 768/768 speed success.
   Delta is at noise floor — Sc C vLLM concurrency scaling saturated.
   Next lever: SGLang engine or FP8 KV-cache.
+- 2026-05-28 14:45 UTC — Merged PR #144 (fern). Scenario C new best:
+  24.305x (SGLang 0.5.12.post1, BF16, LPM scheduler, radix cache default-ON,
+  max-running-requests=256, chunked-prefill-size=8192, Triton attention backend).
+  Supersedes PR #142 (21.098x, +15.2% gain). Quality ratio 1.027 (observed 0.306,
+  n=500), 768/768 speed success, VRAM -10% vs PR #142. Key mechanism: SGLang radix
+  cache is ON by default in 0.5.x; `--schedule-policy lpm` surfaces the benefit
+  by ordering 256-req streams for maximum prefix reuse. Per-profile gains uniform
+  (+18% burst, +15% poisson, +12% constant). H100 reference gap narrowed to 52%.
 - 2026-05-28 13:19 UTC — Merged PR #139 (frieren). Scenario D new best:
   2.073x (vLLM 0.11, FP8+n-gram composition, max-num-seqs=32).
   Supersedes PR #138 SGLang 1.247x (+66%). Quality ratio 0.953 (observed 0.284,

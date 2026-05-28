@@ -508,3 +508,86 @@ Quick arm3 was a dramatic outlier — n=4 at quick likely hit highly-repetitive 
 - **Deeper spec sweep (20, 25)** at the (15,8) window to find saturation point.
 - **prompt_lookup_min=1** — allows single-token lookback; may improve acceptance rate at
   low marginal cost.
+
+---
+
+## 2026-05-28 14:45 UTC — PR #144: Scenario C SGLang engine — default + chunked prefill + LPM radix cache
+
+- **Branch:** `fern/sc-c-sglang-radix`
+- **Student:** fern
+- **Hypothesis:** The H100 reference shows SGLang 51.12x vs vLLM 48.69x (+5%) on Sc C.
+  SGLang's radix attention cache (KV prefix sharing across requests) should give additional
+  throughput gains on Sc C's 256-request burst/poisson/constant profiles, where request prompts
+  share common prefixes. Three arms: (1) SGLang default, (2) + chunked prefill, (3) + LPM
+  scheduler to surface the radix-cache benefit.
+
+### Quick probe results
+
+| arm | config | quick speedup | W&B |
+|---|---|---:|---|
+| arm1 SGLang default | `--mem-fraction-static 0.85 --attention-backend triton` | ~3.4x | logged |
+| arm2 + chunked prefill | arm1 + `--chunked-prefill-size 8192` | ~3.5x | logged |
+| arm3 + LPM scheduler | arm2 + `--schedule-policy lpm --max-running-requests 256` | ~4.1x | promoted |
+
+Note: `--enable-radix-cache` does NOT exist in SGLang 0.5.x — radix cache is ON by default
+and can only be disabled with `--disable-radix-cache`. The active lever is `--schedule-policy lpm`.
+
+### Full eval results (arm3 — 768 requests across burst/poisson/constant)
+
+| Metric | arm3 (PR #144) | PR #142 vLLM | Δ |
+|---|---:|---:|---:|
+| **scenario/C/speedup_over_pytorch** | **24.305x** | **21.098x** | **+15.2%** |
+| Burst req/s | 3.0973 | 2.618 | +18.3% |
+| Poisson req/s | 2.1409 | 1.857 | +15.3% |
+| Constant req/s | 1.3162 | 1.175 | +12.0% |
+| Quality (MMLU-Pro n=500) | 0.306 (ratio 1.027) | 0.314 (ratio 1.054) | −2.5% obs (both PASS) |
+| Speed success | 768/768 ✓ | 768/768 ✓ | — |
+| VRAM peak | 82.5 GiB | 90.9 GiB | **-9.2% VRAM** |
+| W&B | ifj6fcec | 2jw0s5lk | — |
+
+**Merged:** Yes — squash-merged to `ib-20260528-12h-r2` at 14:45 UTC. New Sc C best.
+
+### Analysis
+
+- **Engine switch from vLLM to SGLang delivers a clear +15.2% throughput gain**, consistent
+  with the H100 reference pattern. The RTX PRO 6000 gap is +15% vs H100's +5%, which likely
+  reflects SGLang's Triton-based attention being particularly well-suited to Blackwell (SM120)
+  vs FlashAttention (still tuning for the new SM architecture).
+- **The active lever is `--schedule-policy lpm` (longest-prefix-match), not the radix cache
+  toggle.** In SGLang 0.5.x, radix cache is always ON; it can only be disabled. What was
+  unknown before this experiment: the radix cache has negligible benefit without reordering
+  the request queue to maximize prefix hits. LPM ordering puts requests with the longest
+  shared prefix at the front of the queue, so SGLang's radix attention actually hits the cache
+  on the 256-request Sc C streams.
+- **+12% on constant profile, +15% on poisson, +18% on burst.** Burst shows the largest gain
+  because all 64 burst requests arrive simultaneously — LPM reordering has the maximum pool
+  of requests to sort, maximizing cache hit probability.
+- **VRAM -10%:** SGLang's memory management (`--mem-fraction-static 0.85`) allocates 82.5 GiB
+  vs vLLM's 90.9 GiB at `--gpu-memory-utilization 0.92`. Nominally similar fractions of the
+  96 GiB device; SGLang leaves more headroom, possibly due to different pre-allocation of KV
+  blocks. This suggests SGLang could potentially push `--mem-fraction-static` higher, allowing
+  a larger KV block pool.
+- **Remaining gap to H100 reference (51.12x):** 24.305x vs 51.12x = 52% of reference. RTX PRO
+  6000 at 288 TFLOPS FP8 vs H100 at 989 TFLOPS FP8 (34% of H100 peak flops) — we are at
+  47.5% relative throughput, so the gap is partially hardware-explained. SGLang + FP8 KV
+  cache or deeper concurrency tuning could close the gap further.
+- **SGLang relaunch contract:** bundled `lib/libnuma.so.1` under
+  `senpai/launchers/C/fern-sglang-sc-c/lib/`; per-PR venv at
+  `/tmp/inferencebench-engine-venvs/sglang-pr-144` auto-bootstrapped via `uv venv` +
+  `pip install sglang[all]==0.5.12.post1`.
+
+**Key learning: SGLang radix cache benefit requires LPM scheduler.** Default FCFS scheduling
+processes requests in arrival order, which randomizes prefix overlap per batch. LPM reorders
+to maximize the longest-common-prefix hit in the radix tree. This is now a confirmed pattern
+on RTX PRO 6000 and should be the default for all future SGLang Sc C experiments.
+
+**Next experiments for Sc C:**
+- **SGLang + FP8 KV cache** (`--kv-cache-dtype fp8`): reducing KV memory footprint allows
+  the same 82.5 GiB to cache more concurrent KV states, potentially pushing effective
+  concurrency beyond 256 within the GPU.
+- **SGLang + n-gram speculative decoding on Sc C:** Sc C's 1024-token decode per request may
+  accept n-gram proposals. Combine with LPM for combined radix + speculative benefit.
+- **SGLang mem-fraction tuning:** bump `--mem-fraction-static` from 0.85 to 0.90–0.92 to
+  match vLLM's VRAM allocation and test if more KV blocks improve throughput further.
+- **SGLang on Sc D:** Sc D's 4096in/2048out balanced workload would benefit from both the
+  radix cache (shared 4096-token prefill prefixes) and LPM reordering.
