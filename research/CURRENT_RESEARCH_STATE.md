@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-c-r1`
 
-- Date: 2026-05-28 (updated ~T+95, launch entering review/scorekeeping window)
+- Date: 2026-05-28 (updated ~T+103, launch in final scorekeeping window)
 - Active research tag: `ib-20260528-scen-c-r1`
 - Advisor branch: `ib-20260528-scen-c-r1`
 - Scope: Scenario C only (high-load, geomean throughput across burst/poisson/constant).
@@ -26,22 +26,23 @@ Lineage:
 - **vLLM 0.11.0 V1: `--no-enable-chunked-prefill` is a no-op** (engine forces chunked_prefill=True in arg_utils.py:1548 for non-pooling models). Future scenarios A/B/D should not test this flag.
 - **n-gram speculative decoding wins on long-decode regimes** with structured/instruction-tuned models — Scenario C's output_len=1024 + ignore_eos=true is the right environment. Quality preserved exactly (ratio 1.000).
 - **SGLang is competitive with vLLM on RTX PRO 6000** when configured with triton attention + pytorch sampler. The FlashInfer/SM120 incompatibility doesn't prevent strong baselines.
-- **SGLang launcher in PR #163 uses env-var-controlled defaults**; reproduce requires setting SGLANG_* env vars. Open follow-up: hardcode defaults so the launcher is self-contained.
+- **SGLang launcher self-containment (PR #174 merged)**: PR #163's launcher previously fell back to non-winning defaults when env vars were unset; PR #174 hardcoded the PR #163 Arm A winning config (mem=0.88, max_running=256, fcfs, chunked_prefill=4096) as the unset-fallback so the launcher matches the PR #165 vLLM launcher's self-contained pattern. Env-var overrides preserved.
 
 ## Current state
 
-- ~T+95 of 120 min launch budget. Entering review/scorekeeping window (~25 min remaining, ~10-15 reserved).
-- All Scenario C PRs in this launch are now resolved:
+- ~T+103 of 120 min launch budget. ~17 min remaining; ~10 reserved for final BASELINE.md scorekeeping.
+- Scenario C PRs in this launch:
   - PR #161 merged (rank 3, 20.84x)
   - PR #163 merged (rank 2, 22.18x)
   - PR #165 merged (**rank 1, 23.98x** — current winner)
-  - PR #167 closed (no commits since assignment; insufficient wall time for full eval; would have needed to clear 23.98x not 22.18x)
-- frieren is idle after the PR #165 merge. fern's PR #167 was stuck — no commits, no comments since 17:39, and `--min-remaining-s 1800` would refuse a fresh full eval at this point.
-- No new assignments planned for the remaining budget; the launcher-defaults hardcoding follow-up (see below) is non-urgent and not worth a partial-attempt PR in the final ~10 min.
+  - PR #167 closed (no commits since assignment; insufficient wall time for full eval).
+  - PR #174 merged (SGLang launcher recipe-preservation cleanup — no metric change; baseline still 23.98x).
+- fern is idle after merging PR #174. frieren has PR #175 open (exploratory `num_speculative_tokens=7` quick probe; no baseline-update intent).
+- No new assignments planned: remaining ~7 useful minutes for fern is below quick-probe budget; the k=7 probe in PR #175 will collect data for future launches.
 
 ## Active PRs
 
-_None._ Launch is in scorekeeping phase.
+- **#175 (scen-c-frieren)**: vLLM `num_speculative_tokens=7` quick-only exploration probe. Not intended to update baseline; data is for future Scenario A/B/D tuning.
 
 ## Potential next research directions (for future launches)
 
