@@ -32,7 +32,7 @@ baselines):
 | **A** | scenario/A/speedup_over_pytorch | **1.935x** | `senpai/launchers/A/frieren-vllm12/arm2_vllm12_flashinfer.sh` | zo8t5mds | #186 |
 | **B** | scenario/B/speedup_over_pytorch | **4.450x** | `senpai/launchers/B/tanjiro-fp8-compose/arm1_fp8_spec25_lookup12.sh` | sb06alrs | #179 |
 | **C** | scenario/C/speedup_over_pytorch | **29.768x** | `senpai/launchers/C/fern-sglang-mem-push/arm1_mem090.sh` | 2iilmzji | #181 |
-| **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
+| **D** | scenario/D/speedup_over_pytorch | **3.158x** | `senpai/launchers/D/frieren-vllm21-flashinfer/arm1_vllm21_flashinfer_spec10.sh` | uicvb6s4 | #189 |
 
 ### Scenario A — current winner (PR #186, merged 2026-05-28) — supersedes PR #156
 
@@ -73,7 +73,28 @@ baselines):
   ```
 - **Key insight:** Raising `--mem-fraction-static` from 0.85 → 0.90 allocates +2.8 GiB to the KV cache beyond the FP8 freed weight headroom, confirming that PR #172's config was still KV-capacity-limited at 256-conc. arm2 (0.95) had +0.19% in quick (below 1% promotion threshold) — not promoted. The 0.85→0.90 gain (+0.80%) is small, indicating KV-utilization ceiling is near. H100 SMAC3 ceiling 46.70x; this winner closes the gap to ~64%.
 
-### Scenario D — current winner (PR #152, merged 2026-05-28) — supersedes PR #139
+### Scenario D — current winner (PR #189, merged 2026-05-28) — supersedes PR #152
+
+- **Engine:** vLLM **0.21.0**, **FlashInfer** attention backend (SM120 Blackwell cascade resolved), FP8 weight quantization + n-gram speculative decoding depth 10, BF16 KV cache
+- **Key flags:** `--gpu-memory-utilization 0.92 --max-num-seqs 32 --max-num-batched-tokens 4096 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --attention-backend FLASHINFER --speculative-config '{"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'`
+- **TTFT.p50:** 0.1082 s (PyTorch 0.2123 s; -49%) / **TPOT.p50:** **0.00567 s** (PyTorch 0.0251 s; **-77%**) / **req/s:** 0.1390 (PyTorch 0.0382; **+264%**)
+- **Geomean (raw):** 6.094 (PyTorch 1.930)
+- **Speedup:** **3.158x** (**+42.4% over PR #152's 2.218x**; H100 SMAC3 ceiling 5.69x → this winner = 55% of reference)
+- **Quality:** MMLU-Pro 0.286 obs / 0.298 baseline = ratio **0.960** (gate 0.95, n=500) ✓
+- **Speed success:** 96/96 (failure_rate 0.0) ✓
+- **VRAM peak:** 91,415 MiB / 97,887 MiB (slightly lower than PR #152's 91,706 MiB)
+- **W&B run:** uicvb6s4
+- **FlashInfer env vars:** `VLLM_USE_FLASHINFER_SAMPLER=0`, `VLLM_DISABLE_FLASHINFER_PREFILL=0`
+- **Per-PR venv:** `/tmp/inferencebench-engine-venvs/vllm12-pr-186` (shared; bootstrapped via `pip install "vllm>=0.12.0"`)
+- **Reproduce (from task workspace):**
+  ```bash
+  cp senpai/launchers/D/frieren-vllm21-flashinfer/arm1_vllm21_flashinfer_spec10.sh ./start_server.sh && \
+  python evaluate.py --json-output-file metrics_full.json
+  ```
+- **Key insight:** FlashInfer's GQA paged-decode kernel dominates on Sc D's decode-heavy workload (conc=4, 2048 output tokens, n-gram spec10). TPOT.p50 drops -40.8% (0.00958→0.00567 s) and req/s rises +60.6% (0.0865→0.1390). TTFT.p50 improves modestly (-6.1%) since Sc D prefill share is small. The engine-version-only control (arm2: vLLM 0.21 + FA, quick 2.485x) was clearly below arm1 (3.242x quick), confirming FlashInfer decode kernel — not the vLLM 0.21 scheduler improvements — drives the gain. Pattern matches PR #186: engine upgrade ~neutral, FlashInfer kernel = the win. Sc D quality ratio unchanged vs PR #152 (0.960), n-gram spec10/6 under vLLM 0.21 fully compatible. H100 SMAC3 gap closed from 39% to 55%.
+- **Relaunch contract:** FlashInfer env vars must be set before server start; per-PR venv at `/tmp/inferencebench-engine-venvs/vllm12-pr-186`; launcher auto-bootstraps if absent.
+
+### Scenario D — prior winner (PR #152, merged 2026-05-28) — supersedes PR #139
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight quantization + n-gram speculative decoding depth 10, BF16 KV cache
 - **Key flags:** `--max-num-seqs 32 --max-num-batched-tokens 4096 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'`
@@ -339,6 +360,14 @@ research signal only and must not be used to update the current-best row.
   conc=1 was real; gain modest, consistent with compute-bound regime. AWQ arm
   discarded (chat-template broken + awq_marlin -56% vs FP8 on SM120). Quality
   0.953 (n=500 ✓), 128/128 success. W&B ds519cur.
+- 2026-05-28 22:01 UTC — Merged PR #189 (frieren). Scenario D new best:
+  3.158x (vLLM 0.21 + FlashInfer, FP8 weights + n-gram spec10/6, max-num-seqs=32).
+  Supersedes PR #152 (vLLM 0.11 + FA, 2.218x) — +42.4% gain. TPOT.p50 -40.8%
+  (0.00958→0.00567 s), req/s +60.6% (0.0865→0.139). Quality ratio unchanged at
+  0.960 (observed 0.286, n=500), 96/96 speed success. FlashInfer GQA paged-decode
+  kernel is dominant mechanism; engine upgrade alone (arm2 FA control, 2.485x quick)
+  was clearly lower. H100 SMAC3 ceiling 5.69x; gap closed from 39% to 55%.
+  W&B uicvb6s4.
 - 2026-05-28 16:25 UTC — Merged PR #152 (fern). Scenario D new best:
   2.218x (vLLM 0.11, FP8 weights + n-gram `num_speculative_tokens=10,
   prompt_lookup_max=6`, max-num-seqs=32, chunked prefill at 4096 tokens).
