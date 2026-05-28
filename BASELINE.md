@@ -29,10 +29,32 @@ baselines):
 
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
-| **A** | scenario/A/speedup_over_pytorch | **1.881x** | `senpai/launchers/A/fern-vllm-scheduling-int4/arm1_fp8_seqs1_tokens8192.sh` | ds519cur | #156 |
+| **A** | scenario/A/speedup_over_pytorch | **1.935x** | `senpai/launchers/A/frieren-vllm12/arm2_vllm12_flashinfer.sh` | zo8t5mds | #186 |
 | **B** | scenario/B/speedup_over_pytorch | **4.450x** | `senpai/launchers/B/tanjiro-fp8-compose/arm1_fp8_spec25_lookup12.sh` | sb06alrs | #179 |
 | **C** | scenario/C/speedup_over_pytorch | **29.768x** | `senpai/launchers/C/fern-sglang-mem-push/arm1_mem090.sh` | 2iilmzji | #181 |
 | **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
+
+### Scenario A — current winner (PR #186, merged 2026-05-28) — supersedes PR #156
+
+- **Engine:** vLLM **0.21.0** (latest stable, pip install `vllm>=0.12.0` resolves to 0.21.0), **FlashInfer** attention backend (SM120 Blackwell cascade resolved vs PR #148/vLLM 0.11)
+- **Key flags:** `--gpu-memory-utilization 0.92 --max-num-seqs 1 --max-num-batched-tokens 16384 --no-enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --attention-backend FLASHINFER`
+- **TTFT.p50:** **0.2266 s** (PyTorch 0.4385 s; inverse 4.414 s⁻¹)
+- **TTFT.p90:** 0.2514 s / **TTFT.p99:** 0.2639 s
+- **TPOT.p50:** 0.01023 s / TPOT.p90: 0.01508 s
+- **generation_throughput:** 93.14 tok/s / **request_throughput:** 0.156 req/s
+- **Speedup:** 1.9354x (+2.9% over PR #156's 1.881x; H100 SMAC3 ceiling 4.48x → this winner = 43% of reference)
+- **Quality:** MMLU-Pro 0.296 obs / 0.298 baseline = ratio **0.993** (gate 0.95, n=500) ✓
+- **Speed success:** 128/128 (failure_rate 0.0) ✓
+- **VRAM peak:** 91,991 MiB / 97,887 MiB
+- **W&B run:** zo8t5mds
+- **Per-PR venv:** `/tmp/inferencebench-engine-venvs/vllm12-pr-186` — bootstrapped via `pip install "vllm>=0.12.0"` (~3-5 min first run)
+- **Reproduce (from task workspace):**
+  ```bash
+  cp senpai/launchers/A/frieren-vllm12/arm2_vllm12_flashinfer.sh ./start_server.sh && \
+  python evaluate.py --json-output-file metrics_full.json
+  ```
+- **Key insight:** vLLM 0.21.0 resolves the 5-layer SM120/FlashInfer compatibility cascade (documented in PR #148 for vLLM 0.11). FlashInfer prefill kernel is faster than FlashAttention on Blackwell SM120 at conc=1 / 8192-token inputs: -2.8% TTFT.p50 (0.2332→0.2266 s). The engine upgrade alone (vLLM 0.21 + FA, arm1) was essentially neutral vs PR #156, confirming the gain is attributed to the FlashInfer kernel switch specifically. Quality bonus: 0.953 (PR #156) → 0.993 ratio — FlashInfer prefill slightly more numerically accurate than FlashAttention at FP8 weights. H100 SMAC3 ceiling 4.48x; gap closed from 42% to 43%.
+- **Relaunch contract:** per-PR venv at `/tmp/inferencebench-engine-venvs/vllm12-pr-186`; launcher auto-bootstraps via `pip install "vllm>=0.12.0"` if venv absent.
 
 ### Scenario C — current winner (PR #181, merged 2026-05-28) — supersedes PR #172
 
@@ -187,7 +209,7 @@ baselines):
 - **Quality:** ratio 1.007 (observed 0.300, n=500) ✓
 - **W&B run:** dav3txgq
 
-### Scenario A — current winner (PR #156, merged 2026-05-28) — supersedes PR #137
+### Scenario A — prior winner (PR #156, merged 2026-05-28, superseded by PR #186)
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight-only quantization, BF16 KV cache
 - **Key flags:** `--quantization fp8 --max-num-seqs 1 --max-num-batched-tokens 8192 --no-enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
