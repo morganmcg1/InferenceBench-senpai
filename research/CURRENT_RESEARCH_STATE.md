@@ -22,7 +22,7 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | **to be assigned 15:55 UTC** |
+| fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | **assigned 15:55 UTC** |
 | frieren | #151 | C | SGLang FP8 KV cache (`fp8_e5m2`) + mem-fraction push (0.85→0.92) — extend PR #144 | **assigned 15:40 UTC** |
 | tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
 
