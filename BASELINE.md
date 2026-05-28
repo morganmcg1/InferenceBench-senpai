@@ -29,7 +29,7 @@ baselines):
 
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
-| **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
+| **A** | scenario/A/speedup_over_pytorch | **1.881x** | `senpai/launchers/A/fern-vllm-scheduling-int4/arm1_fp8_seqs1_tokens8192.sh` | ds519cur | #156 |
 | **B** | scenario/B/speedup_over_pytorch | **3.888x** | `senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh` | wkedminm | #149 |
 | **C** | scenario/C/speedup_over_pytorch | **27.497x** | `senpai/launchers/C/frieren-sglang-fp8kv/arm1_fp8kv_mem085.sh` | kk6shiqh | #151 |
 | **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
@@ -152,7 +152,19 @@ baselines):
 - **Quality:** ratio 1.007 (observed 0.300, n=500) ✓
 - **W&B run:** dav3txgq
 
-### Scenario A — current winner (PR #137, merged 2026-05-28)
+### Scenario A — current winner (PR #156, merged 2026-05-28) — supersedes PR #137
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight-only quantization, BF16 KV cache
+- **Key flags:** `--quantization fp8 --max-num-seqs 1 --max-num-batched-tokens 8192 --no-enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
+- **TTFT.p50:** 0.2332 s (PyTorch 0.4385 s; inverse 4.289 s⁻¹)
+- **Speedup:** 1.881x (+0.78% over PR #137's 1.866x)
+- **Quality:** MMLU-Pro 0.284 obs / 0.298 baseline = ratio 0.953 (gate 0.95, n=500) ✓
+- **Speed success:** 128/128 (failure_rate 0.0) ✓
+- **W&B run:** ds519cur
+- **Reproduce (from task workspace):** `cp senpai/launchers/A/fern-vllm-scheduling-int4/arm1_fp8_seqs1_tokens8192.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** Reducing `max-num-seqs` from 8 (PR #137) to 1 eliminates phantom-sequence KV reservation overhead at conc=1. vLLM reserves KV blocks proportional to max-num-seqs even when only 1 request is in flight; max-num-seqs=1 allows those blocks to serve the active prefill instead. Gain is modest (+0.78%) confirming conc=1 Sc A is compute-bound (FP8 dequant) not KV-bandwidth-bound. H100 SMAC3 ceiling 4.48x; this winner closes gap to 42%.
+
+### Scenario A — prior winner (PR #137, merged 2026-05-28, superseded by PR #156)
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight-only quantization, BF16 KV cache
 - **Key flags:** `--quantization fp8 --max-num-seqs 8 --max-num-batched-tokens 10240 --no-enable-chunked-prefill --no-enable-prefix-caching --gpu-memory-utilization 0.92`
@@ -258,6 +270,12 @@ research signal only and must not be used to update the current-best row.
   was 4.30x (vs 8.64x at spec25), confirming the n-gram verify-step compute
   dominates beyond depth=25. Sc B near-ceiling for prompt-lookup; future gains
   likely need EAGLE/Medusa draft-model speculation.
+- 2026-05-28 17:57 UTC — Merged PR #156 (fern). Scenario A new best:
+  1.881x (vLLM 0.11, FP8 weights, max-num-seqs=1, max-num-batched-tokens=8192).
+  Supersedes PR #137 (1.866x) — +0.78%. Confirms phantom-sequence overhead at
+  conc=1 was real; gain modest, consistent with compute-bound regime. AWQ arm
+  discarded (chat-template broken + awq_marlin -56% vs FP8 on SM120). Quality
+  0.953 (n=500 ✓), 128/128 success. W&B ds519cur.
 - 2026-05-28 16:25 UTC — Merged PR #152 (fern). Scenario D new best:
   2.218x (vLLM 0.11, FP8 weights + n-gram `num_speculative_tokens=10,
   prompt_lookup_max=6`, max-num-seqs=32, chunked prefill at 4096 tokens).
