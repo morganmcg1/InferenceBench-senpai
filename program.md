@@ -223,7 +223,7 @@ If it fails, treat baseline/request setup as the first research task; do not let
 students fabricate `speedup_over_pytorch` from public H100 ratios or report raw
 objectives as if they were speedups.
 
-Prepare missing scoring assets outside the two-hour optimization clock. On the
+Prepare missing scoring assets outside the timed optimization clock. On the
 current RTX PRO 6000 cluster, use:
 
 ```bash
@@ -245,7 +245,7 @@ senpai/require_scoring_preflight.sh \
 ```
 
 For Kubernetes SENPAI launches, arm `senpai/arm_cluster_cutoff.sh` at startup
-instead of using a bare cleanup job. For a strict 2 hour window, pass the same
+instead of using a bare cleanup job. For a strict timed window, pass the same
 PVC `--start-gate-path` to the cutoff script and `k8s/launch.py`; pods wait at
 the gate until every expected pod is Ready, then the cutoff job opens the gate
 and starts the clock. It archives `/root/.claude` from every tagged
@@ -286,8 +286,8 @@ student may have a separate checkout such as
 `/workspace/senpai-$STUDENT_NAME/target`; a single hardcoded
 `/workspace/senpai/target` path is not portable.
 
-For RTX PRO 6000 or other shared-pod shakedown runs, source the SENPAI runtime
-environment helper before starting vLLM/SGLang/TGI:
+For RTX PRO 6000 shakedown runs and packed-pod launches, source the SENPAI
+runtime environment helper before starting vLLM/SGLang/TGI:
 
 ```bash
 source "$PROBLEM_DIR/senpai/runtime_env.sh"
@@ -300,28 +300,30 @@ disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
 explicitly opts back in. It is launch environment setup only; it does not modify
 the evaluator or scoring contract.
 
-In multi-student, one-GPU pods, coordinate heavy work with
+When multiple students share a GPU or pod, coordinate heavy work with
 `senpai/gpu_slot.py`. This is only a process supervisor and lease file, not a
 benchmark runner: it records who owns the GPU, which PR/scenario they are
 testing, the unique lease ID, and when the lease expires. Students should still
 run the official task-local `./test_server.sh` and `evaluate.py`; the slot
 prevents accidental overlapping full workloads, stale port ownership, and broad
-cleanup commands.
+cleanup commands. If each student has a dedicated GPU, use the dedicated GPU
+lanes in parallel instead of serializing the whole fleet through one slot.
 
-Students should use `gpu_slot.py run --wait ...` for queued GPU work. Do not
-write shell loops that depend on the exact text printed by `gpu_slot.py status`;
-that output is for human debugging, not a stable machine interface. If
-`status --json` reports active GPU compute processes without a matching lease,
-resolve the orphan before starting a new full workload.
+In shared-GPU topology, students should use `gpu_slot.py run --wait ...` for
+queued GPU work. Do not write shell loops that depend on the exact text printed
+by `gpu_slot.py status`; that output is for human debugging, not a stable
+machine interface. If `status --json` reports active GPU compute processes
+without a matching lease, resolve the orphan before starting a new full
+workload.
 
 Use `--mode quick` for screening probes and `--mode full` for confirmation
 runs. Quick mode caps a slot at 15 minutes and full mode caps it at 60 minutes,
-which prevents one student from silently consuming the whole shared-GPU round.
+which prevents one student from silently consuming a shared GPU round.
 
 When the cutoff time is known, set `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass
 `--deadline-utc` to `gpu_slot.py`, and use `--min-remaining-s` for any full
 evaluation. The slot helper should refuse work that cannot plausibly finish,
-report, and be reviewed before the two-hour gate closes.
+report, and be reviewed before the launch gate closes.
 
 Packed pods share one Python installation. Do not use global `pip install` or
 `uv pip install --system` during serving experiments; that can invalidate other
@@ -492,7 +494,7 @@ parameter choices. SENPAI adds coordination: the advisor manages scarce time and
 GPU access, students run bounded research arms or single hypotheses, and every
 decision is measured through the official evaluator.
 
-The default two-hour loop is:
+The default timed launch loop is:
 
 1. Confirm preflight and create a minimal `BASELINE.md` ledger if needed.
 2. Get idle students into valid bounded assignment PRs before deep planning.

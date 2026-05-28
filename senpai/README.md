@@ -51,7 +51,7 @@ search-direction shakedown; repeat winners on H100 before claiming README
 leaderboard wins.
 
 To build the required scoring assets on the current RTX PRO 6000 cluster,
-outside the two-hour SENPAI optimization clock:
+outside the timed SENPAI optimization clock:
 
 ```bash
 senpai/run_scoring_setup_job.sh \
@@ -92,7 +92,7 @@ It verifies mounted launch secrets, Claude Code config, Weave plugin config,
 the `nvidia-smi` path, GPU visibility, and scoring preflight from inside the
 same pod image that advisor/student pods will use.
 When the smoke job passes, copy the printed `@sha256:...` image digest into the
-timed SENPAI launch and cutoff commands. Do not run the two-hour gate from a
+timed SENPAI launch and cutoff commands. Do not run the timed gate from a
 mutable tag such as `:pr-1` unless you have just smoke-tested that exact
 resolved image ID.
 
@@ -152,8 +152,8 @@ source /tmp/inferencebench-engine-venvs/sglang-pr-123/bin/activate
 
 ## Shared GPU Slot
 
-In one-GPU, multi-student pods, use `gpu_slot.py` to serialize heavy benchmark
-work without adding a separate runner:
+When multiple students share a GPU or pod, use `gpu_slot.py` to serialize heavy
+benchmark work without adding a separate runner:
 
 ```bash
 python senpai/gpu_slot.py status --json
@@ -174,7 +174,8 @@ lease is lost. This prevents accidental overlapping full workloads while
 preserving the official `test_server.sh` plus `evaluate.py` evaluation path.
 Use `--mode quick` for screening probes and `--mode full` for confirmation
 runs. Quick mode caps runtime/TTL at 15 minutes; full mode caps runtime/TTL at
-60 minutes.
+60 minutes. If each student has a dedicated GPU, run those lanes in parallel;
+the shared slot is only for packed/shared-device topology.
 
 During search, keep quick and full evaluation as separate slot acquisitions.
 Quick probes should return control so the student can preserve the result,

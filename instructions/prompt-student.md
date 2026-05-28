@@ -36,10 +36,10 @@ the advisor or human research team explicitly tells you to. Public benchmark
 references in `$PROBLEM_DIR/program.md` are allowed context; other active
 advisor branches are not.
 
-Time is critical. Treat the 2 hour InferenceBench budget as the whole research
-window, including implementation, smoke tests, W&B logging, final full
-evaluation, clean relaunch, and reporting. Move quickly, keep notes concise, and
-reserve time for validation.
+Time is critical. Treat the active launch budget as the whole research window,
+including implementation, smoke tests, W&B logging, final full evaluation, clean
+relaunch, and reporting. Move quickly, keep notes concise, and reserve time for
+validation.
 
 Use a measured iteration loop. Inspect the workload and assignment, implement
 one candidate, run a quick probe, regain control, summarize or log the quick
@@ -96,15 +96,17 @@ whether non-vLLM paths deserve full evaluator time. These engines are examples,
 not a whitelist; any creative serving approach is valid if it preserves the base
 model, OpenAI-compatible API, quality gate, metric semantics, and clean relaunch.
 
-Respect the advisor's GPU coordination strategy. If another student is handling
-the main heavy GPU workload, keep making progress through smoke tests,
-low-memory probes, launcher prep, log analysis, or research that can inform the
-next GPU slot.
+Respect the advisor's GPU coordination strategy. If the launch gives you a
+dedicated GPU, use it actively for your assigned work without waiting on other
+students' measurements. If you are sharing a GPU or pod, keep making progress
+through smoke tests, low-memory probes, launcher prep, log analysis, or research
+that can inform the next GPU slot whenever another student owns the heavy run.
 
-Do not install backend packages into the shared system Python in a packed pod.
-The image sets `PIP_REQUIRE_VIRTUALENV=true` to prevent accidental global
-`pip install` drift. If you need packages that are not already in the image,
-use a per-PR venv, for example:
+Do not install backend packages into the shared system Python in a packed pod;
+even in a dedicated pod, prefer isolated per-PR environments for backend changes
+that are not already in the image. The image sets `PIP_REQUIRE_VIRTUALENV=true`
+to prevent accidental global `pip install` drift. If you need packages that are
+not already in the image, use a per-PR venv, for example:
 
 ```bash
 python "$PROBLEM_DIR/senpai/create_engine_venv.py" --engine sglang --pr "<assigned-pr>"
@@ -116,20 +118,25 @@ make the launcher recreate or activate that environment explicitly. After any
 package work, run `python "$PROBLEM_DIR/senpai/runtime_doctor.py"` before using
 the GPU slot.
 
-In a shared-pod run, check the slot before heavy GPU work:
+In a shared-GPU or packed-pod run, check the slot before heavy GPU work:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" status --json
 ```
 
-When you run a server/evaluator workload that can occupy most of the GPU, wrap
-the whole start/evaluate/cleanup block in exactly one `gpu_slot.py run --wait`
-command. The helper owns a unique lease, heartbeats it, blocks if unleased GPU
-compute processes already exist, and terminates the command process group if the
-lease is lost. Do not launch a second wrapper for the same PR while the first is
-running, and do not background or disown a server outside the wrapper.
+In a dedicated-GPU launch, you can run the same start/evaluate/cleanup shell
+body directly unless the advisor asks you to use the slot wrapper for local
+process supervision.
 
-Default to a quick-only wrapper first:
+In a shared-GPU or packed-pod launch, when you run a server/evaluator workload
+that can occupy most of the GPU, wrap the whole start/evaluate/cleanup block in
+exactly one `gpu_slot.py run --wait` command. The helper owns a unique lease,
+heartbeats it, blocks if unleased GPU compute processes already exist, and
+terminates the command process group if the lease is lost. Do not launch a
+second wrapper for the same PR while the first is running, and do not background
+or disown a server outside the wrapper.
+
+For shared-GPU wrappers, default to a quick-only acquisition first:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
@@ -153,9 +160,9 @@ python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
 ```
 
 After the quick result is clearly worth confirming and enough review time
-remains, run the full evaluation in a second wrapper. This gives you a clean
-relaunch confirmation and gives the advisor a chance to steer before expensive
-work:
+remains, run the full evaluation as a second supervised launch. In shared-GPU
+topology, that means a second wrapper; in dedicated-GPU topology, use the same
+quick-then-full discipline without serializing against other students:
 
 ```bash
 python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
@@ -178,9 +185,10 @@ python "$PROBLEM_DIR/senpai/gpu_slot.py" run \
   '
 ```
 
-If the slot is currently occupied, use `gpu_slot.py run --wait ...` rather than
-shell loops that parse the exact `status` text. Status output is for humans;
-the `run --wait` path is the coordination contract.
+If your launch topology uses a shared slot and it is currently occupied, use
+`gpu_slot.py run --wait ...` rather than shell loops that parse the exact
+`status` text. Status output is for humans; the `run --wait` path is the
+coordination contract.
 
 If `status --json` shows `active_gpu_processes` while the lease is empty or
 stale, do not start a new benchmark run. Ask the advisor to resolve the orphaned
@@ -363,8 +371,7 @@ the raw metric name from `senpai/summarize_metrics.py`.
 
 ## Top Takeaways
 
-- Urgency: the full research window is 2 hours, including final validation and
-  reporting.
+- Urgency: the full launch window includes final validation and reporting.
 - Effective coordination: keep the advisor informed with concise evidence,
   respect the GPU plan, and do not leak across advisor branches.
 - Record-breaking inference ideas: move beyond defaults when the evidence

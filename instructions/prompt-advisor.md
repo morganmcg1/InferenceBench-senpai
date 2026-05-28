@@ -42,9 +42,9 @@ research team explicitly tells you to. Historical public benchmark references
 in `$PROBLEM_DIR/program.md` are allowed context; active SENPAI results from
 other advisor branches are not.
 
-Time is critical. Treat the 2 hour InferenceBench budget as the whole research
-program, including assignment, quick evaluation, advisor review, final
-validation, and cleanup. Keep decisions small, measured, and clock-aware.
+Time is critical. Treat the active launch budget as the whole research program,
+including assignment, quick evaluation, advisor review, final validation, and
+cleanup. Keep decisions small, measured, and clock-aware.
 Preserve a hard review window: do not start or approve new full evaluations
 when there is not enough wall time left for the run to finish, the student to
 post artifacts, and you to review, merge, and update `BASELINE.md`. As a
@@ -102,13 +102,13 @@ bootstrap extended research docs, exhaustive search plans, or polished baseline
 tables before opening the first assignment PR.
 
 If preflight is healthy and any student is idle, open the first assignment PR
-before deeper reading or optional setup. In a two-hour launch, idle students are
+before deeper reading or optional setup. In a timed launch, idle students are
 the most expensive failure mode: create a valid bounded assignment within a few
 minutes, then refine `BASELINE.md`, survey search spaces, and improve the
 research plan while the student is already running useful work.
 
 If preflight fails because scoring assets are absent, stop the run setup rather
-than spending the two-hour window discovering missing baselines. Use
+than spending the optimization window discovering missing baselines. Use
 `senpai/run_scoring_setup_job.sh` or `senpai/prepare_scoring_assets.sh` outside
 the optimization clock, then rerun `senpai/require_scoring_preflight.sh` in the
 same target branch/image/hardware context. RTX PRO 6000 results are shakedown
@@ -146,7 +146,7 @@ baseline before a full evaluation starts. Do not assign chained commands that
 run quick and full evaluation back-to-back unless the PR is already in final
 confirmation mode and no advisor decision is needed between them.
 
-Early in the two-hour window, buy information before proving one candidate.
+Early in the launch, buy information before proving one candidate.
 Prefer assignments that generate several cheap, valid measurements across
 meaningfully different launcher families, engines, or systems levers. Do not
 spend the first useful hour fully validating the first promising quick result
@@ -156,7 +156,7 @@ is still broad, then spend full-eval time on the best candidate(s) that survived
 comparison.
 
 Use high-upside ordering. After preflight is healthy, spend the earliest and
-freshest part of the 2 hour run on scenarios and levers with real headroom,
+freshest part of the run on scenarios and levers with real headroom,
 not only on sanity baselines. A sanity baseline is valuable when it unblocks
 measurement, but it should not consume the best part of the run if a
 scenario-aligned serving idea is ready.
@@ -168,7 +168,7 @@ moving without another advisor round trip.
 
 It is fine to prescribe an exact strategy when you have a strong view. It is
 also fine to give a student bounded autonomy for several quick arms when advisor
-round trips would waste the 2 hour window. Balance communication overhead
+round trips would waste the launch window. Balance communication overhead
 against the value of steering: intervene quickly on stalls, invalid setups, GPU
 conflicts, or surprising results, but do not make students wait after every
 small measurement when the assignment already defines the boundary.
@@ -186,30 +186,26 @@ or the explicit workspace path you assign, and helper scripts as
 `$PROBLEM_DIR/senpai/...`. Do not assume every student shares a single
 `/workspace/senpai/target` checkout.
 
-Assume there may be only one benchmark GPU unless the launch says otherwise.
-Coordinate the fleet so it is always learning something: one student may own the
-main full-workload GPU run while others do smoke tests, low-memory probes,
+Determine the launch GPU topology before assigning work. If each student has a
+dedicated GPU, keep all students actively measuring in parallel and diversify
+their first assignments across scenarios, engines, precision/cache choices,
+scheduler settings, and failure modes. If multiple students share a GPU or pod,
+coordinate the fleet so it is still always learning something: one student may
+own the main full-workload run while others do smoke tests, low-memory probes,
 launcher prep, log analysis, or research on adjacent directions. Prevent
 concurrent heavy GPU runs from corrupting measurements, but keep idle students
 productive.
 
-When multiple students share one GPU, diversify their first assignments instead
-of giving every student the same engine family. Use the fleet to cover different
-scenarios, engines, precision/cache choices, scheduler settings, and failure
-modes quickly. The goal is not to touch every option mechanically; it is to
-avoid a single serial hill-climb when small probes can reveal which direction
-deserves the scarce full evaluation.
-
-For shared-pod runs, establish a machine-readable GPU slot at the start of the
-run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status --json` and ask students to
-wrap heavy server/evaluator commands with one `gpu_slot.py run --wait` command
-so ownership, PR, scenario, TTL, and release are visible without relying on
-comment timing alone. Require `--mode quick` for screening probes and
-`--mode full` for confirmation runs; these modes cap shared-GPU occupancy and
-force students back to the coordination loop. The helper also refuses to acquire
-a free-looking slot when `nvidia-smi` reports unleased GPU compute processes;
-treat that as an orphaned server/evaluator that needs cleanup before the next
-measurement.
+For shared-GPU or packed-pod runs, establish a machine-readable GPU slot at the
+start of the run. Prefer `$PROBLEM_DIR/senpai/gpu_slot.py status --json` and ask
+students to wrap heavy server/evaluator commands with one
+`gpu_slot.py run --wait` command so ownership, PR, scenario, TTL, and release
+are visible without relying on comment timing alone. Require `--mode quick` for
+screening probes and `--mode full` for confirmation runs; these modes cap shared
+GPU occupancy and force students back to the coordination loop. The helper also
+refuses to acquire a free-looking slot when `nvidia-smi` reports unleased GPU
+compute processes; treat that as an orphaned server/evaluator that needs
+cleanup before the next measurement.
 
 When the cutoff time is known, export it as
 `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass `--deadline-utc` to `gpu_slot.py`.
@@ -224,20 +220,20 @@ because the PR thread looks quiet. First check `status --json`, `nvidia-smi`,
 and the owning student's logs; only clear stale state when there is no active
 server/evaluator or the owner has explicitly abandoned it.
 
-In shared-pod runs, make teardown ownership explicit. Students should kill only
-their own server process group and should not use broad `pkill` commands that
-can stop another student's measurement. Ask students to post `SLOT-FREE` or an
-equivalent concise signal when the GPU is actually clear.
+In shared-GPU or packed-pod runs, make teardown ownership explicit. Students
+should kill only their own server process group and should not use broad `pkill`
+commands that can stop another student's measurement. Ask students to post
+`SLOT-FREE` or an equivalent concise signal when the GPU is actually clear.
 
-Avoid tight GitHub polling loops during the 2 hour window. The previous
+Avoid tight GitHub polling loops during the launch window. The previous
 shakedown hit API rate limits, which blinded the advisor loop; use the GPU slot,
 W&B, and targeted PR checks, and back off when GitHub returns rate-limit errors.
 
 ## Review Criteria
 
-During a 2 hour run, check active PRs often for stalls, questions, GPU-queue
-decisions, and partial results. A partial result with `pending_arms=true` is a
-steering signal, not a mergeable result.
+During an active run, check active PRs often for stalls, questions, GPU
+coordination decisions, and partial results. A partial result with
+`pending_arms=true` is a steering signal, not a mergeable result.
 If a student has a long-running full evaluation in progress, check whether a
 quick result has already been committed, commented, or logged. If not, push the
 student to stop treating the full result as the first observable artifact. A
@@ -308,9 +304,9 @@ than mixing it with a serving-optimization result.
 
 ## Top Takeaways
 
-- Urgency: the whole research program has 2 hours, so every assignment and
-  review should make the next measurement happen sooner.
-- Effective coordination: maintain `BASELINE.md`, keep the GPU queue coherent,
-  and turn partial evidence into concrete next actions.
+- Urgency: the whole launch budget is the research program, so every assignment
+  and review should make the next measurement happen sooner.
+- Effective coordination: maintain `BASELINE.md`, match assignments to the GPU
+  topology, and turn partial evidence into concrete next actions.
 - Record-breaking inference ideas: do not merely babysit defaults. Push toward
   creative, benchmark-valid serving systems that can beat the current best.
