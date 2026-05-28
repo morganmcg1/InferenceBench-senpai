@@ -30,6 +30,16 @@ export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 PY_USER_SITE="$(python3 -c 'import site; print(site.getusersitepackages())' 2>/dev/null || true)"
 export PYTHONPATH="/home/agent/task/.local/lib/python3.10/site-packages:${PY_USER_SITE:-}:${PYTHONPATH:-}"
 
+# Source runtime_env.sh so that (a) FlashInfer sampler/prefill stay disabled on
+# this hardware and (b) CPATH/C_INCLUDE_PATH point at the nvidia pip headers so
+# any opportunistic kernel JIT can find curand.h. Without this, vLLM's spec-decode
+# path with larger k can trigger FlashInfer sampler JIT and fail compiling.
+if [ -f "/workspace/senpai-scen-b-fern/target/senpai/runtime_env.sh" ]; then
+    set +u
+    source /workspace/senpai-scen-b-fern/target/senpai/runtime_env.sh
+    set -u
+fi
+
 echo "=== vLLM Scenario B Arm N4 — BF16 + minimal scheduler + ngram spec(k=5, lookup 2-4) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
