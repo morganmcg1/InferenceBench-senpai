@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 13:50 UTC
+- **As of:** 2026-05-28 14:00 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -30,9 +30,10 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 | fern | C (high-load throughput) | SGLang | SGLang default + chunked prefill + radix cache vs vLLM | #144 | **assigned 13:50 UTC** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **MERGED 12:50 UTC — Sc D first winner 1.247x** |
-| tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **arm3 (spec15/lookup8) quick 6.918x — full eval running** |
+| tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **arm3 (spec15/lookup8) quick 6.918x — full eval stalled (nudged 13:54 UTC)** |
 | frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram composition (arm3 full 2.073x) | #139 | **MERGED 13:19 UTC — Sc D new best 2.073x (supersedes #138)** |
-| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 + n-gram spec on Sc A (extend #137 winner) | #143 | **arm1 quick 1.9115x / arm2 1.9143x (tie within 5%) — arm1 full eval running** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 + n-gram spec on Sc A (extend #137 winner) | #143 | **CLOSED 14:00 UTC — full eval 1.8603x (-0.30% noise), spec metric-orthogonal on TTFT-only Sc A** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights + FP8 KV cache to attack prefill attention BW | #145 | **assigned 14:00 UTC** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a

@@ -380,3 +380,63 @@ configs ≥64 seqs, so the quick can't differentiate architecturally.)
 - **vLLM FP8 KV-cache:** `--kv-cache-dtype fp8` — reduces KV memory footprint, potentially
   allowing even higher effective concurrency within 96 GB VRAM.
 - **SGLang + chunked prefill + radix** once SGLang base is established.
+
+---
+
+## 2026-05-28 13:55 UTC — PR #143: Scenario A FP8 + n-gram speculative composition (CLOSED — did not improve)
+
+- **Branch:** `frieren/sc-a-fp8-ngram-composition`
+- **Student:** frieren
+- **Hypothesis:** Extend PR #137 (FP8 weights, 1.866x) by composing with n-gram speculative
+  decoding (proven on Sc B 2.687x and Sc D 2.073x). Sc A has a 1024-token decode tail
+  that should benefit from n-gram acceptance, compounding the FP8 prefill gain.
+
+### Quick probe results
+
+| arm | spec_tokens | lookup_max | Quick speedup | W&B |
+|---|---:|---:|---:|---|
+| arm1 | 5 | 4 | 1.9115x | quc7zeij |
+| arm2 | 10 | 6 | 1.9143x | 3gp3w4s5 |
+
+Promoted arm1 (simpler within 5%).
+
+### Full eval results (arm1)
+
+| Metric | This run | PR #137 winner | Δ |
+|---|---:|---:|---:|
+| **scenario/A/speedup_over_pytorch** | **1.8603x** | **1.866x** | **-0.30% ❌** |
+| TTFT.p50 | 0.23572s | 0.2349s | +0.34% (slower, noise) |
+| TPOT.p50 | 0.01276s | 0.01750s | -27% (much faster) |
+| Throughput (gen tok/s) | 78.89 | 54.73 | +44% |
+| Request throughput | 0.1306 req/s | 0.0903 req/s | +45% |
+| Quality (MMLU-Pro n=500) | 0.290 (ratio 0.973) | 0.288 (ratio 0.966) | +0.7% |
+| Success | 128/128 ✓ | 128/128 ✓ | — |
+| W&B | 3nc047zt | izg22lch | — |
+
+### Analysis
+
+- **The hypothesis was wrong about Sc A primary metric.** Sc A scores on `1/ttft.p50`
+  (prefill speed). N-gram speculation works during decode (after first token), so it has
+  no effect on TTFT. The 0.30% regression is at the noise floor, but it is the wrong
+  direction.
+- **Composition is real but invisible to Sc A scoring.** TPOT -27%, throughput +44%,
+  request throughput +45% — all genuine improvements from n-gram acceptance on the
+  1024-token decode tail. Quality is even slightly better. But Sc A's metric ignores
+  decode performance entirely.
+- **Sc A is prefill-bound on RTX PRO 6000.** To beat 1.866x meaningfully, future Sc A
+  experiments must attack the prefill kernel itself: FP8 KV cache, larger
+  `--max-num-batched-tokens`, FlashInfer prefill backend, or alternative quantization.
+- **Pattern learned: scenario-metric alignment matters.** Spec composition wins on Sc B
+  (TPOT-scored) and Sc D (geomean of ttft, tpot, req/s), but is metric-orthogonal on
+  Sc A (1/ttft.p50 only) and Sc C (geomean req/s). Future composition hypotheses must
+  identify which scenario metric the proposed lever actually moves.
+
+### Decision
+
+Closed without merging. Decision tree path: "arm below 1.866x → partial did_not_improve,
+do not mark terminal, ask advisor". Advisor closes after reviewing — frieren's analysis
+correctly identifies that arm2 would be no better (also prefill-bound), so running
+additional arms is a waste of GPU time.
+
+**Next experiment for frieren:** Sc A prefill-attack composition (FP8 weights + FP8
+KV cache + larger batched-tokens) — see PR #145.
