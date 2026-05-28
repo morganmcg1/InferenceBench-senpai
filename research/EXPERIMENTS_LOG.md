@@ -27,10 +27,26 @@ PyTorch reference: TPOT p50 = 25.15 ms (raw 1/tpot.p50 = 39.76 tok/s).
 - **Aggressive spec windows trade quality for speed**: F4 (spec=25) hit 5.60x but quality at n=16 dropped to 0.63 ratio (below the screening noise floor of 0.84). Could still be small-sample noise — would need a medium-quality (n=64-100) screening to discriminate.
 - **No terminal full eval was run** this round. Full Scenario B eval requires ~57 min of speed-eval alone; the 2h window was spent on 6 quick arms.
 
-### Conclusion: PR #159 closed as `research-signal-only`. Carry forward to next round:
-- F1 launcher (BF16 + ngram k=5, lookup_max=4, min=2) as the highest-confidence terminal candidate.
-- F4 launcher (spec=25 lookup=12) as the higher-risk/higher-reward arm pending quality confirmation.
-- Both arms need medium-quality screening (n≥64) before promotion to full eval next round.
+### FULL EVAL — F1 terminal result (18:22 UTC)
+
+| Arm | Eval mode | TPOT p50 | Speedup | MMLU-Pro (n=500) | Quality ratio | W&B |
+|---|---|---:|---:|---:|---:|---|
+| F1 BF16 + ngram k=5 | full (64 requests) | **8.94 ms** | **2.81x** | **0.314** | **1.054** | `6r6w0ukx` |
+
+PyTorch reference: TPOT p50 = 25.15 ms, raw 1/tpot.p50 = 39.76 tok/s.
+Quality gate: τ=0.95 × 0.298 = 0.283. Observed 0.314 (ratio 1.054) → **PASS**.
+Validation: `validation_pass=true`, `baseline_update_allowed=true`, `terminal_eligible=true`, 64/64 requests.
+
+### Results commentary (full eval)
+
+- **Full eval settled at 2.81x vs 3.50x quick screening.** At n=4 burst quick probes, n-gram acceptance rate is higher due to shorter prompt contexts; at n=64 burst with `ignore_eos=true` and ~7400-token outputs the acceptance dynamics are slightly less favourable, but still a strong and clean win.
+- **Quality gate passed convincingly.** 0.314 vs baseline 0.298 (ratio 1.054) across 500 MMLU-Pro questions. N-gram speculative decoding with BF16 weights and k=5 preserves model quality at this spec window; no speculative-decoding-induced degradation at 500-sample resolution.
+- **PR #159 merged to advisor branch `ib-20260528-scen-b-r1` at 18:25 UTC** as the round-1 terminal winner.
+
+### Conclusion: **TERMINAL WINNER — 2.81x speedup. Merged.**
+- Launchers F0/F1/F2/F3 squash-merged into advisor branch.
+- F4/F5 (spec=25) remain as research signals only — aggressive spec windows at n=16 quality ratio 0.63, quality at n=500 unknown, not promoted.
+- New round-1 baseline: **F1 BF16 + ngram k=5 = 2.81x speedup** (full eval, 64 requests, 500-sample quality gate).
 
 ---
 
