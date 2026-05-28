@@ -955,3 +955,54 @@ The spec10 intermediate depth captures a real but smaller benefit: TPOT.p50 -7.9
 1. spec7/8/11/12 sweep to find quality knee precisely
 2. prompt_lookup_min=1 at spec10
 3. Chunked-prefill size tuning at conc=4 (max-num-batched-tokens variant)
+
+## 2026-05-28 17:20 UTC — PR #154: Scenario D n-gram spec depth fine-sweep above spec10
+
+- **Branch:** `tanjiro/sc-d-vllm-spec-fineswee`
+- **Student:** tanjiro
+- **Hypothesis:** Map the quality cliff between spec10 (PR #152, safe, 2.218x quality 0.960) and spec15 (PR #146/#152 quick, fail 0.629). Test spec11/12 (just above safe) plus spec10/min=1 (extend matching window without raising depth).
+- **Status:** CLOSED — did_not_improve / hit quality cliff
+
+### Quick probe results (n=4, quality_n=16)
+
+| Arm | Config | Quick speedup | Quality (n=16) | Verdict | W&B |
+|---|---|---:|---:|---|---|
+| arm1 | spec11/lookup7/min=2 | 2.025x | 0.629 ✗ | screen FAIL | l9i86yd5 |
+| arm2 | spec12/lookup8/min=2 | 2.444x | 0.629 ✗ | screen FAIL | eb2qs8tp |
+| arm3 | spec10/lookup6/**min=1** | 2.244x | 0.839 ✓ | promoted | 0ozy7ol0 |
+
+### Full eval result (arm3 only)
+
+| Metric | arm3 (spec10/min=1) | PR #152 (spec10/min=2) | Δ |
+|---|---:|---:|---:|
+| **Speedup** | 2.323x | 2.218x | +4.7% |
+| TPOT.p50 | 0.00870 s | 0.00958 s | -9.2% |
+| TTFT.p50 | 0.1152 s | 0.1152 s | tied |
+| **Quality ratio** | **0.926** ✗ | 0.960 ✓ | **-3.5pp, gate FAIL** |
+| Speed success | 96/96 | 96/96 | tied |
+| W&B | ily0f83g | g1xjqoyg | — |
+
+### Analysis
+
+**No arm passes quality gate.** Two failure modes:
+1. **Deeper spec (arms 1, 2):** spec11/12 fail n=16 screen at 0.629 — same value as spec15/spec20+ regressions. The cliff between spec10 (safe) and spec11 (fail) is much steeper than expected. Plausible mechanism: deeper draft windows admit more high-perplexity drafts that pass FP8 verification by numerical tolerance.
+2. **Looser min (arm 3):** spec10/min=1 keeps decode latency advantage (TPOT -9.2%) and passes n=16 screen at 0.839 BUT fails full quality gate at 0.926 (< 0.95). min=2 → min=1 admits single-token-anchored drafts that drift MMLU-Pro accuracy by -3.5pp.
+
+### Key rule established
+
+**PR #152's spec10/lookup6/min=2 is the n-gram local optimum on Sc D.** Neither widening spec depth nor loosening lookup min preserves quality. Future Sc D gains must come from different mechanisms:
+- FP8 KV cache composition (untried on Sc D — PR #164 next)
+- EAGLE/Medusa draft-model speculation (less sensitive to FP8 numerics than n-gram)
+- PD-disaggregated serving (TTFT and TPOT bottlenecks on different paths in Sc D)
+
+### Cross-scenario quality contrast
+
+| Scenario | Output length | Highest passing spec | Highest min |
+|---|---:|---:|---|
+| Sc B (PR #149) | 8192 | spec25 | min=2 (untested otherwise) |
+| Sc D (PR #152) | 2048 | spec10 | min=2 |
+| Sc A | 1024 | n-gram metric-orthogonal | — |
+
+Sc B's tolerance for deep specs (25 vs Sc D's 10) is plausibly explained by longer output amortising the verify-step quality drift across more tokens. Sc D's 4× shorter outputs concentrate per-decoder-step quality cost.
+
+**Next experiment for tanjiro:** Sc D FP8 KV composition with PR #152 winner (PR #164 — 3-arm: fp8_e5m2 + fp8_e4m3 + mem 0.95 control).

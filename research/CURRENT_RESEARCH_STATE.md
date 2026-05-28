@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 17:05 UTC
+- **As of:** 2026-05-28 17:35 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -24,7 +24,7 @@
 |---|---:|---|---|---|
 | fern | #156 | A | Scheduling fine-tune (max-num-seqs=1, batched-tokens=8192) + optional INT4 AWQ probe | **assigned 17:05 UTC** |
 | frieren | #153 | C | SGLang FP8 weights + FP8 KV composition (extend PR #151) — ablation arm3 isolates weight contribution | **assigned 16:25 UTC** |
-| tanjiro | #154 | D | n-gram spec depth fine-sweep: spec11/lookup7, spec12/lookup8, spec10/min=1 — find quality cliff above spec10 | **assigned 16:50 UTC** |
+| tanjiro | #164 | D | FP8 KV cache composition with PR #152 (fp8_e5m2, fp8_e4m3, mem 0.95 control) | **assigned 17:35 UTC** |
 
 All 3 student GPUs occupied.
 
@@ -34,6 +34,7 @@ All 3 student GPUs occupied.
 |---:|---|---|---|---|
 | #149 | tanjiro | B | **3.888x arm2 spec25/lookup12 (+9.5%)** — quality 1.013, 64/64 | MERGED — new Sc B best |
 | #152 | fern | D | **2.218x arm2 spec10/lookup6 (+7.0%)** — quality 0.960, 96/96 | MERGED — new Sc D best |
+| #154 | tanjiro | D | spec11/12 fail screen (0.629), spec10/min=1 = 2.323x but quality 0.926 ✗ | CLOSED — n-gram exhausted on Sc D |
 | #137 | frieren | A | 1.866x FP8 weights | MERGED — current Sc A best |
 | #136 | fern | B | 2.687x n-gram spec5/4 | MERGED — superseded by #141 |
 | #138 | tanjiro | D | 1.247x SGLang default | MERGED — superseded by #139 |
@@ -82,6 +83,10 @@ All 3 student GPUs occupied.
 
 13. **Sc B spec depth has strong diminishing returns past 15** (PR #149, 3.888x at spec25 = +9.5% over PR #141's 3.550x at spec15). The spec5→spec15 jump was +32% on Sc B; spec15→spec25 is only +9.5%, and spec30 saturates (4.30x quick vs spec25's 8.64x quick — verify-step compute overhead exceeds gains). Sc B spec depth peak appears to be at spec25/lookup12.
 
+14. **Sc D n-gram local optimum is PR #152's spec10/lookup6/min=2** (PR #154 confirmed at full eval). Quality cliff between spec10 (safe, 0.960) and spec11 (fail, 0.629) is much steeper than expected; spec11/12 both screen-fail at exactly the same 0.629 ratio. Also, lowering prompt_lookup_min from 2 → 1 on the proven spec10 winner gains +4.7% speed but drops quality to 0.926 < gate. Neither widening spec nor loosening min preserves quality on Sc D's 2048-token outputs. Future Sc D gains require different mechanisms (FP8 KV composition tested in PR #164, EAGLE draft model, PD-disaggregation).
+
+15. **Sc D quality cross-scenario insight:** Sc B (8192-out) tolerates spec25; Sc D (2048-out) caps at spec10. Output length is the load-bearing variable for spec-depth tolerance — longer decode amortises per-step quality drift over more tokens, masking the FP8 + spec verify numerical edge cases that Sc D concentrates.
+
 ## Current research focus
 
 **Primary focus: close the gaps to H100 SMAC3 ceilings, especially Sc B (23%) and Sc D (36%).**
@@ -94,7 +99,7 @@ All 3 student GPUs occupied.
 
 3. **Sc D fern #152 (MERGED):** arm2 spec10/lookup6 = 2.218x (+7.0%), quality 0.960. New Sc D best.
 
-4. **Sc D tanjiro #154:** n-gram spec depth fine-sweep — spec11, spec12, and spec10/min=1. Map the quality cliff between spec10 (safe, 2.218x) and spec15 (fail, quality 0.629). If spec11-12 are safe, could push Sc D to 2.25-2.30x.
+4. **Sc D tanjiro #164:** FP8 KV cache composition with PR #152 winner. PR #154 confirmed n-gram is exhausted on Sc D — testing whether FP8 KV (+13.1% on Sc C at 256-conc, -26% on Sc A at conc=1) is net-positive at Sc D's intermediate conc=4 regime. 3-arm: fp8_e5m2, fp8_e4m3, and mem-util 0.95 control.
 
 5. **Sc A fern #156:** scheduling fine-tune (max-num-seqs=1, max-num-batched-tokens=8192) to eliminate phantom-sequence KV overhead at conc=1. Secondary probe: INT4 AWQ quantization if checkpoint available. Current 1.866x is 42% of H100 ceiling — scheduling overhead is the last unexplored lever on vLLM 0.11.
 
