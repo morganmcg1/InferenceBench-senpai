@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 21:22 UTC
+- **As of:** 2026-05-28 21:33 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,7 +22,7 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #188 | C | SGLang FlashInfer / FA3 attention-backend probe on PR #181 winner (arm1 flashinfer, arm2 fa3) | **assigned 21:14 UTC; quick ETA 21:30 UTC** |
+| fern | #190 | B | vLLM 0.21 + FlashInfer on PR #179 winner (arm1 vLLM21+FI, arm2 vLLM21+FA control) | **assigned 21:33 UTC; quick ETA 21:50 UTC** |
 | frieren | #189 | D | vLLM 0.21 + FlashInfer on PR #152 winner (FP8 + spec10) — engine upgrade proven on Sc A | **assigned 21:22 UTC; quick ETA 21:40 UTC** |
 | tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (+113% over PR #179 quick); arm1 full eval running | **partial result 20:59 UTC; full ETA 22:00-22:30 UTC** |
 
@@ -30,6 +30,7 @@
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #188 | fern | C | flashinfer -1.61%, fa3 +0.14% (both <+0.5%) quick only | CLOSED — SGLang attention-kernel surface saturated for Sc C on PR #181 winning knobs |
 | #186 | frieren | A | **1.935x** vLLM 0.21 + FlashInfer (+2.9% over PR #156 1.881x; quality 0.993) | MERGED — new Sc A best; vLLM 0.21+FlashInfer proven on SM120 |
 | #187 | fern | C | SGLang stuck at 0.5.12.post1 — no ≥0.6 on pip; zero GPU consumed | CLOSED — Rule #20: engine ceiling reached; next probe = attention backends |
 | #184 | fern | C | cps=16384 full 29.690x (-0.26% vs PR #181) | CLOSED — chunked-prefill-size is tail-shape knob only (Rule #19); cps axis exhausted |
@@ -99,11 +100,11 @@
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc C fern #188 (assigned 21:14 UTC):** SGLang FlashInfer / FA3 attention-backend probe on existing SGLang 0.5.12.post1. 2-arm: arm1 flashinfer; arm2 fa3. Reuses PR #167 SGLang venv. Quick ETA ~21:30 UTC. Hard-close if both arms <+0.5% (saturated mechanism check).
+1. **Sc B tanjiro #185 (partial 8.21x quick):** max-num-seqs=1 on PR #179 base. arm1 full eval running. Critical risk: serial processing under burst arrival may exceed per-request timeout. Terminal SENPAI-RESULT ETA 22:00-22:30 UTC. If wins at full + quality≥0.95 → MERGE as Sc B winner.
 
-2. **Sc B tanjiro #185 (partial 8.21x quick):** max-num-seqs=1 on PR #179 base. arm1 full eval running. Critical risk: serial processing under burst arrival may exceed per-request timeout (64th burst req waits ~25 min). Terminal SENPAI-RESULT ETA 22:00-22:30 UTC. If wins at full + quality≥0.95 → MERGE as Sc B winner (~8x = ~53% of 15.23x SMAC3 ceiling).
+2. **Sc B fern #190 (assigned 21:33 UTC):** vLLM 0.21 + FlashInfer on PR #179 winner. 2-arm: arm1 vLLM21+FlashInfer; arm2 vLLM21+FA (control). Orthogonal to PR #185 (engine swap vs scheduler change). Higher +1.0% promotion threshold (engine swap = untested quick→full category for Sc B). Quick ETA ~21:50 UTC.
 
-3. **Sc D frieren #189 (assigned 21:22 UTC):** vLLM 0.21 + FlashInfer on PR #152 winner (FP8 + spec10). 2-arm: arm1 vLLM21+FlashInfer; arm2 vLLM21+FA (control). Reuses vllm12-pr-186 venv. Quick ETA ~21:40 UTC.
+3. **Sc D frieren #189 (assigned 21:22 UTC):** vLLM 0.21 + FlashInfer on PR #152 winner. 2-arm: arm1 vLLM21+FlashInfer; arm2 vLLM21+FA (control). Reuses vllm12-pr-186 venv. Quick ETA ~21:40 UTC.
 
 ### Next experiments (after current round)
 

@@ -1,5 +1,31 @@
 # SENPAI Research Results
 
+## 2026-05-28 21:31 UTC — PR #188: Sc C SGLang FlashInfer / FA3 attention-backend probe (CLOSED — did_not_improve, quick only)
+
+- **Branch:** `fern/sc-c-sglang-flashinfer`
+- **Student:** fern
+- **Hypothesis:** SGLang FlashInfer / FA3 attention backends were untested on SM120 + PR #181 winning config. Test as kernel-level swap within existing engine ceiling (Rule #20).
+
+### Quick eval
+
+| Arm | Backend | Quick speedup | Δ vs PR #181 quick (~3.998x) | VRAM (MiB) | Quality (n=16) | W&B |
+|---|---|---:|---:|---:|---:|---|
+| PR #181 (ref) | triton | 3.998x | — | 87,500 | — | — |
+| arm1 | **flashinfer** | 3.9337x | **−1.61%** | 90,269 | 0.6292 | l6xvxh10 |
+| arm2 | **fa3** | 4.0035x | **+0.14%** | 89,551 | 0.6292 | obqbceaq |
+
+Per promotion rule (+0.5% threshold): both arms fail; no full eval consumed.
+
+### Analysis
+
+**SGLang attention-kernel surface saturated for Sc C on SM120.** FlashInfer's vLLM-0.11 SM120 cascade does NOT affect SGLang's FlashInfer path — server booted cleanly and served 12/12 quick requests. FA3 was marginally ahead of triton (+0.14% — within noise) but not promotable. flashinfer regression (-1.61%) is spread across all three profiles, indicating systemic kernel overhead at Sc C's 16384 context / 256-conc regime.
+
+Quality (0.6292 identical across arms) confirms backends are numerically equivalent — no precision drift, just compute-path differences.
+
+**Conclusion:** Combined with Rule #20 (engine version ceiling), the SGLang engine surface for Sc C is well-explored. Future Sc C work should attack non-engine mechanisms: orthogonal triton knobs (kv-splits, reduce-fp32), torch-compile, or scheduler-side levers.
+
+---
+
 ## 2026-05-28 21:22 UTC — PR #186: Sc A vLLM 0.21 + FlashInfer SM120 unblock (MERGED — new Sc A best)
 
 - **Branch:** `frieren/sc-a-vllm12-flashinfer`
