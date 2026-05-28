@@ -50,9 +50,26 @@ PyTorch baseline raw objectives (from imported metrics):
 
 ## Provisional / quick-only results
 
-_(none yet)_
+These are `--quick` runs (`request_limit=4`, `quality_n=16`). Quality ratios at
+this sample size are statistical noise, not gate-eligible. Speedups are
+research signal only and must not be used to update the current-best row.
+
+| Scenario | Arm | Quick speedup | Quality ratio (n=16) | W&B run | PR | Notes |
+|---|---|---:|---:|---|---:|---|
+| B | fern arm1 BF16 tuned | 1.438x | 0.839 | ex8p5t6j | #136 | vLLM 0.11, max_num_seqs=16, chunked prefill on |
+| B | fern arm2 FP8 weights | 1.474x | 0.839 | ycwnvt87 | #136 | +`--quantization fp8`; within 5% of arm1 |
+| B | fern arm3 n-gram spec | **3.518x** | 0.839 | du9y0jz8 | #136 | +n-gram spec, num_speculative_tokens=5 — promoted to full eval |
+| A | frieren arm1 one-shot prefill | 1.276x | 0.839 | 5iump62l | #137 | vLLM 0.11, no chunked prefill flag (vLLM forces it anyway) |
+| A | frieren arm2 chunked prefill large | 1.279x | 0.839 | r20z2rm0 | #137 | within noise of arm1 |
+| A | frieren arm3 FP8 weights | **1.901x** | 0.839 | eyvyj8oz | #137 | +`--quantization fp8` — promoted to full eval |
+| D | tanjiro arm1 sglang_default | 1.167x | 0.629 | 2nfds9ud | #138 | SGLang per-PR venv; **launcher not relaunch-safe (libnuma host install)** |
+| D | tanjiro arm2 sglang_tuned | 1.183x | 0.629 | 8zul6lqz | #138 | +chunked-prefill-size=4096, lpm scheduler; within 5% of arm1 |
 
 ## Update history
 
 - 2026-05-28 10:42 UTC — Created the baseline ledger. Preflight passed for all
   scenarios; assigning first round of experiments to fern, frieren, tanjiro.
+- 2026-05-28 11:45 UTC — Logged round-1 quick-probe research signal. All three
+  students promoted their best arm to full eval. No terminal results yet.
+  Tanjiro PR #138 sent back for libnuma packaging / vLLM-fallback decision
+  before any SGLang full eval can become terminal.
