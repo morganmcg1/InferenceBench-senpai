@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# SGLang default arm for Scenario D (PR #138).
+# SGLang tuned arm for Scenario D (PR #138):
+#   --mem-fraction-static 0.85
+#   --chunked-prefill-size 4096
+#   --schedule-policy lpm
+#   --max-running-requests 64
 #
 # Relaunch-safety contract:
 #   * The launcher does NOT call apt-get or otherwise mutate the host.
@@ -30,8 +34,6 @@ export VIRTUAL_ENV="${SGLANG_VENV}"
 export PATH="${SGLANG_VENV}/bin:${PATH}"
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 
-# Locate the bundled libnuma directory. Try several locations so the launcher
-# works both from its source directory and when copied to a task workspace.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIB_REL_PATH="senpai/launchers/D/tanjiro-sglang/lib"
 LIB_CANDIDATES=(
@@ -58,19 +60,22 @@ if [ -z "${SGLANG_LIB_DIR}" ]; then
 fi
 export LD_LIBRARY_PATH="${SGLANG_LIB_DIR}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-echo "=== SGLang Inference Server (arm1 default) ==="
+echo "=== SGLang Inference Server (arm2 tuned) ==="
 echo "MODEL_ID=${MODEL_ID}"
 echo "HOST=${HOST} PORT=${PORT}"
 echo "MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 echo "SGLANG_VENV=${SGLANG_VENV}"
 echo "SGLANG_LIB_DIR=${SGLANG_LIB_DIR}"
-echo "==============================================="
+echo "============================================"
 
 exec python3 -m sglang.launch_server \
     --model-path "${MODEL_ID}" \
     --host "${HOST}" \
     --port "${PORT}" \
     --context-length "${MAX_MODEL_LEN}" \
-    --mem-fraction-static 0.80 \
+    --mem-fraction-static 0.85 \
+    --chunked-prefill-size 4096 \
+    --schedule-policy lpm \
+    --max-running-requests 64 \
     --attention-backend triton \
     --trust-remote-code
