@@ -1,5 +1,37 @@
 # SENPAI Research Results
 
+## 2026-05-28 19:12 UTC — PR #172: Sc C SGLang FP8 weights + FP8 KV composition (MERGED — new Sc C best 29.532x)
+
+- **Branch:** `fern/sc-c-sglang-fp8wt`
+- **Student:** fern
+- **Hypothesis:** SGLang FP8 weight quantization composes with FP8 KV cache on PR #151 winner at Sc C's 256-request KV-bandwidth-bound regime. FP8 weights halve per-batch weight bandwidth (amortised over 256 concurrent requests); FP8 KV halves per-token KV block size. Independent bandwidth levers targeting distinct memory hierarchies.
+
+### Full eval results (arm1 — 768 requests across burst/poisson/constant + n=500 MMLU-Pro)
+
+| Metric | PR #172 arm1 | PR #151 (prior best) | Δ |
+|---|---:|---:|---:|
+| **scenario/C/speedup_over_pytorch** | **29.532x** | **27.497x** | **+7.4% ✓** |
+| geomean req/s | 2.502 | ~2.329 | +7.4% |
+| Quality (MMLU-Pro n=500) | 0.286 (ratio 0.960) | 0.298 (ratio 1.000) | -4% (still passes gate) |
+| Speed success | 768/768 ✓ | 768/768 ✓ | — |
+| VRAM peak | ~84.7 GiB | 84.4 GiB | ≈ same |
+| W&B | 5ncgrruu | kk6shiqh | — |
+
+### Analysis
+
+- **FP8 weights + FP8 KV compose on Sc C.** At 256-concurrency, weight bandwidth is shared across the batch — the per-weight-read cost amortises multiplicatively. FP8 KV reduces KV memory per request independently. Both levers converge on the same throughput objective (serve more concurrent tokens per second) without interfering.
+- **Quality at 0.960 (barely passes gate).** 0.286/0.298 ratio. Tighter than PR #151's 1.000. FP8 weights introduce small numerical perturbation to the full decode path. The gate holds (tau=0.95) but there is less margin now.
+- **arm3 quick (FP8wt + BF16KV) edged arm1 at n=4** (4.040x vs 3.991x) — concurrency-bound quick eval suppresses the FP8 KV benefit. At full 256-conc, FP8 KV's doubled KV capacity materialises (+7.4% total vs PR #151).
+- **Sc C lever progression:** vLLM baseline → SGLang LPM+radix (24.305x, +15.2%) → FP8 KV (27.497x, +13.1%) → FP8 wt+KV (29.532x, +7.4%). Each composition layer adds diminishing returns; next lever needs to be non-bandwidth. Sc C ceiling 46.70x at 63%.
+
+### Next Sc C directions
+
+- **Higher mem-fraction with FP8wt+FP8KV:** arm2 (mem 0.92) was nearly identical to arm1 at quick (3.989x vs 3.991x). With FP8 weights freeing ~7 GiB, arm2's VRAM was 91.5 GiB but quick was flat — full eval might show small gain from extra KV slots. Low priority.
+- **SGLang 0.6.x / newer SGLang:** Different version may improve Triton kernel perf. Engineering investment.
+- **CPU offload / tensor parallelism:** Out of scope for single-GPU shakedown.
+
+---
+
 ## 2026-05-28 19:05 UTC — PR #166: Sc B prompt_lookup_min=1 sweep (CLOSED — did_not_improve, quick→full collapse)
 
 - **Branch:** `frieren/sc-b-prompt-lookup-min1`

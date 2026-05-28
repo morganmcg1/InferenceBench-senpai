@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 19:10 UTC
+- **As of:** 2026-05-28 19:18 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -15,16 +15,16 @@
 |---|---|---:|---|---:|---:|
 | A | 1/ttft.p50 | **1.881x** | vLLM FP8 weights + max-num-seqs=1 | #156 | 42% of 4.48x |
 | B | 1/tpot.p50 | **3.888x** | vLLM n-gram spec25/12 | #149 | 26% of 15.23x |
-| C | geomean req/s | **27.497x** | SGLang LPM + radix + FP8 KV | #151 | 59% of 46.70x |
+| C | geomean req/s | **29.532x** | SGLang LPM + radix + FP8 wt + FP8 KV | #172 | 63% of 46.70x |
 | D | geomean (1/ttft, 1/tpot, req/s) | **2.218x** | vLLM FP8 + n-gram spec10 | #152 | 39% of 5.69x |
 
 ## Active experiments
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #172 | C | SGLang FP8 weights composition on PR #151 winner (3-arm ablation: fp8wt+fp8kv mem0.85, +mem0.92, fp8wt-only BF16KV control) | **arm1 full eval running, ETA ~19:20 UTC** |
+| fern | #181 | C | mem-fraction push on PR #172 winner (FP8wt+FP8KV, 0.90 and 0.95) | **assigned 19:18 UTC** |
 | frieren | #180 | A | `--max-num-batched-tokens` sweep beyond 8192 (3-arm: 16384, 32768, 65536) on PR #156 base | **assigned 19:10 UTC** |
-| tanjiro | #179 | B | FP8 weights composition: arm1 fp8+spec25 = 3.856x (tied PR #149), arm2 fp8+spec20 = **7.789x** quick (suspect!), arm3 fp8+spec30 = 5.909x | **arm2 full eval running** |
+| tanjiro | #179 | B | FP8 weights composition: arm2 fp8+spec20 quick 7.789x → full eval running (rule #17 caution: Sc B quick→full may collapse) | **arm2 full eval running** |
 
 All 3 student GPUs occupied.
 
@@ -32,6 +32,7 @@ All 3 student GPUs occupied.
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #172 | fern | C | **29.532x** SGLang FP8wt+FP8KV (+7.4% over 27.497x) | MERGED — new Sc C best |
 | #166 | frieren | B | spec25/min=1: quick 5.601x (+44%), full **3.329x (-14.4%)** | CLOSED — quick→full collapse; rule #17 established |
 | #156 | fern | A | **1.881x** FP8+seqs=1+tok=8192 (+0.78% over 1.866x) | MERGED — new Sc A best |
 | #164 | tanjiro | D | FP8 KV arm1/arm2 -10%, arm3 BF16 control tied 2.208x | CLOSED — did_not_improve; rule #16 established |
@@ -82,19 +83,19 @@ All 3 student GPUs occupied.
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B tanjiro #179 (HIGH PRIORITY — arm2 full eval running):** FP8 + spec20/lookup10 quick = **7.789x** (+100% over PR #149!). But rule #17 flags Sc B quick→full unreliability for any change that alters n-gram dynamics; arm2 changes spec depth AND adds FP8 — high risk of quick→full collapse. Quality at n=16 floor (3/16). Full eval will decide. Fallback: arm1 (fp8+spec25 = 3.856x ≈ PR #149, no improvement).
+1. **Sc B tanjiro #179 (HIGH PRIORITY — arm2 full eval running ETA ~20:00 UTC):** FP8 + spec20/lookup10 quick = **7.789x** (+100% over PR #149!). Rule #17 caution: Sc B quick→full unreliable for n-gram dynamics changes — arm2 cuts spec depth 25→20 AND adds FP8. Quality at n=16 floor (3/16). Full eval will decide. Fallback: arm1 (fp8+spec25 = 3.856x ≈ PR #149, no improvement if arm2 collapses).
 
-2. **Sc C fern #172 (full eval running ETA ~19:20 UTC):** SGLang FP8 weights + FP8 KV composition. Quick arm1=3.991x, arm3 (FP8wt-only BF16KV control) 4.040x — full eval at 256-conc needed to see real composition benefit.
+2. **Sc A frieren #180 (assigned 19:10 UTC):** `--max-num-batched-tokens` sweep beyond 8192 (16384, 32768, 65536). Single-flag tuning, no quality risk.
 
-3. **Sc A frieren #180 (NEW — assigned 19:10 UTC):** `--max-num-batched-tokens` sweep beyond 8192 (16384, 32768, 65536). PR #156's 8192 budget exactly matches Sc A input length — at-the-limit budget may force conservative kernel selection. Pure scheduling/memory tuning, no quality risk.
+3. **Sc C fern #181 (NEW — assigned 19:18 UTC):** mem-fraction push on PR #172 winner (FP8wt+FP8KV). Test 0.90 and 0.95 to confirm whether higher mem allocation improves throughput at 256-conc. PR #172 arm2 (mem 0.92) was flat at quick (concurrency-bound) — full eval will discriminate.
 
 ### Next experiments (after current round)
 
-1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed (PR #173). Draft model (if Mistral-compatible checkpoint exists) could push beyond spec10 quality cliff. High-risk high-value.
+1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. High-risk-high-value. Priority after current round closes.
 
-2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #180 outcome. If batched-tokens push exhausts vLLM 0.11 Sc A levers, vLLM 0.12 unblocks FlashInfer cascade.
+2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #180 outcome. vLLM 0.12 unblocks FlashInfer cascade (20%+ Sc A TTFT potential).
 
-3. **Sc B: compound winners** — If tanjiro #179 arm2 holds at full eval AND fern's Sc C #172 wins, propagate FP8 weights pattern to remaining scenarios. Sc B is the cleanest next target.
+3. **Sc B compound**: If tanjiro #179 arm2 holds at full eval (FP8 + spec20), next Sc B experiment: compose arm2 winner with other levers (e.g. higher mem-fraction, different spec config).
 
 ## Operational notes
 
