@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 20:35 UTC
+- **As of:** 2026-05-28 20:57 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,7 +22,7 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #184 | C | chunked-prefill-size sweep (4096/16384/32768) on PR #181 base; 3-arm quick eval | **running since 20:15 UTC** |
+| fern | #187 | C | SGLang engine upgrade (newer pip release) + FlashInfer probe (arm1 triton, arm2 flashinfer) | **assigned 20:57 UTC** |
 | frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **assigned 20:35 UTC** |
 | tanjiro | #185 | B | max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1; arm2 full seqs=1+no-chunked) | **assigned 20:32 UTC** |
 
@@ -30,6 +30,7 @@
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #184 | fern | C | cps=16384 full 29.690x (-0.26% vs PR #181) | CLOSED — chunked-prefill-size is tail-shape knob only (Rule #19); cps axis exhausted |
 | #183 | frieren | A | SGLang 1.549x (-18.5% vs PR #156 1.881x) | CLOSED — SGLang Triton prefill 21% slower than vLLM FA on SM120 |
 | #179 | tanjiro | B | **4.450x** FP8wt + spec25/lookup12 (+14.5% over PR #149 3.888x) | MERGED — new Sc B best; arm2 (spec20) quality_failed at full |
 | #182 | fern | C | mem 0.95 full 29.727x = -0.14% vs PR #181 (noise) | CLOSED — did_not_improve; mem-fraction lever exhausted at 0.90 |
@@ -82,6 +83,8 @@
 
 14. **Rule #18 — Sc C quick→full amplification factor (REFINED by PR #182):** Sc C quick is concurrency-bound at n=4 burst. Lever-induced gains amplify ~4-9× quick→full **when the lever has real effect**. PR #181 mem-fraction 0.85→0.90: quick +0.18% → full +0.80% (~4.4×). PR #172 FP8 KV: quick +1.2% suppression → full +7.4% (effectively ~6× when sign-corrected). **However, PR #182 demonstrated that quick gaps within ±0.5% can also be pure noise that do NOT amplify** (mem 0.95: quick +0.19% vs arm1 → full -0.14%). Implication: rule #18 applies when the lever has mechanism; saturated-mechanism arms (e.g., dead-capacity beyond KV ceiling) stay at noise levels. Promotion to full eval is still informative even at +0.1-0.3% quick, but expect ~50% of such arms to be noise.
 
+16. **Rule #19 — Sc C chunked-prefill-size is a tail-shape knob, not a headline knob (PR #184):** cps=16384 (full): -0.26% headline, but burst TPOT p99 −50% (0.65→0.32s) AND burst TTFT p90 +42% worse (1.071→1.526s). The two effects cancel in the geomean-of-3-profiles primary. Future Sc C work should target levers that change per-step decode throughput (engine version, speculation, attention kernel) — not prefill/decode scheduling rebalancing.
+
 15. **Sc C local optimum near 30x:** 4 consecutive Sc C wins (PR #144 24.305x → PR #151 27.497x +13.1% → PR #172 29.532x +7.4% → PR #181 29.768x +0.80%). Marginal gains shrinking exponentially. Mem-fraction lever exhausted at 0.90. Next mechanisms to test: chunked-prefill-size (for burst tail), CUDA graph batch sizes, or fundamentally new approaches (spec decoding, EAGLE/MTP heads). 64% of H100 SMAC3 ceiling — closing in but real gains require new mechanism.
 
 ## Current research focus
@@ -90,11 +93,11 @@
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B tanjiro #185 (assigned 20:32 UTC):** max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1). 2-arm: arm1 seqs=1 alone; arm2 seqs=1+no-chunked+batched=8192 (full PR #156-style). Quick ETA ~20:55 UTC.
+1. **Sc C fern #187 (assigned 20:57 UTC):** SGLang engine upgrade (latest pip release) + FlashInfer backend probe. 2-arm: arm1 newer SGLang + PR #181 config; arm2 newer SGLang + flashinfer backend. Quick ETA ~21:25 UTC. Hard-close if quick shows <+0.5% gain.
 
-2. **Sc A frieren #186 (assigned 20:35 UTC):** vLLM 0.12 + FlashInfer. PR #183 confirmed SGLang is 21% slower than vLLM FA → returning to vLLM but with newer engine + unblocked FlashInfer. Quick ETA ~21:00 UTC.
+2. **Sc B tanjiro #185 (assigned 20:32 UTC):** max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1). Quick ETA ~21:00 UTC; full ETA ~22:00 UTC.
 
-3. **Sc C fern #184 (running since 20:15 UTC):** chunked-prefill-size sweep (cps=4096/16384/32768). Burst-tail TPOT p99 mechanism. Quick ETA ~20:45 UTC.
+3. **Sc A frieren #186 (assigned 20:35 UTC):** vLLM 0.12 + FlashInfer unblock on SM120. Quick ETA ~21:05 UTC (add ~5 min for vLLM 0.12 install); full ETA ~22:05 UTC.
 
 ### Next experiments (after current round)
 

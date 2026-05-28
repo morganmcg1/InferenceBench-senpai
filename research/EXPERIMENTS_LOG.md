@@ -1,5 +1,38 @@
 # SENPAI Research Results
 
+## 2026-05-28 20:55 UTC — PR #184: Sc C chunked-prefill-size sweep (CLOSED — did_not_improve)
+
+- **Branch:** `fern/sc-c-sglang-cps`
+- **Student:** fern
+- **Hypothesis:** PR #182 revealed burst TPOT p99 = 0.65s (28× p50) — chunked prefill scheduling contributes to decode starvation under 256-conc burst. H1 (larger chunks = faster queue drain → lower TPOT tails), H2 (smaller chunks = more decode interleaving → lower TPOT tails).
+
+### Quick eval (3 arms)
+
+| Arm | cps | Quick speedup | Δ vs PR #181 | Burst TPOT p99 | Burst TTFT p99 |
+|---|---:|---:|---:|---:|---:|
+| arm1 | 4096 | 3.987x | -0.28% | 0.032 | 0.201 |
+| arm2 | 16384 | 4.011x | +0.33% | 0.538 | 0.199 |
+| arm3 | 32768 | 4.026x | +0.70% | 0.538 | 0.198 |
+
+arm3 capped by `max_prefill_tokens=16384` — functionally equivalent to arm2 with worse VRAM/boot. arm2 promoted.
+
+### Full eval (arm2 cps=16384)
+
+| Metric | PR #181 (cps=8192) | arm2 (cps=16384) | Δ |
+|---|---:|---:|---:|
+| scenario/C/speedup_over_pytorch | 29.768x | 29.690x | **−0.26%** |
+| Burst TTFT p90 | 1.071s | 1.526s | +42% (worse) |
+| Burst TPOT p99 | ~0.65s | 0.323s | **−50% (better!)** |
+| Quality | 0.960 | 0.960 | tied |
+
+W&B: `qt2ggzt2` (arm2 full)
+
+### Analysis
+
+**Rule #19 established:** chunked-prefill-size is a **tail-shape knob, not a headline knob** on Sc C. Larger chunks improve decode tails (TPOT p99 halved!) but worsen first-token tails (TTFT p90 +42%). The two effects cancel in the geomean-of-3-profiles primary. Net headline = −0.26% (within noise). cps axis is exhausted for Sc C.
+
+---
+
 ## 2026-05-28 20:35 UTC — PR #183: Sc A SGLang FP8 weights engine swap (CLOSED — did_not_improve)
 
 - **Branch:** `frieren/sc-a-sglang-fp8wt`
