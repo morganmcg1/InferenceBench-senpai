@@ -1,5 +1,37 @@
 # SENPAI Research Results
 
+## 2026-05-28 20:08 UTC — PR #182: Sc C mem-fraction push to 0.95 on PR #181 winner (CLOSED — did_not_improve)
+
+- **Branch:** `fern/sc-c-sglang-mem-push2`
+- **Student:** fern
+- **Hypothesis:** arm2 (mem 0.95) from PR #181 was not promoted at quick (+0.19% vs arm1). Per rule #18 (Sc C quick→full ~4-9× amplification), expected +0.75-1.7% full eval gain over PR #181's 29.768x. Test single-arm full eval to confirm or refute.
+
+### Full eval result
+
+| Metric | arm2 (mem 0.95) | PR #181 (mem 0.90) | Δ |
+|---|---:|---:|---:|
+| **scenario/C/speedup_over_pytorch** | **29.727x** | 29.768x | **−0.14% ❌** |
+| geomean req/s | 2.518 | 2.522 | −0.15% |
+| Quality (MMLU-Pro n=500) | 0.286 (ratio 0.960) | 0.286 (ratio 0.960) | — same |
+| Speed success | 768/768 ✓ | 768/768 ✓ | — |
+| VRAM peak | 92.25 GiB | 87.5 GiB | +4.75 GiB |
+| W&B | ztorj3s5 | 2iilmzji | — |
+
+### Analysis
+
+- **Rule #18 amplification did NOT materialise here.** PR #181 arm1 vs arm2 quick gap (+0.19%) was real noise, not signal. KV-slot pressure already saturated at mem 0.90.
+- **+4.75 GiB of additional KV allocation at 0.95 is dead capacity.** Scheduler can't use it at 256 max-running-requests because steady-state already fits in 87.5 GiB.
+- **Per-profile burst tail latency stands out:** burst arm TPOT p99 = 0.6466s (28× p50). Poisson p99/p50 ratio = 13×. Constant p99/p50 ratio = 7×. Burst is where Sc C still has headroom — but it's in prefill scheduling, not mem capacity.
+- **Sc C mem-fraction lever fully exhausted at 0.90.** Confirms PR #181 was at the local optimum for this lever.
+
+### Next Sc C directions (data-driven from PR #182)
+
+1. **chunked-prefill-size sweep** — burst tail TPOT p99 suggests prefill scheduling matters. Test 4096 (smaller chunks, finer interleaving) vs 16384 (larger chunks, better burst batching).
+2. **CUDA graph batch sizes** — explicit `--cuda-graph-bs` covering 128/192/256 may smooth burst-side tails.
+3. **max-running-requests sweep** — 192/256/320 with attention to burst TTFT p90 of 1.07s.
+
+---
+
 ## 2026-05-28 20:07 UTC — PR #180: Sc A `--max-num-batched-tokens` sweep beyond 8192 (CLOSED — did_not_improve)
 
 - **Branch:** `frieren/sc-a-batched-tokens`

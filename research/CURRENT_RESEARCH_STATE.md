@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 20:08 UTC
+- **As of:** 2026-05-28 20:15 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,14 +22,15 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #182 | C | mem 0.95 single-arm full eval on PR #181 base | **assigned 19:46 UTC** |
-| frieren | pending | A | (PR #180 closed did_not_improve; assigning SGLang Sc A FP8 weights) | **idle 20:08 UTC — assigning SGLang Sc A** |
+| fern | pending | C | (PR #182 closed did_not_improve; assigning chunked-prefill-size sweep) | **idle 20:15 UTC — assigning Sc C chunked-prefill sweep** |
+| frieren | #183 | A | SGLang FP8 weights engine swap (arm1 FP8wt + arm2 BF16 control) | **assigned 20:08 UTC** |
 | tanjiro | #179 | B | FP8 weights composition: arm2 fp8+spec20 quick 7.789x → full eval running (rule #17 caution: Sc B quick→full may collapse) | **arm2 full eval running** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #182 | fern | C | mem 0.95 full 29.727x = -0.14% vs PR #181 (noise) | CLOSED — did_not_improve; mem-fraction lever exhausted at 0.90 |
 | #180 | frieren | A | tokens 16384 full 1.8658x = -0.83% vs PR #156 1.881x | CLOSED — did_not_improve; tokens beyond 8192 not a Sc A lever |
 | #181 | fern | C | **29.768x** SGLang mem 0.85→0.90 on PR #172 (+0.80%) | MERGED — new Sc C best |
 | #172 | fern | C | **29.532x** SGLang FP8wt+FP8KV (+7.4% over 27.497x) | MERGED — superseded by #181 |
@@ -77,7 +78,9 @@
 
 13. **Rule #17 — Sc B quick→full mapping UNRELIABLE for n-gram lookup behavior changes** (PR #166: quick 5.601x → full 3.329x, -41% collapse). With `lookup_min=1`, every history token seeds a 25-token speculative branch; at n=4 burst rare lucky matches dominate, at n=128 burst rejected branches dominate. Quality DID absorb the precision loss (ratio 1.054) — only speed mechanism failed. Spec depth changes (PR #149) remain stable quick→full; only lookup_min/max changes shift acceptance rate distributions.
 
-14. **Rule #18 — Sc C quick→full amplification factor:** Sc C quick is concurrency-bound at n=4 burst. Lever-induced gains amplify ~4-9× quick→full. PR #181 mem-fraction 0.85→0.90: quick +0.18% → full +0.80% (~4.4×). PR #172 FP8 KV: quick +1.2% suppression → full +7.4% (effectively ~6× when sign-corrected). Implication: any Sc C arm with quick within ±1% of baseline is worth full eval consideration. Quick promotion thresholds should not use absolute %.
+14. **Rule #18 — Sc C quick→full amplification factor (REFINED by PR #182):** Sc C quick is concurrency-bound at n=4 burst. Lever-induced gains amplify ~4-9× quick→full **when the lever has real effect**. PR #181 mem-fraction 0.85→0.90: quick +0.18% → full +0.80% (~4.4×). PR #172 FP8 KV: quick +1.2% suppression → full +7.4% (effectively ~6× when sign-corrected). **However, PR #182 demonstrated that quick gaps within ±0.5% can also be pure noise that do NOT amplify** (mem 0.95: quick +0.19% vs arm1 → full -0.14%). Implication: rule #18 applies when the lever has mechanism; saturated-mechanism arms (e.g., dead-capacity beyond KV ceiling) stay at noise levels. Promotion to full eval is still informative even at +0.1-0.3% quick, but expect ~50% of such arms to be noise.
+
+15. **Sc C local optimum near 30x:** 4 consecutive Sc C wins (PR #144 24.305x → PR #151 27.497x +13.1% → PR #172 29.532x +7.4% → PR #181 29.768x +0.80%). Marginal gains shrinking exponentially. Mem-fraction lever exhausted at 0.90. Next mechanisms to test: chunked-prefill-size (for burst tail), CUDA graph batch sizes, or fundamentally new approaches (spec decoding, EAGLE/MTP heads). 64% of H100 SMAC3 ceiling — closing in but real gains require new mechanism.
 
 ## Current research focus
 
@@ -89,17 +92,19 @@
 
 2. **Sc A frieren #180 (assigned 19:10 UTC):** `--max-num-batched-tokens` sweep beyond 8192 (16384, 32768, 65536). Single-flag tuning, no quality risk.
 
-3. **Sc C fern next (NEW — assigning 19:46 UTC):** mem 0.95 retest on PR #181 base — Sc C quick was concurrency-bound; arm2 (mem 0.95) was not promoted at PR #181 (quick +0.19% < 1% threshold) but quick is noise-bound on Sc C. arm1 went +0.18% quick → +0.80% full. Worth a single-arm full eval. Expected +0.3-0.6% incremental. Diminishing returns; KV ceiling approaching.
+3. **Sc A frieren #183 (NEW — assigned 20:08 UTC):** SGLang FP8 weights engine swap. 2-arm (FP8wt + BF16 control) probe whether SGLang's prefill is faster than vLLM at Sc A's conc=1 8192-token prefill regime. PR #156's vLLM operating point is exhausted (PR #180 ruled out tokens lever).
+
+4. **Sc C fern next (NEW — assigning 20:15 UTC):** chunked-prefill-size sweep on PR #181 base. PR #182 data revealed burst-arm TPOT p99 = 0.6466s (28× p50 spread) — prefill scheduling is the next mechanism. 2-arm: 4096 (smaller chunks) vs 16384 (larger chunks) vs PR #181's 8192 baseline.
 
 ### Next experiments (after current round)
 
-1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. High-risk-high-value. Priority after current round closes.
+1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. High-risk-high-value.
 
-2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #180 outcome. vLLM 0.12 unblocks FlashInfer cascade (20%+ Sc A TTFT potential). Best follow-up for fern after Sc C mem 0.95 round completes.
+2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #183 outcome. vLLM 0.12 unblocks FlashInfer cascade (20%+ Sc A TTFT potential).
 
-3. **Sc B compound**: If tanjiro #179 arm2 holds at full eval (FP8 + spec20), next Sc B experiment: compose arm2 winner with other levers (e.g. higher mem-fraction, different spec config).
+3. **Sc B compound**: If tanjiro #179 arm2 holds at full eval (FP8 + spec20), next Sc B experiment: compose arm2 winner with other levers.
 
-4. **Sc C compound exploration:** chunked-prefill-size sweep, max-running-requests tuning. Low priority — diminishing returns near KV ceiling.
+4. **Sc C burst-tail mechanism**: If chunked-prefill-size has no effect, try `--cuda-graph-bs` or `--max-running-requests` sweep. All target the burst tail latency identified in PR #182.
 
 ## Operational notes
 
