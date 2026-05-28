@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 16:50 UTC
+- **As of:** 2026-05-28 17:05 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -14,15 +14,15 @@
 | Scenario | Metric | Best speedup | Engine | PR | vs H100 SMAC3 ceiling |
 |---|---|---:|---|---:|---:|
 | A | 1/ttft.p50 | **1.866x** | vLLM FP8 weights | #137 | 42% of 4.48x |
-| B | 1/tpot.p50 | **3.550x** | vLLM n-gram spec15/8 | #141 | 23% of 15.23x |
+| B | 1/tpot.p50 | **3.888x** | vLLM n-gram spec25/12 | #149 | 26% of 15.23x |
 | C | geomean req/s | **27.497x** | SGLang LPM + radix + FP8 KV | #151 | 59% of 46.70x |
-| D | geomean (1/ttft, 1/tpot, req/s) | **2.073x** | vLLM FP8 + n-gram | #139 | 36% of 5.69x |
+| D | geomean (1/ttft, 1/tpot, req/s) | **2.218x** | vLLM FP8 + n-gram spec10 | #152 | 39% of 5.69x |
 
 ## Active experiments
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #152 | D | vLLM spec10/lookup6 depth upgrade (extend PR #139) | **arm2 = 2.218x** (+7.0%, quality 0.960) — review-ready, sent back for rebase after PR #149 merge; spec15 fails quality regardless of dtype |
+| fern | #156 | A | Scheduling fine-tune (max-num-seqs=1, batched-tokens=8192) + optional INT4 AWQ probe | **assigned 17:05 UTC** |
 | frieren | #153 | C | SGLang FP8 weights + FP8 KV composition (extend PR #151) — ablation arm3 isolates weight contribution | **assigned 16:25 UTC** |
 | tanjiro | #154 | D | n-gram spec depth fine-sweep: spec11/lookup7, spec12/lookup8, spec10/min=1 — find quality cliff above spec10 | **assigned 16:50 UTC** |
 
@@ -33,7 +33,7 @@ All 3 student GPUs occupied.
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
 | #149 | tanjiro | B | **3.888x arm2 spec25/lookup12 (+9.5%)** — quality 1.013, 64/64 | MERGED — new Sc B best |
-| #152 | fern | D | **2.218x arm2 spec10/lookup6 (+7.0%)** — quality 0.960, 96/96 | review-ready pending rebase |
+| #152 | fern | D | **2.218x arm2 spec10/lookup6 (+7.0%)** — quality 0.960, 96/96 | MERGED — new Sc D best |
 | #137 | frieren | A | 1.866x FP8 weights | MERGED — current Sc A best |
 | #136 | fern | B | 2.687x n-gram spec5/4 | MERGED — superseded by #141 |
 | #138 | tanjiro | D | 1.247x SGLang default | MERGED — superseded by #139 |
@@ -92,9 +92,11 @@ All 3 student GPUs occupied.
 
 2. **Sc C frieren #153:** SGLang FP8 weights composed with FP8 KV (extend PR #151 winner). Testing whether SGLang FP8 weight quantization adds further weight-bandwidth reduction on top of FP8 KV. Key question: does vLLM-style "FP8 weights hurt at high concurrency" apply to SGLang's Triton kernels?
 
-3. **Sc D fern #152 (pending rebase → merge):** arm2 spec10/lookup6 = 2.218x (+7.0%), quality 0.960. Sent back for BASELINE.md rebase after PR #149 merge. Will become new Sc D best.
+3. **Sc D fern #152 (MERGED):** arm2 spec10/lookup6 = 2.218x (+7.0%), quality 0.960. New Sc D best.
 
-4. **Sc D tanjiro #154:** n-gram spec depth fine-sweep — spec11, spec12, and spec10/min=1. Map the quality cliff between spec10 (safe, 2.218x) and spec15 (fail, 0.629 quality). If spec11-12 are safe, could push Sc D to 2.25-2.30x.
+4. **Sc D tanjiro #154:** n-gram spec depth fine-sweep — spec11, spec12, and spec10/min=1. Map the quality cliff between spec10 (safe, 2.218x) and spec15 (fail, quality 0.629). If spec11-12 are safe, could push Sc D to 2.25-2.30x.
+
+5. **Sc A fern #156:** scheduling fine-tune (max-num-seqs=1, max-num-batched-tokens=8192) to eliminate phantom-sequence KV overhead at conc=1. Secondary probe: INT4 AWQ quantization if checkpoint available. Current 1.866x is 42% of H100 ceiling — scheduling overhead is the last unexplored lever on vLLM 0.11.
 
 ### Next experiments (after current round)
 
