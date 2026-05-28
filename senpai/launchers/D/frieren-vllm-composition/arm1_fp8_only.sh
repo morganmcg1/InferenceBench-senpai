@@ -14,5 +14,4 @@ exec python3 -m vllm.entrypoints.openai.api_server \
   --no-enable-prefix-caching \
   --kv-cache-dtype auto \
   --quantization fp8 \
-  --speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}' \
   --trust-remote-code --disable-log-stats
