@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 12:22 UTC
+- **As of:** 2026-05-28 12:46 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -20,15 +20,15 @@ room. RTX PRO 6000 has known constraints around FlashAttention + FP8 KV
 combinations; default to BF16 KV with FlashAttention unless a PR explicitly
 tests the hardware-specific path.
 
-Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139):
+Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 
 | Student | Scenario | Engine | Hypothesis | PR | Status |
 |---|---|---|---|---:|---|
-| fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B new best 2.687x** |
-| fern | C (high-load throughput) | vLLM 0.11 | high-concurrency BF16 + prefix caching arms | #140 | **just assigned 12:22 UTC** |
-| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A new best 1.866x** |
-| tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default (full eval 1.247x; not yet relaunch-safe) | #138 | **WIP — Path A (bundle libnuma + auto-bootstrap venv) in progress** |
-| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram speculative composition | #139 | **WIP — quick probes pending (assigned 11:56 UTC)** |
+| fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B best 2.687x** |
+| fern | C (high-load throughput) | vLLM 0.11 | high-conc BF16 + prefix caching (3 quick arms done; arm1 promoted to full) | #140 | **WIP — full eval in flight (arm1 BF16 high-conc, quick 3.888x)** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
+| tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **REVIEW — rebase sent for start_server.sh conflict 12:44 UTC** |
+| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram composition (arm3 quick 1.810x) | #139 | **WIP — full eval running (composition arm, started 12:40:21 UTC)** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a
@@ -46,12 +46,18 @@ only and not terminal.
 |---|---|---|---:|---|---|
 | fern | B | arm1 BF16 tuned | 1.438x | quick done | ex8p5t6j |
 | fern | B | arm2 FP8 weights | 1.474x | quick done; within 5% of arm1 | ycwnvt87 |
-| fern | B | **arm3 n-gram spec** | **3.518x** | promoted to full eval | du9y0jz8 |
+| fern | B | **arm3 n-gram spec** | **3.518x** | full eval 2.687x merged | du9y0jz8 |
 | frieren | A | arm1 one-shot prefill | 1.276x | quick done | 5iump62l |
 | frieren | A | arm2 chunked prefill large | 1.279x | quick done; within noise of arm1 | r20z2rm0 |
-| frieren | A | **arm3 FP8 weights** | **1.901x** | promoted to full eval | eyvyj8oz |
-| tanjiro | D | arm1 sglang_default | 1.167x | quick done | 2nfds9ud |
-| tanjiro | D | arm2 sglang_tuned | 1.183x | quick done; within 5% of arm1 | 8zul6lqz |
+| frieren | A | **arm3 FP8 weights** | **1.901x** | full eval 1.866x merged | eyvyj8oz |
+| tanjiro | D | arm1 sglang_default | 1.167x | full eval 1.2506x (relaunch-safe, in review) | 2nfds9ud → nf10i0y2 |
+| tanjiro | D | arm2 sglang_tuned | 1.183x | dropped per simplicity tiebreak | 8zul6lqz |
+| fern | C | arm1 BF16 high-conc | **3.888x** | promoted to full eval | qvcrnc4s |
+| fern | C | arm2 + prefix cache | 3.928x | within 1% of arm1; arm1 preferred | 2rtv6gxb |
+| fern | C | arm3 + FP8 | 3.798x | FP8 hurts on high-conc throughput (-3.3%) | wuvd1ycq |
+| frieren | D | arm1 fp8 only | 1.326x | quick done | (no W&B) |
+| frieren | D | arm2 ngram only | 1.697x | quick done | (no W&B) |
+| frieren | D | **arm3 fp8+ngram** | **1.810x** | promoted to full eval (running) | (no W&B yet) |
 
 ### Key learnings so far
 
@@ -62,6 +68,28 @@ only and not terminal.
   the full 64-request Sc B distribution (longer outputs diverge from prefix context).
   Sc B now beats H100 vLLM default (2.25x); ceiling from SMAC3 at 15x suggests
   deeper speculative depth and multi-seq batching have large untapped headroom.
+- **FP8 + n-gram speculative compose on Scenario D** (frieren quick: arm1 FP8-only
+  1.326x, arm2 ngram-only 1.697x, arm3 composition **1.810x** — +6.6% over arm2,
+  +36.5% over arm1). The interaction is constructive: FP8 cuts the 4096-token
+  prefill TTFT while n-gram speculation cuts the 2048-token decode TPOT, and the
+  two operate at different stages of each request. Full eval in flight to confirm.
+- **Scenario C high-concurrency exploration (fern):** arm1 BF16 high-conc with
+  `--max-num-seqs 64 --max-num-batched-tokens 8192` returns **3.888x quick speedup**
+  (geomean req/s) — well above Sc A/B quick levels, consistent with H100 reference
+  pattern where vLLM default already hits 48.69x on Sc C. Prefix caching is +1%
+  noise at quick n=4 (low inter-request prefix overlap on Sc C's varied prompts).
+  **FP8 hurts on Sc C** (-3.3% vs arm2): high-concurrency throughput is bound by
+  KV-cache memory and scheduler overhead, not weight-read bandwidth, so FP8
+  dequant overhead on every fwd pass dominates the marginal bandwidth savings.
+  Different optimum than Sc A. Arm1 (simplest, within 1% of best) promoted to
+  full eval.
+- **Tanjiro Sc D SGLang relaunch-safe** (1.2506x full eval, MMLU-Pro 0.31 vs
+  baseline 0.298 = ratio 1.04, 96/96 speed success, W&B `nf10i0y2`). The
+  bundled-libnuma fix (Path A) succeeded — `libnuma.so.1` shipped under
+  `senpai/launchers/D/tanjiro-sglang/lib/` + `LD_LIBRARY_PATH` prepend +
+  `start_server.sh` auto-bootstraps the SGLang venv via `uv venv` if missing.
+  PR #138 currently `CONFLICTING` on `start_server.sh` (PR #136 committed a
+  different version at merge); rebase send-back at 12:44 UTC.
 - **FP8 weight-only quantization is the strongest single lever for Scenario A
   TTFT** (1.90x quick vs 1.28x BF16). It boots cleanly on Blackwell with vLLM
   0.11 + FlashAttention. Pending full-eval confirmation from PR #137. We have
