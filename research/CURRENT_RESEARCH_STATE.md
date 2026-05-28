@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-d-r1`
 
-- **Updated:** 2026-05-28 17:12 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~84 min left)
+- **Updated:** 2026-05-28 17:33 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~63 min left; review at 18:20 UTC, latest full-eval start ~17:50 UTC)
 - **MAJOR FINDING:** Scenario D speed eval runs at concurrency=1 because `src/eval/inference/runner.py:1159` defaults profile-level concurrency to 1 when scenario.json has only a `profile` dict (no `profiles` list). Scenario D's profile is `{"name":"burst","pattern":"burst"}` with no concurrency. The PyTorch baseline_metrics.json also only has the c=1 burst profile, so speedups vs baseline are apples-to-apples. Wider-batch / chunked-prefill / prefix-cache levers are dormant; per-token decode levers (speculative decoding, quantization, decoder kernels) dominate.
 - **Launch budget:** ~2 hours, single Scenario D.
 - **Most recent human directive:** none in this launch (no open team issues).
@@ -16,8 +16,8 @@ The first round is **engine-diversified**: one vLLM arm and one SGLang arm. Goal
 
 | PR | Student | Engine | Latest signal | Next step |
 |---|---|---|---|---|
-| #155 | scen-d-frieren | vLLM tuned | Arm 1 quick **1.17x**, Arm 2 quick **1.25x**. Arm 2 full eval started ~16:59 UTC, expected terminal at 17:25-17:50 UTC. | Let Arm 2 full finish → terminal SENPAI-RESULT → SLOT-FREE → stand down. Pivot reserved for fern. |
-| #157 | scen-d-fern | SGLang | Arm 1 LPM quick **1.168x** at c=1 (gen throughput 60.93 tok/s vs PyTorch 38.21 = +59% — best per-token decoder seen so far). Identified the c=1 harness behavior. | Skip Arm 2 FCFS (irrelevant at c=1). Pivot to Arm 2-bis: SGLang + NGRAM speculative decoding (preferred), with vLLM n-gram speculative fallback. Prepare both launchers now while frieren is on the GPU. Quick → full when slot frees. |
+| #155 | scen-d-frieren | vLLM tuned | Arm 1 quick **1.17x**, Arm 2 quick **1.25x**. Claimed Arm 2 full eval at 16:58 UTC. No W&B full-mode run visible yet at 17:33 UTC. Expected terminal 17:30-17:50 UTC if eval is actually running (c=1 full ≈ 30-35 min). Pinged for heartbeat at 17:31. | Wait for terminal SENPAI-RESULT or heartbeat. If no signal by 17:45 UTC, declare stood-down and transfer slot to fern. |
+| #157 | scen-d-fern | SGLang | Arm 1 LPM quick **1.168x** at c=1 (gen throughput 60.93 tok/s vs PyTorch 38.21 = +59% — best per-token decoder seen so far). Identified the c=1 harness behavior. Silent since 17:07. Pinged at 17:31 for spec-launcher prep status. | Should be prepping SGLang+NGRAM and vLLM-spec fallback launchers while frieren holds the slot. Ready to take the slot the moment frieren posts SLOT-FREE. |
 
 Both students must use `gpu_slot.py run --wait --mode {quick,full}`. Quick caps 15 min, full caps 60 min, `--min-remaining-s 1500` required for full eval. Post a `SLOT-FREE` line on release.
 
