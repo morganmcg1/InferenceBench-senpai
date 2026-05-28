@@ -761,3 +761,56 @@ Each fix surfaced the next blocker; frieren stopped at layer 5 (out-of-scope pat
 **Next experiment for frieren:** Pivot to Sc C — extend PR #144 winner (24.305x SGLang LPM + radix)
 with FP8 KV cache + mem-fraction push (researcher H2+H5). Sc C is 256-concurrency, KV-memory-bound;
 FP8 KV halves block size — opposite of Sc A regime. PR #144 left 15 GiB of unused VRAM headroom.
+
+---
+
+## 2026-05-28 15:50 UTC — PR #147: Scenario D SGLang LPM + radix cache (CLOSED — did_not_improve)
+
+- **Branch:** `fern/sglang-sc-d-lpm-radix`
+- **Student:** fern
+- **Hypothesis:** Port the PR #144 Sc C winning mechanism (SGLang LPM scheduler + always-on
+  radix cache) to Sc D. Sc D has 4-concurrency with 4096-token inputs (4× longer than Sc C's
+  1024-token inputs), which should expose more prefix-tree hits per request. Compose with
+  FP8 + SGLang NGRAM to mirror PR #139's vLLM FP8+n-gram composition pattern.
+
+### Result: **1.568x** — below PR #139 baseline (2.073x), -24.4% regression
+
+### Quick-probe results (n=4 burst, n=16 MMLU)
+
+| Arm | Levers | Quick speedup | TTFT.p50 | TPOT.p50 | W&B |
+|---|---|---:|---:|---:|---|
+| arm1 | LPM + radix | 1.121x | 0.2016s | 0.0215s | n5vbzgpo |
+| arm2 | + FP8 | 1.316x | 0.1422s | 0.0186s | 2fnl9pi6 |
+| arm3 | + NGRAM spec | 1.228x | 0.1961s | 0.0181s | v4cuazq5 |
+| **arm4** | **FP8 + NGRAM (composition)** | **1.506x** | **0.1360s** | **0.0155s** | **ge4hc9d3** |
+
+### Full eval result (arm4)
+
+| Metric | PyTorch | PR #139 winner | **arm4 (this PR)** | arm4 vs baseline |
+|---|---:|---:|---:|---:|
+| TTFT.p50 | 0.2123s | 0.1161s | 0.1165s | tied |
+| TPOT.p50 | 0.0251s | 0.0104s | **0.0163s** | **−57% worse** |
+| req/s | 0.0382 | 0.0776 | 0.0526 | **−32% worse** |
+| geomean | 1.930 | 4.001 | 3.026 | -24.4% |
+| **speedup_over_pytorch** | 1.000x | **2.073x** | **1.568x** | **−24.4%** |
+| MMLU-Pro ratio (n=500) | 1.000 | 0.953 | 0.993 ✓ | within gate |
+| Speed success | — | 96/96 | 96/96 ✓ | clean |
+| VRAM peak | — | 91.7 GiB | 82.2 GiB | -10% |
+| W&B | — | 40f15iox | **ps1tr5ni** | — |
+
+**Closed:** Not merged — did_not_improve. Quality clean (0.993), validation pass, but speed regression vs PR #139.
+
+### Three independent failure modes (fern's analysis)
+
+1. **Radix-cache transfer hypothesis disproved.** PR #144 won Sc C +15.2% via **cross-request prefix sharing** within a 256-request burst (LPM scheduler reorders to maximise hits). Sc D has 4 concurrent requests with *unique* dataset content — no shared prefixes exist for the radix tree. arm1 quick=1.121x is essentially LPM/radix overhead with no measurable benefit. Input length (4096 vs 1024) is irrelevant; what mattered was *concurrent-request count × prefix overlap structure*.
+2. **SGLang NGRAM weaker than vLLM prompt-lookup on natural-language Sc D outputs.** SGLang's BFS-based n-gram with `max_bfs_breadth=10` explores 10 candidate paths per draft step — 10× verify compute. On non-repetitive Mistral outputs, accept_len averaged 1.5-2.0 vs vLLM's effective ~2.5 (single-path). TPOT: SGLang NGRAM 0.0163s vs vLLM spec5 0.0104s = -57%.
+3. **SGLang NGRAM forces `disable_overlap_schedule=True`** + `enable_mixed_chunk=False`. arm3 (NGRAM only) TTFT 0.196s vs arm2 (FP8 only) 0.142s — NGRAM disables overlap-prefill optimisations, regressing TTFT by ~38%. arm4 (FP8+NGRAM) recovers TTFT to 0.136s but TPOT regression is decisive.
+
+### Key insights & rules established
+
+- **SGLang LPM+radix mechanism is Sc C-specific.** Requires high-concurrency burst with cross-request prefix overlap. Rule: do not attempt this mechanism on workloads with `concurrency ≤ small_count × unique_requests`.
+- **Engine choice matters per scenario.** vLLM's prompt-lookup is decisively stronger than SGLang's NGRAM for Sc D's natural-language outputs. SGLang wins Sc C (bursty, schedulable), vLLM wins Sc D (low-concurrency, deeper-spec-decode-friendly).
+- **Composition pattern (FP8 + spec) works in both engines** but the spec implementation choice is determinative. vLLM PR #139 spec5/lookup4 → 2.073x. SGLang NGRAM 15/breadth=10 → 1.568x. Same scenario, different engines, opposite composition outcomes.
+- **fern's quick→full ratio for SGLang arm4: 1.506→1.568x (+4.1%).** Smaller than vLLM PR #139's quick→full +14.5%. SGLang quick probes are MORE predictive of full performance than vLLM quick probes — useful pattern for future SGLang work.
+
+**Next experiment for fern:** Sc D vLLM spec depth upgrade (researcher H1) — extend PR #139 winner from spec5/lookup4 to spec15/lookup8. PR #141 (Sc B) showed spec5→spec15 gave +32%. On Sc D (2048-token outputs, less spec exposure than Sc B's 8192) the gain should be smaller but still meaningful. Direct vLLM extension, two integer changes; quality risk lower than Sc B (4× less verify-step exposure).
