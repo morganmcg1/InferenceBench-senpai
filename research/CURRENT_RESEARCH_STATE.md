@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-c-r1`
 
-- Date: 2026-05-28 (updated ~T+65)
+- Date: 2026-05-28 (updated ~T+90)
 - Active research tag: `ib-20260528-scen-c-r1`
 - Advisor branch: `ib-20260528-scen-c-r1`
 - Scope: Scenario C only (high-load, geomean throughput across burst/poisson/constant).
@@ -14,27 +14,37 @@
 
 ## Live baseline
 
-**22.18x** speedup_over_pytorch (Scenario C geomean). PR #163 merged. **SGLang 0.5.9**: triton attn + pytorch sampler, mem_fraction_static=0.88, max_running_requests=256, schedule_policy=fcfs, chunked_prefill_size=4096. W&B: b4xhsfby. Quality ratio 1.054 (n=500). VRAM peak 86.7 GB / 96 GB → 9.3 GB headroom remaining.
+**23.98x** speedup_over_pytorch (Scenario C geomean). **PR #165 merged**. vLLM 0.11.0 + n-gram speculative decoding (num_speculative_tokens=5, prompt_lookup_min=3, prompt_lookup_max=5) on top of PR #161 Arm A config (max_num_seqs=384, max_num_batched_tokens=16384, gpu_mem_util=0.92, chunked_prefill ON). W&B: mj8f07f0. Quality ratio 1.000 (n=500, exact match). Self-contained launcher.
 
-(Previous: vLLM Arm A at 20.84x, PR #161, W&B btpqa2rl — now rank 2.)
+Lineage:
+- Rank 1: PR #165 vLLM+ngram 23.98x (current)
+- Rank 2: PR #163 SGLang 22.18x
+- Rank 3: PR #161 vLLM Arm A 20.84x
 
-## Current research focus
+## Research findings worth carrying forward
 
-- **Push SGLang concurrency further**: SGLang Arm A used `max_running_requests=256` and `mem_fraction_static=0.88` with 9.3 GB VRAM headroom unused. Next: push max_running_requests to 384/512 and mem_fraction_static to 0.90-0.92, possibly with chunked_prefill_size=8192. scen-c-fern's next PR.
-- **Resolve chunked-prefill hypothesis**: frieren's PR #165 still WIP — full eval of vLLM Arm D (chunked-prefill OFF). If it beats 22.18x SGLang, both engines have leads. If it doesn't, vLLM Arm A stands as best-vLLM.
-- **Hardcode winning SGLang config as launcher defaults** so reproduce-in-fresh-container doesn't depend on caller env vars. Build this into fern's next PR.
+- **vLLM 0.11.0 V1: `--no-enable-chunked-prefill` is a no-op** (engine forces chunked_prefill=True in arg_utils.py:1548 for non-pooling models). Future scenarios A/B/D should not test this flag.
+- **n-gram speculative decoding wins on long-decode regimes** with structured/instruction-tuned models — Scenario C's output_len=1024 + ignore_eos=true is the right environment. Quality preserved exactly (ratio 1.000).
+- **SGLang is competitive with vLLM on RTX PRO 6000** when configured with triton attention + pytorch sampler. The FlashInfer/SM120 incompatibility doesn't prevent strong baselines.
+- **SGLang launcher in PR #163 uses env-var-controlled defaults**; reproduce requires setting SGLANG_* env vars. Open follow-up: hardcode defaults so the launcher is self-contained.
+
+## Current state
+
+- ~T+90 of 120 min launch budget; ~30 min remaining, ~15 min reserved for final review/scorekeeping.
+- frieren just merged the winning PR #165 and is idle.
+- fern (PR #167) is stale_wip — no commits since 17:39, no comments since launch. May be stuck.
 
 ## Active PRs
 
-- #165 (scen-c-frieren, vLLM Arm D + n-gram spec): WIP, full eval in progress.
-- New fern PR (pending): SGLang concurrency push (max_running_requests 384/512, mem_fraction higher, chunked_prefill 8192) + hardcoded launcher defaults.
+- #167 (scen-c-fern): SGLang concurrency push + hardcode defaults — **stale, may need to be wrapped up**.
 
-## Potential next research directions
+## Potential next research directions (for future launches)
 
-- SGLang `--enable-torch-compile` (search space says false, but worth a quick probe at high concurrency).
-- SGLang speculative decoding (`--speculative-algorithm EAGLE` or n-gram) for Scenario C's long-decode regime.
-- FP8 weight quantization for SGLang (if booting + quality passes) — could push VRAM headroom even further.
-- vLLM speculative decoding (n-gram) — Arm E in frieren's PR #165 if Arm D doesn't win.
+- Higher num_speculative_tokens (7, 9) — diminishing returns expected.
+- vLLM with `method=eagle` if a Mistral-7B EAGLE draft checkpoint becomes available.
+- SGLang + speculative decoding (EAGLE/MEDUSA) to combine the two leads.
+- FP8 weight quantization (BF16 KV preserved) — could free VRAM for higher concurrency.
+- Try the SM120-compatible flashinfer build that recent SGLang patches reportedly support.
 
 ## Stop rules / hard limits
 

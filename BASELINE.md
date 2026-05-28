@@ -35,25 +35,23 @@ Reference points apply to H100 80GB at 2h, **not** RTX PRO 6000 shakedown. Treat
 
 | Rank | PR | Launcher | Engine | Geomean speedup | Quality (ratio) | W&B run | Notes |
 |---:|---|---|---|---:|---|---|---|
-| 1 | #163 | `senpai/launchers/C/sglang-fern/start_server.sh` | SGLang 0.5.9 | **22.18x** | PASS (1.054) | b4xhsfby | triton attn + pytorch sampler, mem_fraction_static=0.88, max_running_requests=256, schedule_policy=fcfs, chunked_prefill_size=4096 |
-| 2 | #161 | `senpai/launchers/C/vllm-frieren/start_server.sh` | vLLM | 20.84x | PASS (1.027) | btpqa2rl | max_num_seqs=384, max_num_batched_tokens=16384, gpu_mem_util=0.92, chunked_prefill ON, BF16 KV |
+| 1 | #165 | `senpai/launchers/C/vllm-frieren-arm2-ngram/start_server.sh` | vLLM 0.11.0 | **23.98x** | PASS (1.000) | mj8f07f0 | Arm A + n-gram speculative decoding (num_speculative_tokens=5, prompt_lookup_min=3, prompt_lookup_max=5) |
+| 2 | #163 | `senpai/launchers/C/sglang-fern/start_server.sh` | SGLang 0.5.9 | 22.18x | PASS (1.054) | b4xhsfby | triton attn + pytorch sampler, mem_fraction_static=0.88, max_running_requests=256, fcfs, chunked_prefill_size=4096 |
+| 3 | #161 | `senpai/launchers/C/vllm-frieren/start_server.sh` | vLLM | 20.84x | PASS (1.027) | btpqa2rl | max_num_seqs=384, max_num_batched_tokens=16384, gpu_mem_util=0.92, chunked_prefill ON, BF16 KV |
 
-**Reproduce current best (PR #163, SGLang):**
-The launcher reads tuning parameters from env vars; the winning config requires these set:
-```bash
-export SGLANG_MEM_FRACTION_STATIC=0.88
-export SGLANG_MAX_RUNNING_REQUESTS=256
-export SGLANG_SCHEDULE_POLICY=fcfs
-export SGLANG_CHUNKED_PREFILL_SIZE=4096
-# Then copy senpai/launchers/C/sglang-fern/start_server.sh into the workspace and run evaluate.py
-```
-The launcher also requires the per-PR venv at `/tmp/inferencebench-engine-venvs/sglang-pr-163` and the apt package `libnuma1` for sgl_kernel. **Known follow-up**: hardcode the winning env-var values as defaults in the launcher so reproduce-in-fresh-container does not depend on caller env.
+**Reproduce current best (PR #165, vLLM + n-gram speculation):**
+The launcher is self-contained (no env-var dependency). Copy `senpai/launchers/C/vllm-frieren-arm2-ngram/start_server.sh` into a Scenario C task workspace, run `evaluate.py`. Key flags: `--max-num-seqs 384 --max-num-batched-tokens 16384 --gpu-memory-utilization 0.92 --enable-chunked-prefill --no-enable-prefix-caching --speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":5,"prompt_lookup_min":3}' --kv-cache-dtype auto`.
+
+Notable: scenario C's `output_len=1024 ignore_eos=true` regime + Mistral-Instruct chat structure produces enough repeated token spans that n-gram lookup amortizes TPOT effectively. Quality is identical to torch baseline (ratio=1.000 at n=500) — speculation is exact, not approximate.
+
+**Cross-engine observation**: vLLM's `--no-enable-chunked-prefill` CLI flag is a **no-op in vLLM 0.11.0 V1** — the engine unconditionally sets `enable_chunked_prefill=True` for non-pooling tasks in `arg_utils.py` line 1548. Quick-mode A-vs-D delta in PR #161 was therefore run-to-run noise, not a chunked-prefill effect. Documented for future Scenario A/B/D runs.
 
 ## Provisional / quick-only candidates (not yet terminal)
 
 | PR | Engine | Quick speedup | Notes |
 |---|---|---:|---|
-| #161 Arm D | vLLM (chunked-prefill OFF) | 3.80x quick | Burst TTFT collapsed in quick mode (+37% vs Arm A quick); student predicts this reverses in steady-state full eval — **PR #165 testing now** |
+| #165 Arm E quick | vLLM + n-gram spec, k=5 | 4.07x quick | Promoted to full eval — became current winner at 23.98x |
+| #161 Arm D | vLLM (chunked-prefill OFF flag) | n/a | Flag is no-op in vLLM 0.11.0 V1 — discarded |
 
 ## Failed launches and dead ends
 
@@ -61,6 +59,7 @@ _None yet._
 
 ## Update history
 
+- 2026-05-28 17:54: **PR #165 merged** — vLLM + n-gram speculative decoding wins with 23.98x (+8.1% over SGLang). Quality ratio 1.000 (n=500, exactly matches torch baseline). 768/768 succeeded. Launcher is self-contained — no env-var dependency. W&B: mj8f07f0.
 - 2026-05-28 17:31: **PR #163 merged** — SGLang takes the lead with 22.18x (+6.4% over vLLM Arm A). Quality PASS (ratio 1.054, n=500, observed=0.314), 768/768 requests, validation_pass=true. W&B: b4xhsfby.
 - 2026-05-28 17:19: **PR #161 merged** — first terminal Scenario C result. vLLM Arm A full eval: 20.84x speedup, quality PASS (ratio=1.027, n=500, MMLU-Pro observed=0.306), 768/768 requests, validation_pass=true. W&B: btpqa2rl.
 - 2026-05-28: Created ledger at start of `ib-20260528-scen-c-r1`. Preflight passed against

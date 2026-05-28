@@ -1,5 +1,48 @@
 # SENPAI Research Results — `ib-20260528-scen-c-r1`
 
+## 2026-05-28 17:54 — PR #165: vLLM Scenario C — n-gram speculative decoding wins
+
+- **Branch**: `scen-c-frieren/vllm-c-chunked-prefill-full-speculative`
+- **Hypothesis (Arm D)**: chunked-prefill OFF wins over chunked-prefill ON in full eval, reversing the quick-mode noise.
+- **Hypothesis (Arm E)**: n-gram speculative decoding amortizes TPOT in Scenario C's long-decode regime (output_len=1024, ignore_eos=true). The Mistral-Instruct chat structure produces enough repeated token spans for prompt-lookup speculation to hit.
+
+### Diagnostic finding (Arm D)
+
+`--no-enable-chunked-prefill` is a **no-op in vLLM 0.11.0 V1**: `arg_utils.py:1548` unconditionally sets `enable_chunked_prefill=True` for non-pooling tasks. The PR #161 quick-mode A-vs-D delta was therefore run-to-run noise. The student diagnosed this from `server.log` (final scheduler config printed) and pivoted to Arm E. Important repo-wide note for future scenarios.
+
+### Terminal result (Arm E full eval)
+
+| Metric | Value |
+|---|---|
+| scenario/C/speedup_over_pytorch | **23.98x** (vs prior baseline 22.18x → +8.1%) |
+| geomean req/s | 2.0313 req/s |
+| quality/mmlu_pro_observed_accuracy | 0.298 (ratio **1.000**, PASS at n=500) |
+| speed requests | 768/768 succeeded |
+| VRAM peak | ~89 GB / 96 GB |
+| W&B run | mj8f07f0 |
+| validation_pass | true |
+
+### Per-profile metrics
+
+| Profile | req/s | gen tok/s | TTFT p50 | TPOT p50 |
+|---|---:|---:|---:|---:|
+| burst (c=64) | 2.947 | 30.01 | 0.096s | 0.0331s |
+| poisson (r=32, c=32) | 2.109 | 39.72 | 0.077s | 0.0253s |
+| constant (r=16, c=16) | 1.349 | 49.84 | 0.070s | 0.0205s |
+
+### Analysis and conclusions
+
+- vLLM + Arm A config + n-gram spec decode beats both pure-vLLM (20.84x) and SGLang (22.18x). Per-profile burst req/s 2.95 vs 2.74 for SGLang shows the speculation gain comes from decode-amortization, not from a per-profile concurrency advantage.
+- Quality ratio exactly 1.000 — n-gram speculation is exact (proposed tokens are verified against the model's own logits), so accuracy is preserved.
+- Per-profile TPOT improved (burst 0.033s vs PR #161 Arm A would have been higher) — spec decode is doing real work; the burst profile gets the largest gain in raw req/s.
+- Self-contained launcher (no env-var dependency, in contrast to PR #163 SGLang launcher).
+
+### Next directions implied by this result
+
+1. Test higher `num_speculative_tokens` (7, 9) — diminishing returns expected but unverified.
+2. Combine n-gram spec decode with SGLang's faster scheduler — would require SGLang spec-decode support (EAGLE/MEDUSA) and a draft model.
+3. Explore vLLM `--speculative-config` with `method=eagle` if a Mistral-7B EAGLE checkpoint is available.
+
 ## 2026-05-28 17:31 — PR #163: SGLang Scenario C boot + tune defaults
 
 - **Branch**: `scen-c-fern/sglang-c-throughput-tune`
