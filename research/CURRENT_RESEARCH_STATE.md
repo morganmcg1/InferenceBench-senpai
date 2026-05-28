@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 16:25 UTC
+- **As of:** 2026-05-28 16:35 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,9 +22,9 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | **assigned 15:55 UTC** |
+| fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | Quick probes done 16:01 UTC; **spec15 fails quality regardless of dtype**, arm2 (spec10) in full eval |
 | frieren | #153 | C | SGLang FP8 weights + FP8 KV composition (extend PR #151) — ablation arm3 isolates weight contribution | **assigned 16:25 UTC** |
-| tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
+| tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **arm2 spec25/lookup12 = 3.888x** (+9.5%, quality 1.013) — sent back 16:35 UTC for BASELINE.md rebase |
 
 All 3 student GPUs occupied.
 
@@ -48,6 +48,8 @@ All 3 student GPUs occupied.
 | #149 | tanjiro | B | spec20/25/30 BF16 — quick probes pending | **assigned 15:15 UTC** |
 | #150 | frieren | C | SGLang FP8 KV + mem 0.92 — auto-merged by GH due to branch collision | CLOSED — reissued as #151 |
 | #151 | frieren | C | 27.497x SGLang FP8 KV (fp8_e5m2) — MERGED new Sc C best +13.1% |
+| #149 | tanjiro | B | **3.888x arm2 spec25/lookup12 (+9.5%)** — review-ready, sent back 16:35 UTC for rebase after PR #151 BASELINE.md conflict |
+| #152 | fern | D | spec15 fails quality on Sc D regardless of dtype (n=16 screen); arm2 spec10 in full eval (quick 2.033x ≈ PR #139 baseline) |
 | #153 | frieren | C | SGLang FP8 weights + FP8 KV composition | **assigned 16:25 UTC** |
 
 ## Key learnings
@@ -74,13 +76,17 @@ All 3 student GPUs occupied.
 
 11. **FP8 KV cache wins at high concurrency** (PR #151, +13.1% on Sc C). Halves KV memory footprint → doubles in-flight KV token capacity (545k → 1,090k). Regime-specific: wins at Sc C (256 concurrent requests, KV-bandwidth-bound), regresses at Sc A (conc=1, compute-bound). `fp8_e5m2` accepted by SGLang 0.5.12.post1 on SM120 Blackwell.
 
+12. **Deep spec depth quality risk is dtype-independent on Sc D** (PR #152 quick probes, n=16 only — pending full confirmation). Both FP8+spec15 and BF16+spec15 produce quality_ratio 0.629 on Sc D, vs spec10 passing at 1.049. This is at odds with Sc B where PR #149 confirmed BF16+spec25 passes at full quality (n=500, ratio 1.013). Hypothesis: Sc D's 2048-token outputs have less repetition for n-gram matching → greedy spec verify at high depth produces more error-amplifying mispredictions per output token. Sc D spec sweet spot is shallower than Sc B's. Awaiting arm2 (spec10) full eval to confirm spec10 is a viable Sc D depth.
+
+13. **Sc B spec depth has strong diminishing returns past 15** (PR #149, 3.888x at spec25 = +9.5% over PR #141's 3.550x at spec15). The spec5→spec15 jump was +32% on Sc B; spec15→spec25 is only +9.5%, and spec30 saturates (4.30x quick vs spec25's 8.64x quick — verify-step compute overhead exceeds gains). Sc B spec depth peak appears to be at spec25/lookup12.
+
 ## Current research focus
 
 **Primary focus: close the gaps to H100 SMAC3 ceilings, especially Sc B (23%) and Sc D (36%).**
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B tanjiro #149:** Deeper spec sweep (spec20/25/30 BF16). The superlinear depth scaling from PR #141 (spec5→spec15: +32%) hasn't hit saturation. If spec20-30 continues the trend, Sc B could reach 5-7x. Low risk. Most important experiment in flight.
+1. **Sc B tanjiro #149:** Deeper spec sweep (spec20/25/30 BF16). RESULT: **arm2 spec25/lookup12 = 3.888x (+9.5%)**, quality 1.013, 64/64 successes. Sent back for rebase 16:35 UTC due to PR #151 BASELINE.md conflict. spec30 saturates (verify-compute overhead) — spec25 is the new Sc B sweet spot.
 
 2. **Sc C frieren #153:** SGLang FP8 weights composed with FP8 KV (extend PR #151 winner). PR #151 confirmed FP8 KV +13.1% (24.305x→27.497x). Testing whether SGLang FP8 weight quantization adds further weight-bandwidth reduction. 3-arm ablation: arm1 FP8wt+FP8KV, arm2 arm1+mem0.92, arm3 FP8wt only (no FP8KV — isolates weight contribution). Key question: does vLLM-style "FP8 weights hurt at high concurrency" apply to SGLang's Triton kernels?
 
