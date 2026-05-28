@@ -30,7 +30,7 @@ baselines):
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.881x** | `senpai/launchers/A/fern-vllm-scheduling-int4/arm1_fp8_seqs1_tokens8192.sh` | ds519cur | #156 |
-| **B** | scenario/B/speedup_over_pytorch | **3.888x** | `senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh` | wkedminm | #149 |
+| **B** | scenario/B/speedup_over_pytorch | **4.450x** | `senpai/launchers/B/tanjiro-fp8-compose/arm1_fp8_spec25_lookup12.sh` | sb06alrs | #179 |
 | **C** | scenario/C/speedup_over_pytorch | **29.768x** | `senpai/launchers/C/fern-sglang-mem-push/arm1_mem090.sh` | 2iilmzji | #181 |
 | **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
 
@@ -140,7 +140,25 @@ baselines):
 - **W&B run:** nf10i0y2
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh ./start_server.sh && SGLANG_LIB_DIR="$(realpath senpai/launchers/D/tanjiro-sglang/lib)" python evaluate.py --json-output-file metrics_full.json`
 
-### Scenario B — current winner (PR #149, merged 2026-05-28) — supersedes PR #141
+### Scenario B — current winner (PR #179, merged 2026-05-28) — supersedes PR #149
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, **FP8 weight quantization** + n-gram (prompt-lookup) speculative decoding depth 25, BF16 KV cache
+- **Key flags:** `--max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":25,"prompt_lookup_max":12,"prompt_lookup_min":2}'`
+- **TPOT.p50:** 0.005652 s (PyTorch 0.0252 s) → **1/TPOT.p50 = 176.93 tok/s** (PyTorch 39.76)
+- **TTFT.p50:** 0.04485 s (PyTorch 0.0709 s) — -37%
+- **Speedup:** 4.450x (+14.5% over PR #149's 3.888x; H100 SMAC3 ceiling 15.23x → this winner = 29% of reference)
+- **Quality:** MMLU-Pro 0.288 obs / 0.298 baseline = ratio **0.9664** (gate 0.95, n=500) ✓
+- **Speed success:** 64/64 (failure_rate 0.0) ✓
+- **VRAM peak:** 90.5 GiB / 97.9 GiB
+- **W&B run:** sb06alrs
+- **Reproduce (from task workspace):**
+  ```bash
+  cp senpai/launchers/B/tanjiro-fp8-compose/arm1_fp8_spec25_lookup12.sh ./start_server.sh && \
+  python evaluate.py --json-output-file metrics_full.json
+  ```
+- **Key insight:** FP8 weight quantization composes partially with n-gram spec25/lookup12 on Sc B (TPOT-only scenario). FP8 cuts TPOT.p50 by ~13% (0.006470 → 0.005652) even with active n-gram speculation — the incremental gain is smaller than in TTFT-bound scenarios (like Sc D's 45% TTFT cut) because n-gram already partially amortizes weight reads across the speculative batch. arm2 (spec20) showed quick 7.79x (rule #17: quick unreliable) but collapsed to 3.404x full with quality_ratio 0.9396 — quality failure. arm1 (spec25, the PR #149 BF16 config + FP8) was the safe winner. H100 SMAC3 ceiling 15.23x; this winner closes to 29% of reference.
+
+### Scenario B — prior winner (PR #149, merged 2026-05-28) — supersedes PR #141
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding depth 25, BF16 KV cache
 - **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":25,"prompt_lookup_max":12,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
@@ -280,6 +298,12 @@ research signal only and must not be used to update the current-best row.
   n=500, gate 0.95). TTFT -45% (FP8), TPOT -59% (n-gram) — both levers target
   independent pipeline stages in balanced 4096in/2048out Sc D. Confirms
   composition hypothesis: multiplicative gains when bottlenecks are independent.
+- 2026-05-28 20:28 UTC — Merged PR #179 (tanjiro). Scenario B new best:
+  4.450x (FP8 weights + n-gram `num_speculative_tokens=25, prompt_lookup_max=12`, vLLM 0.11, BF16 KV cache).
+  Supersedes PR #149 (spec25/lookup12 BF16, 3.888x) — +14.5% gain. Quality ratio 0.9664
+  (observed 0.288, n=500), 64/64 speed success, VRAM 90.5 GiB. arm2 (FP8+spec20) failed
+  quality gate at full (0.9396 < 0.95) after looking dominant at quick (7.79x) — rule #17
+  confirmed again: Sc B quick unreliable for n-gram spec changes. W&B sb06alrs.
 - 2026-05-28 16:22 UTC — Merged PR #149 (tanjiro). Scenario B new best:
   3.888x (`num_speculative_tokens=25, prompt_lookup_max=12`, vLLM 0.11, BF16).
   Supersedes PR #141 (spec15/lookup8, 3.550x) — +9.5% gain. Quality ratio 1.013
