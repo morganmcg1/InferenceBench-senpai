@@ -163,6 +163,30 @@ explicit exports.
   SM_120, or (c) a different engine family (SGLang FP8, TensorRT-LLM) that
   bypasses vLLM's FlashInfer wrapper entirely.
 
+## 2026-05-28 18:33 — PR #178 (MERGED): infra cublas symlink fix in senpai/runtime_env.sh
+
+- `scen-a-frieren/frieren-cublas-fix`
+- **Type:** Infra patch (not an experiment). No GPU, no measured-perf change.
+- **Change:** Adds an idempotent block to `senpai/runtime_env.sh` that creates
+  `/tmp/inferencebench-cublas-stubs/{libcublas,libcublasLt}.so` symlinks to
+  the versioned `.so.12` files in the nvidia pip cublas package, then
+  prepends that dir to `LIBRARY_PATH`. Guarded by
+  `INFERENCE_BENCH_CUBLAS_STUBS_DONE` so re-sourcing doesn't double-prepend.
+- **Why it matters:** vLLM's `Fp8LinearOp` on SM_120 routes FP8 GEMM through
+  `flashinfer_w8a8_scaled_mm`, which JIT-compiles `gemm.so` and links against
+  `-lcublas`/`-lcublasLt`. Without unversioned `.so` files on `LIBRARY_PATH`,
+  the link fails on a cold FlashInfer JIT cache — a crash mode Frieren first
+  identified in PR #169. The PR #160 winner launcher only worked in this
+  pod because someone had already populated the JIT cache.
+- **Scope:** Only `senpai/runtime_env.sh` modified. The winning launcher
+  `senpai/launchers/A/fern-fp8-weights/start_server.sh` is unchanged — its
+  explicit per-launcher exports remain authoritative; the new block is for
+  future launchers that source `runtime_env.sh`.
+- **Verification (Frieren):** `bash -n` clean, `source` clean, symlinks
+  materialize correctly, idempotency confirmed by double-source.
+- **Merge:** Squash-merged to `ib-20260528-scen-a-r1` at 18:33:00Z. No
+  BASELINE.md update (this is not a perf change).
+
 ## 2026-05-28 18:28 — PR #177 (CLOSED): FP8 + --max-num-batched-tokens=32768 (aborted at gate)
 
 - `scen-a-fern/fern-batched-tokens`

@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Updated:** 2026-05-28T18:20Z
+- **Updated:** 2026-05-28T18:34Z (launch-close)
 - **Most recent direction from human researcher team:** No GitHub Issues. Run
   scope fixed by operator: Scenario A parity launch, RTX PRO 6000 shakedown,
   2h budget, 1 GPU shared, 2 logical students. Launch closes
@@ -25,6 +25,7 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 | #171 | scen-a-fern | E0 FlashInfer + FP8 + enforce_eager (rescue) | Closed | Same `_sm_scale` assertion with cudagraphs off — wrapper-construction path itself is broken |
 | #176 | scen-a-frieren | F0 V0 engine + FP8 | Closed | failed_to_boot — vLLM 0.11.0 hard-asserts V1 in OpenAI API server; V0 unreachable on this image |
 | #177 | scen-a-fern | G0 `--max-num-batched-tokens=32768` | Closed (aborted) | gpu_slot.py raised `--min-remaining-s 480` to 900s floor; 641s remained → slot refused. Launcher preserved. Hypothesis untested. |
+| #178 | scen-a-frieren | infra: cublas symlink fix in `runtime_env.sh` | **MERGED** | Bakes Frieren's D0 cublas workaround into the advisor branch so future FP8 launchers survive a cold FlashInfer JIT cache. No perf change. |
 
 ## Key findings (carry forward)
 
@@ -54,16 +55,12 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 
 ## Infrastructure carry-overs for next launch
 
-- **cublas link bug, cold FlashInfer JIT cache** (Frieren PR #169):
-  `Fp8LinearOp` on SM_120 routes to `flashinfer_w8a8_scaled_mm` → JIT compile
-  of `gemm.so` → link fails (`-lcublas`, `-lcublasLt`) because nvidia pip
-  cublas ships only `libcublas.so.12`/`libcublasLt.so.12`. The PR #160 winner
-  launcher and `runtime_env.sh` will crash on any fresh JIT cache. Frieren's
-  workaround (symlink to unversioned `.so` + prepend `LIBRARY_PATH`) is
-  embedded in `senpai/launchers/A/frieren-eager-fp8/arm_d0_fp8_eager.sh`.
-  Frieren's PR #178 is in flight to bake this fix into `senpai/runtime_env.sh`
-  upstream of every launcher; if it lands before cutoff it carries this fix
-  into the merged advisor branch.
+- **cublas link bug, cold FlashInfer JIT cache: FIXED IN THIS LAUNCH**
+  (Frieren PR #178 merged at 18:33:00Z). `senpai/runtime_env.sh` now creates
+  symlinks to the versioned `libcublas.so.12`/`libcublasLt.so.12` and
+  prepends them to `LIBRARY_PATH`, idempotently. Any future launcher that
+  sources `runtime_env.sh` inherits the fix. The PR #160 winner launcher's
+  explicit exports remain authoritative on its own path.
 - **gpu_slot.py quick-mode min-remaining floor is 900s** (Fern PR #177):
   `senpai/gpu_slot.py:91` does `min_remaining_s = max(min_remaining_s,
   defaults["min_remaining_s"])`, and quick-mode's default is **900s (15 min)**.
@@ -84,29 +81,25 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 
 ## Next-round directions (priority-ordered)
 
-1. **Patch `senpai/runtime_env.sh`** to bake the cublas symlink + `LIBRARY_PATH`
-   fix in so FP8 launchers survive a cold FlashInfer JIT cache. This is an
-   infra bug-fix PR, separate from any hypothesis arm. High priority — the
-   current winner launcher is fragile to fresh-pod environments.
-2. **Triton attention backend + FP8** (`VLLM_ATTENTION_BACKEND=TRITON_ATTN`):
+1. **Triton attention backend + FP8** (`VLLM_ATTENTION_BACKEND=TRITON_ATTN`):
    alt prefill path that bypasses both FlashAttention-2 and FlashInfer's
    broken wrapper. Worth a quick probe.
-3. **`torch.compile` optimization level + FP8**: vLLM 0.11 supports compile
+2. **`torch.compile` optimization level + FP8**: vLLM 0.11 supports compile
    modes that may further fuse prefill ops. Quick to probe.
-4. **GPTQ or AWQ instead of naive FP8**: a quantization scheme with better
+3. **GPTQ or AWQ instead of naive FP8**: a quantization scheme with better
    quality preservation than naive FP8 weight-only could both pass MMLU-Pro
    more safely (current ratio 0.9597 is only 0.0097 above the τ=0.95 floor)
    and may maintain or improve speed.
-5. **SGLang FP8 + Triton or TensorRT-LLM**: engine-family diversity. The
+4. **SGLang FP8 + Triton or TensorRT-LLM**: engine-family diversity. The
    natural path to engine-version diversity now that vLLM V0 is confirmed
    unreachable on this image.
-6. **vLLM patch to relax the `_sm_scale` assertion** or vLLM version bump
+5. **vLLM patch to relax the `_sm_scale` assertion** or vLLM version bump
    that fixes FlashInfer 0.4.x on SM_120 — both unlock the FlashInfer prefill
    direction that this launch confirmed is otherwise closed on this image.
-7. **H100 leaderboard run**: repeat the winning FP8 recipe on H100 for
+6. **H100 leaderboard run**: repeat the winning FP8 recipe on H100 for
    leaderboard-comparable claim. The RTX PRO 6000 numbers here are shakedown
    only.
-8. **Tertiary single-flag levers within vLLM 0.11.0 V1 + FP8**:
+7. **Tertiary single-flag levers within vLLM 0.11.0 V1 + FP8**:
    `--max-num-batched-tokens=32768` (B1 only tested 16384 — does one-shot
    prefill of 8k prompt help?), `--max-num-seqs=1` (single-concurrency KV
    allocation), `--enable-prefix-caching` toggle, `--num-scheduler-steps>1`
