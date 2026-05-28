@@ -32,9 +32,25 @@ baselines):
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **3.888x** | `senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh` | wkedminm | #149 |
 | **C** | scenario/C/speedup_over_pytorch | **27.497x** | `senpai/launchers/C/frieren-sglang-fp8kv/arm1_fp8kv_mem085.sh` | kk6shiqh | #151 |
-| **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
+| **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
 
-### Scenario D — current winner (PR #139, merged 2026-05-28) — supersedes PR #138
+### Scenario D — current winner (PR #152, merged 2026-05-28) — supersedes PR #139
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight quantization + n-gram speculative decoding depth 10, BF16 KV cache
+- **Key flags:** `--max-num-seqs 32 --max-num-batched-tokens 4096 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":10,"prompt_lookup_max":6,"prompt_lookup_min":2}'`
+- **TTFT.p50:** 0.1152 s (PyTorch 0.2123 s) — tied with PR #139 (FP8 prefill unchanged)
+- **TPOT.p50:** 0.00958 s (PyTorch 0.0251 s) — spec10/6 cuts decode latency vs spec5/4 (0.0104 s in PR #139) by -7.9%
+- **req/s:** 0.0865 (PyTorch 0.0382) — +11.5% vs PR #139's 0.0776
+- **Geomean (1/ttft.p50, 1/tpot.p50, req/s):** 4.280 (PyTorch 1.930)
+- **Speedup:** 2.218x (+7.0% over PR #139's 2.073x)
+- **Quality:** MMLU-Pro 0.286 obs / 0.298 baseline = ratio 0.960 (gate 0.95, n=500) ✓
+- **Speed success:** 96/96 (failure_rate 0.0) ✓
+- **VRAM peak:** 91.7 GiB / 97.9 GiB (tied with PR #139)
+- **W&B run:** g1xjqoyg
+- **Reproduce (from task workspace):** `cp senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** Intermediate n-gram spec depth (10/6) captures part of the deeper-spec decode benefit on Sc D while staying inside the quality gate. arm1 (FP8 + spec15/lookup8) and arm3 (BF16 + spec15/lookup8) both screened at MMLU-Pro ratio 0.629 (3/16 at n=16) — identical across FP8 and BF16 confirms spec depth ≥ 15 (not FP8) corrupts sampling on Sc D, matching the Sc B precedent from PR #146. spec10/lookup6 sits below the quality cliff and lifts speedup +7.0%. H100 SMAC3 ceiling 5.69x; this winner closes the gap to 39%.
+
+### Scenario D — prior winner (PR #139, merged 2026-05-28, superseded by PR #152)
 
 - **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight quantization + n-gram speculative decoding, BF16 KV cache
 - **Key flags:** `--max-num-seqs 32 --max-num-batched-tokens 4096 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}'`
@@ -242,3 +258,13 @@ research signal only and must not be used to update the current-best row.
   was 4.30x (vs 8.64x at spec25), confirming the n-gram verify-step compute
   dominates beyond depth=25. Sc B near-ceiling for prompt-lookup; future gains
   likely need EAGLE/Medusa draft-model speculation.
+- 2026-05-28 16:25 UTC — Merged PR #152 (fern). Scenario D new best:
+  2.218x (vLLM 0.11, FP8 weights + n-gram `num_speculative_tokens=10,
+  prompt_lookup_max=6`, max-num-seqs=32, chunked prefill at 4096 tokens).
+  Supersedes PR #139 (spec5/lookup4, 2.073x) — +7.0% gain. Quality ratio 0.960
+  (observed 0.286, n=500), 96/96 speed success. arm1 (FP8+spec15/lookup8) and
+  arm3 (BF16+spec15/lookup8) screened identically at quality ratio 0.629 (n=16),
+  proving spec depth ≥ 15 — not FP8 — drives the Sc D quality cliff (matching
+  the Sc B precedent from PR #146). spec10/lookup6 lands below the cliff and
+  lifts TPOT.p50 -7.9%, req/s +11.5%; TTFT.p50 essentially tied. Suggested
+  follow-up: sweep spec7–spec9 to locate the precise quality knee.
