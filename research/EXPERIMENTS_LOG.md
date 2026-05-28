@@ -1,5 +1,32 @@
 # SENPAI Research Results
 
+## 2026-05-28 20:35 UTC — PR #183: Sc A SGLang FP8 weights engine swap (CLOSED — did_not_improve)
+
+- **Branch:** `frieren/sc-a-sglang-fp8wt`
+- **Student:** frieren
+- **Hypothesis:** SGLang's Triton prefill kernels may execute conc=1 8192-token prefill faster than vLLM's FlashAttention. PR #180 ruled out vLLM token-budget as a Sc A lever; this was a clean engine-swap probe with FP8 weights held constant.
+
+### Quick eval results
+
+| Arm | Engine | TTFT.p50 (s) | Quick speedup | Δ vs PR #156 | W&B |
+|---|---|---:|---:|---:|---|
+| arm1 | SGLang 0.5.12 + FP8wt | 0.2832 | 1.549x | **−18.5%** | ar82pmyi |
+| arm2 | SGLang 0.5.12 + BF16 | 0.3868 | 1.134x | **−40.4%** | kcq8mm5a |
+| PR #156 ref | vLLM 0.11 + FP8wt | 0.2332 | 1.901x (quick) | — | ds519cur |
+
+Both arms exceed the >2% regression floor → closed without full eval per PR's explicit rule.
+
+### Analysis
+
+- **SGLang Triton prefill is 21% slower than vLLM FlashAttention** at Sc A's conc=1 8192-token prefill on SM120 (TTFT 0.2832 vs 0.2332s), with identical FP8 weight quantization. Engine kernel is the bottleneck, not the quantization or scheduler.
+- **FP8 still helps +36.6% inside SGLang** (arm1 vs arm2) — confirming FP8 lever works across both engines, but doesn't overcome the Triton baseline deficit.
+- Matches Sc D precedent (PR #147 SGLang −24.4%). SGLang's Triton attention loses to vLLM FlashAttention on SM120 for prefill-dominant regimes. SGLang only wins at Sc C (256-conc with LPM+radix prefix sharing).
+- VRAM: SGLang ~85.5 GiB vs vLLM ~93 GiB — SGLang's lower static allocation is not useful at conc=1 where we never use the extra KV pool.
+
+### Conclusion: SGLang is not a Sc A lever. Next direction: vLLM 0.12 + FlashInfer (PR #186 assigned).
+
+---
+
 ## 2026-05-28 20:28 UTC — PR #179: Sc B FP8 weights + n-gram spec25/lookup12 composition (MERGED — new Sc B best)
 
 - **Branch:** `tanjiro/sc-b-fp8-compose`

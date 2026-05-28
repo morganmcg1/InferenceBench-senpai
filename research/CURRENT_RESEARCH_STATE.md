@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 20:28 UTC
+- **As of:** 2026-05-28 20:35 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -23,13 +23,14 @@
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
 | fern | #184 | C | chunked-prefill-size sweep (4096/16384/32768) on PR #181 base; 3-arm quick eval | **running since 20:15 UTC** |
-| frieren | #183 | A | SGLang FP8 weights engine swap (arm1 FP8wt + arm2 BF16 control) | **running since 20:08 UTC** |
-| tanjiro | pending | B | PR #179 MERGED (4.450x); assigning next Sc B compound | **idle 20:28 UTC — assigning** |
+| frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **assigned 20:35 UTC** |
+| tanjiro | #185 | B | max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1; arm2 full seqs=1+no-chunked) | **assigned 20:32 UTC** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #183 | frieren | A | SGLang 1.549x (-18.5% vs PR #156 1.881x) | CLOSED — SGLang Triton prefill 21% slower than vLLM FA on SM120 |
 | #179 | tanjiro | B | **4.450x** FP8wt + spec25/lookup12 (+14.5% over PR #149 3.888x) | MERGED — new Sc B best; arm2 (spec20) quality_failed at full |
 | #182 | fern | C | mem 0.95 full 29.727x = -0.14% vs PR #181 (noise) | CLOSED — did_not_improve; mem-fraction lever exhausted at 0.90 |
 | #180 | frieren | A | tokens 16384 full 1.8658x = -0.83% vs PR #156 1.881x | CLOSED — did_not_improve; tokens beyond 8192 not a Sc A lever |
@@ -89,9 +90,9 @@
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B tanjiro (assigning ~20:28 UTC):** PR #179 showed FP8wt composes +14.5% with spec25. Next compound: `--max-num-seqs 1` optimization (PR #156's phantom-KV insight applied to Sc B). 2-arm: arm1 max-num-seqs=1 alone; arm2 full PR #156-style (max-num-seqs=1 + no-chunked-prefill + max-batched-tokens=8192). Time: ~90 min fits ~2h 10min remaining.
+1. **Sc B tanjiro #185 (assigned 20:32 UTC):** max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1). 2-arm: arm1 seqs=1 alone; arm2 seqs=1+no-chunked+batched=8192 (full PR #156-style). Quick ETA ~20:55 UTC.
 
-2. **Sc A frieren #183 (running since 20:08 UTC):** SGLang FP8 weights engine swap (arm1 FP8wt + arm2 BF16 control). Quick ETA ~20:40 UTC.
+2. **Sc A frieren #186 (assigned 20:35 UTC):** vLLM 0.12 + FlashInfer. PR #183 confirmed SGLang is 21% slower than vLLM FA → returning to vLLM but with newer engine + unblocked FlashInfer. Quick ETA ~21:00 UTC.
 
 3. **Sc C fern #184 (running since 20:15 UTC):** chunked-prefill-size sweep (cps=4096/16384/32768). Burst-tail TPOT p99 mechanism. Quick ETA ~20:45 UTC.
 
