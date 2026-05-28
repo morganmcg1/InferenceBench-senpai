@@ -1,0 +1,18 @@
+arm1 spec25/lookup12/min=1  (W&B s5aj7628)
+  TPOT.p50 = 0.004490s   (PR #149 full=0.00647s -> -30.6%; PyTorch=0.02515s)
+  Implied speedup (1/tpot.p50) = 5.601x  (vs PR #149 merged 3.888x = +44%)
+  TTFT.p50 = 0.0651s
+  request_throughput_req_per_s = 0.0366
+  generation_throughput_tokens_per_s = 170.20
+  speed success = 4/4
+  MMLU-Pro quality (n=16) = 0.1875 / 0.298 = ratio 0.629  <-- below PR's 0.92 quick gate
+  VRAM peak = 90201 MiB
+
+arm2 spec25/lookup15/min=2  (W&B oaveolmf)
+  TPOT.p50 = 0.006008s   (PR #149 full=0.00647s -> -7.2%; PyTorch=0.02515s)
+  Implied speedup (1/tpot.p50) = 4.187x  (vs PR #149 merged 3.888x = +7.7%)
+  TTFT.p50 = 0.0642s
+  request_throughput_req_per_s = 0.0336
+  speed success = 4/4
+  MMLU-Pro quality (n=16) = 0.1875 / 0.298 = ratio 0.629  <-- below PR's 0.92 quick gate
+  VRAM peak = 90201 MiB

@@ -1,0 +1,87 @@
+{
+  "scenario": "B",
+  "name": "Output heavy",
+  "mission": "Maximize decoding speed for long outputs. Prioritize generation throughput while keeping responses coherent.",
+  "dataset": null,
+  "dataset_split": null,
+  "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+  "profiles": {
+    "burst": {
+      "request_count": 4,
+      "success_count": 4,
+      "failure_count": 0,
+      "empty_output_count": 0,
+      "failure_rate": 0.0,
+      "ttft": {
+        "p50": 0.06415958469733596,
+        "p90": 0.9483332075178625,
+        "p99": 1.2891261111013588
+      },
+      "itl": {
+        "p50": 0.012016377411782742,
+        "p90": 0.0171207956969738,
+        "p99": 0.01822517354041338
+      },
+      "tpot": {
+        "p50": 0.006007577824552058,
+        "p90": 0.011514253200769141,
+        "p99": 0.012389214908698376
+      },
+      "generation_throughput_tokens_per_s": 150.7929003004127,
+      "request_throughput_req_per_s": 0.03357119592565766,
+      "json_valid_rate": null,
+      "choice_accuracy": null
+    }
+  },
+  "vram_peak_mb": 90201.0,
+  "speed_eval": {
+    "requests_source": "/tmp/inferencebench-scenario-b-frieren-min1/inference_eval/baselines/speed/torch/inference_scenario_b_output_heavy/mistralai_Mistral-7B-Instruct-v0.3/requests.jsonl",
+    "requests_used_file": "requests_used_speed.jsonl",
+    "generation_log_file": "speed_generations.jsonl"
+  },
+  "quality_check": {
+    "tau": 0.95,
+    "pass": false,
+    "datasets": {
+      "mmlu_pro": {
+        "observed_accuracy": 0.1875,
+        "baseline_accuracy": 0.298,
+        "ratio": 0.6291946308724833,
+        "tau": 0.95,
+        "pass": false,
+        "n": 16,
+        "note": "",
+        "baseline_ref": {
+          "generated_at_unix": 1779573070,
+          "dataset": "mmlu_pro",
+          "seed": 248,
+          "n": 500,
+          "accuracy": 0.298,
+          "model_id": "mistralai/Mistral-7B-Instruct-v0.3",
+          "server_url": "http://127.0.0.1:40801",
+          "baseline_log_file": "src/eval/inference/baselines/quality/torch/mistralai_Mistral-7B-Instruct-v0.3/mmlu_pro/248_500/baseline_generations.jsonl",
+          "baseline_metrics_file": "src/eval/inference/baselines/quality/torch/mistralai_Mistral-7B-Instruct-v0.3/mmlu_pro/248_500/baseline_metrics.json",
+          "note": "no exact baseline entry for dataset=mmlu_pro seed=248 n=16; using n=500"
+        },
+        "samples_file": "/tmp/inferencebench-scenario-b-frieren-min1/inference_eval/baselines/samples/mmlu_pro/248_500/samples.jsonl",
+        "generation_log_file": "quality_mmlu_pro_generations.jsonl",
+        "seed": 248,
+        "evaluated_count": 16
+      }
+    },
+    "baseline_registry": "/tmp/inferencebench-scenario-b-frieren-min1/inference_eval/baselines/quality/mistralai_Mistral-7B-Instruct-v0.3_torch.json"
+  },
+  "score": 0,
+  "eval_pipeline": {
+    "version": 1,
+    "steps": [
+      "speed_eval",
+      "quality_check"
+    ]
+  },
+  "eval_mode": {
+    "name": "quick",
+    "request_limit": 4,
+    "quality_n": 16
+  }
+}
