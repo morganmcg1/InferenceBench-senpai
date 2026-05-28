@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 18:00 UTC
+- **As of:** 2026-05-28 18:10 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -24,7 +24,7 @@
 |---|---:|---|---|---|
 | fern | #172 | C | SGLang FP8 weights composition on PR #151 winner (3-arm ablation: fp8wt+fp8kv, +mem0.92, fp8wt-only control) | **assigned 18:00 UTC** |
 | frieren | #166 | B | n-gram `prompt_lookup_min=1` on PR #149 winner (spec25/lookup12) — arm1 full eval running (quick 5.601x = +44%) | **arm1 full eval running 17:53 UTC** |
-| tanjiro | #164 | D | FP8 KV cache composition with PR #152 (fp8_e5m2, fp8_e4m3, mem 0.95 control) | **3 quick crashes (1-2s), heartbeat sent 17:56 UTC** |
+| tanjiro | #173 | D | Chunked-prefill vs one-shot + batched-tokens sweep (arm1 no-chunk+tok8192, arm2 chunk+tok8192, arm3 chunk+tok16384) | **assigned 18:10 UTC** |
 
 All 3 student GPUs occupied.
 
@@ -84,7 +84,9 @@ All 3 student GPUs occupied.
 
 14. **Sc D n-gram local optimum is PR #152's spec10/lookup6/min=2** (PR #154 confirmed at full eval). Quality cliff between spec10 (safe, 0.960) and spec11 (fail, 0.629) is much steeper than expected; spec11/12 both screen-fail at exactly the same 0.629 ratio. Also, lowering prompt_lookup_min from 2 → 1 on the proven spec10 winner gains +4.7% speed but drops quality to 0.926 < gate. Neither widening spec nor loosening min preserves quality on Sc D's 2048-token outputs. Future Sc D gains require different mechanisms (FP8 KV composition tested in PR #164, EAGLE draft model, PD-disaggregation).
 
-15. **Sc D quality cross-scenario insight:** Sc B (8192-out) tolerates spec25; Sc D (2048-out) caps at spec10. Output length is the load-bearing variable for spec-depth tolerance — longer decode amortises per-step quality drift over more tokens, masking the FP8 + spec verify numerical edge cases that Sc D concentrates.
+15. **Sc D quality cross-scenario insight:** Sc B (8192-out) tolerates spec25; Sc D (2048-out) caps at spec10.
+
+16. **FP8 KV cache regime threshold on this hardware:** FP8 KV HURTS at conc=1 (Sc A, -26%, PR #145) and conc=4 (Sc D, -10%, PR #164). FP8 KV WINS at conc=256 (Sc C, +13.1%, PR #151). The bandwidth-vs-compute crossover sits between 4 and 256 concurrent requests. Both e5m2 and e4m3 give identical Sc D regression, confirming the bottleneck is dequant compute overhead, not format precision. **FP8 KV is Sc C-specific on this workload.** Output length is the load-bearing variable for spec-depth tolerance — longer decode amortises per-step quality drift over more tokens, masking the FP8 + spec verify numerical edge cases that Sc D concentrates.
 
 ## Current research focus
 
@@ -96,7 +98,7 @@ All 3 student GPUs occupied.
 
 2. **Sc C fern #172 (NEW):** SGLang FP8 weights composition on PR #151 winner. 3-arm ablation: arm1 FP8wt+FP8KV, arm2 +mem0.92, arm3 FP8wt-only (ablation control). Retries the goal of stuck PR #153 using fern's SGLang experience (PR #147). Key question: does SGLang's Triton FP8 kernels avoid the dequant overhead that hurt vLLM FP8 at high concurrency?
 
-3. **Sc D tanjiro #164 (PROBLEMATIC):** 3 quick-probe runs all crashed in 1-2s. Heartbeat sent 17:56 UTC requesting error details. Most likely culprit: wrong `--kv-cache-dtype` flag syntax (try `fp8_e5m2` vs bare `fp8`) or vLLM FP8 weights + FP8 KV dtype combination issue.
+3. **Sc D tanjiro #173 (NEW):** Chunked-prefill vs one-shot prefill + batched-tokens sweep on PR #152 base. 3-arm: arm1 `--no-enable-chunked-prefill --max-num-batched-tokens 8192`, arm2 chunked+8192, arm3 chunked+16384. Sc D's 4096-token inputs may be over-chunked at the PR #152 4096 budget.
 
 ### Next experiments (after current round)
 
@@ -104,7 +106,7 @@ All 3 student GPUs occupied.
 
 2. **Sc B frieren #166 fallback arm2** — Only if arm1 fails quality at n=500. spec25/lookup15/min=2 = 4.187x = +7.7% safe fallback. Confirm before assigning a new Sc B experiment.
 
-3. **Sc D: FP8 KV composition** — Being tested by tanjiro #164. If tanjiro PR crashes can be diagnosed and fixed, the result could push Sc D past 2.218x.
+3. **Sc D: vLLM 0.12+ per-PR venv** — After chunked-prefill sweep completes, the remaining Sc D frontier is the FlashInfer attention upgrade (layers 2-3 of PR #148 cascade fixed in vLLM 0.12+). Major engineering investment but potential 20%+ TTFT gain.
 
 4. **Sc A: INT4 GPTQ/AWQ** — solidrust AWQ is incompatible (chat template broken). Needs a Mistral-7B-Instruct-v0.3 GPTQ-int4 checkpoint with correct system prompt handling. Low priority until compatible checkpoint identified.
 

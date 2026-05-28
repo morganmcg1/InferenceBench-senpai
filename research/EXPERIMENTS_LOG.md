@@ -1057,3 +1057,34 @@ Sc B's tolerance for deep specs (25 vs Sc D's 10) is plausibly explained by long
 **Informs rule #16:** INT4 AWQ on SM120 Blackwell with `solidrust/Mistral-7B-Instruct-v0.3-AWQ` is not viable — both correct chat-template and kernel performance fail. Future INT4 investigation requires a compatible checkpoint (GPTQ-int4 or AWQ with matching instruct chat template).
 
 **Next for fern:** PR #172 — Sc C SGLang FP8 weights composition (the unfinished business from stuck PR #153).
+
+## 2026-05-28 18:07 UTC — PR #164: Sc D FP8 KV cache composition with PR #152 (CLOSED — did_not_improve)
+
+- **Branch:** `tanjiro/sc-d-fp8kv-composition`
+- **Student:** tanjiro
+- **Hypothesis:** FP8 KV cache (+13.1% on Sc C at 256-conc) might transfer to Sc D's intermediate conc=4 regime. 3-arm test: fp8_e5m2, fp8_e4m3, BF16 KV mem-0.95 control.
+
+**Results:**
+
+| Arm | Config | Quick speedup | Quality (n=16) | Full speedup | Notes |
+|---|---|---:|---:|---:|---|
+| arm1 | FP8 weights + FP8 KV (e5m2), mem 0.92 | 1.829x | 0.629 (noise) | — | -10% vs PR #152 quick, not promoted |
+| arm2 | FP8 weights + FP8 KV (e4m3), mem 0.92 | 1.828x | 0.629 (noise) | — | -10% vs PR #152 quick, not promoted |
+| **arm3** | FP8 weights + BF16 KV (control), mem **0.95** | **2.048x** | **1.049** | **2.208x** | Tied PR #152 (-0.45%); MERGED would not beat baseline |
+| PR #152 baseline | FP8 weights + BF16 KV, mem 0.92 | 2.033x | 0.960 | 2.218x | Current Sc D best |
+
+W&B full eval (arm3): `mor4bn11`
+
+**Analysis:**
+- FP8 KV (both e5m2 and e4m3) regressed Sc D by -10% at quick probe — both formats gave identical results (1.829x vs 1.828x = within 0.05%). The dequant compute overhead at conc=4 exceeds the bandwidth savings from halved KV memory.
+- arm3 control (mem 0.92 → 0.95) is neutral: +3.2% VRAM headroom but no throughput gain. PR #152 is at the mem-fraction plateau for Sc D. arm3 full at 2.208x = -0.45% vs PR #152 (noise).
+- Quick→full mapping stable (~+8%): arm3 quick 2.048x → full 2.208x = +7.8%, consistent with PR #164's note and PR #152's own ratio. Sc D quick is a reliable predictor (unlike Sc B).
+- Student correctly did NOT promote arm1/arm2 to full — speed signal (-10%) was the reject signal, not quality screen.
+
+**Rule #16 established:** FP8 KV cache regresses Sc D at conc=4 (intermediate regime). The KV-bandwidth-bound vs compute-bound threshold on this hardware sits between conc=4 (Sc D, FP8 KV HURTS) and conc=256 (Sc C, FP8 KV +13.1%). Future Sc D FP8 KV exploration should only proceed with conc > 4 or if the attention kernel changes.
+
+**Key architectural insight:** e5m2 and e4m3 give identical Sc D regression (-10%), confirming the bottleneck is compute (dequant overhead), not format precision. Format choice is irrelevant when the regime is wrong.
+
+**Decision:** CLOSED — arm3 at 2.208x does not beat PR #152's 2.218x. Good negative result.
+
+**Next for tanjiro:** PR #173 — Sc D chunked-prefill vs one-shot prefill + batched-tokens sweep on PR #152 base.
