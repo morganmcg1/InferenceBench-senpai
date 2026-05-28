@@ -23,7 +23,7 @@
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
 | fern | #147 | D | SGLang LPM + radix cache (port of PR #144 +15.2% mechanism to Sc D) | **quick complete, full eval running** |
-| frieren | #150 | C | SGLang FP8 KV cache (`fp8_e5m2`) + mem-fraction push (0.85→0.92) — extend PR #144 | **assigned 15:35 UTC** |
+| frieren | #151 | C | SGLang FP8 KV cache (`fp8_e5m2`) + mem-fraction push (0.85→0.92) — extend PR #144 | **assigned 15:40 UTC** |
 | tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
 
 All 3 student GPUs occupied.
@@ -46,7 +46,8 @@ All 3 student GPUs occupied.
 | #147 | fern | D | partial: quick arm4 1.506x (FP8+NGRAM) | **full eval running** — below PR #139 2.073x expected |
 | #148 | frieren | A | 1.484x Triton fallback (did_not_improve) | CLOSED — FlashInfer blocked on vLLM 0.11/FlashInfer 0.6 stack (5-layer cascade) |
 | #149 | tanjiro | B | spec20/25/30 BF16 — quick probes pending | **assigned 15:15 UTC** |
-| #150 | frieren | C | SGLang FP8 KV + mem 0.92 — quick probes pending | **assigned 15:35 UTC** |
+| #150 | frieren | C | SGLang FP8 KV + mem 0.92 — auto-merged by GH due to branch collision | CLOSED — reissued as #151 |
+| #151 | frieren | C | SGLang FP8 KV + mem 0.92 — quick probes pending | **assigned 15:40 UTC** |
 
 ## Key learnings
 
