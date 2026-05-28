@@ -30,7 +30,7 @@ baselines):
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
-| **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
+| **B** | scenario/B/speedup_over_pytorch | **3.550x** | `senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh` | 8656lf5w | #141 |
 | **C** | scenario/C/speedup_over_pytorch | **21.098x** | `senpai/launchers/C/fern-vllm-highconc-scale/arm1_seqs128_tok8192.sh` | 2jw0s5lk | #142 |
 | **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
 
@@ -84,16 +84,30 @@ baselines):
 - **W&B run:** nf10i0y2
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh ./start_server.sh && SGLANG_LIB_DIR="$(realpath senpai/launchers/D/tanjiro-sglang/lib)" python evaluate.py --json-output-file metrics_full.json`
 
-### Scenario B — current winner (PR #136, merged 2026-05-28)
+### Scenario B — current winner (PR #141, merged 2026-05-28) — supersedes PR #136
 
-- **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding, BF16 KV cache
-- **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --gpu-memory-utilization 0.92`
-- **TPOT.p50:** 0.00936 s (PyTorch 0.0252 s) — exact verification, zero quality risk from speculation
-- **Speedup:** 2.687x (inverse_tpot_p50: 106.84 vs 39.76 tok/s)
+- **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding depth 15, BF16 KV cache
+- **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":15,"prompt_lookup_max":8,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
+- **TPOT.p50:** 0.00708 s (PyTorch 0.0252 s) — spec15/8 cuts decode latency vs spec5/4 (0.00936 s in PR #136)
+- **Speedup:** 3.550x (+32.2% over PR #136's 2.687x, `inverse_tpot_p50` 141.15 vs 39.76 tok/s)
 - **Quality:** MMLU-Pro 0.300 obs / 0.298 baseline = ratio 1.007 (gate 0.95, n=500) ✓
 - **Speed success:** 64/64 (failure_rate 0.0) ✓
-- **VRAM peak:** 90305 MiB / 97887 MiB
-- **Reproduce (from task workspace):** `cp senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **VRAM peak:** 90271 MiB / 97887 MiB (~93%)
+- **W&B run:** 8656lf5w
+- **Reproduce (from task workspace):** `cp senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** Deeper speculation wins superlinearly on Sc B's 8192-token outputs. Once the decoded prefix is long (~100+ tokens), the model generates natural n-grams that match `prompt_lookup_max=8` lookback patterns — spec15 emits 15-token bursts vs spec5's 5-token bursts. Quick probe overestimated (6.918x at n=4) due to highly-repetitive samples; full eval at n=64 gives authoritative 3.550x. Quick-to-full ratio ~51% is consistent with prior Sc B quick observations.
+
+### Scenario B — prior winner (PR #136, merged 2026-05-28, superseded by PR #141)
+
+- **Speedup:** 2.687x (`num_speculative_tokens=5, prompt_lookup_max=4`)
+- **W&B run:** dav3txgq
+
+### Scenario B — prior (PR #136 details)
+
+- **Engine:** vLLM 0.11.0, n-gram spec depth 5, BF16 KV cache
+- **Speedup:** 2.687x (inverse_tpot_p50: 106.84 tok/s)
+- **Quality:** ratio 1.007 (observed 0.300, n=500) ✓
+- **W&B run:** dav3txgq
 
 ### Scenario A — current winner (PR #137, merged 2026-05-28)
 
@@ -167,6 +181,13 @@ research signal only and must not be used to update the current-best row.
   768/768 speed success across burst/poisson/constant profiles. All 4 scenarios
   now have baseline entries. Key insight: Sc C is scheduler-bound (not
   bandwidth-bound), so FP8 hurts; concurrency matching is the main lever.
+- 2026-05-28 14:10 UTC — Merged PR #141 (tanjiro). Scenario B new best:
+  3.550x (`num_speculative_tokens=15, prompt_lookup_max=8`, vLLM 0.11, BF16).
+  Supersedes PR #136 (spec5/4, 2.687x) — +32.2% gain. Quality ratio 1.007
+  (observed 0.300, n=500), 64/64 speed success, VRAM peak 90.3 GB. Deep spec
+  wins superlinearly on 8192-token decode outputs: prompt_lookup_max=8 surfaces
+  more n-gram matches in the growing decoded context, spec15 emits 15-token bursts.
+  Quick probe was 6.918x (overestimate at n=4); authoritative full eval settles 3.550x.
 - 2026-05-28 13:44 UTC — Merged PR #142 (fern). Scenario C new best:
   21.098x (vLLM 0.11, BF16, max-num-seqs=128, chunked-prefill at 8192 tokens,
   no FP8, no prefix caching). Supersedes PR #140 (21.052x, +0.22% gain).
