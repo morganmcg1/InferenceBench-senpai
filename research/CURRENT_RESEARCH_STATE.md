@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 12:19 UTC
+- **As of:** 2026-05-28 12:22 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -25,6 +25,7 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139):
 | Student | Scenario | Engine | Hypothesis | PR | Status |
 |---|---|---|---|---:|---|
 | fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B new best 2.687x** |
+| fern | C (high-load throughput) | vLLM 0.11 | high-concurrency BF16 + prefix caching arms | #140 | **just assigned 12:22 UTC** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A new best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default (full eval 1.247x; not yet relaunch-safe) | #138 | **WIP — Path A (bundle libnuma + auto-bootstrap venv) in progress** |
 | frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram speculative composition | #139 | **WIP — quick probes pending (assigned 11:56 UTC)** |
