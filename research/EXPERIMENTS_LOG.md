@@ -1,5 +1,36 @@
 # SENPAI Research Results
 
+## 2026-05-28 20:07 UTC — PR #180: Sc A `--max-num-batched-tokens` sweep beyond 8192 (CLOSED — did_not_improve)
+
+- **Branch:** `frieren/sc-a-batched-tokens`
+- **Student:** frieren
+- **Hypothesis:** PR #156's `--max-num-batched-tokens 8192` exactly matches Sc A's input length. An at-the-limit token budget may force vLLM into conservative kernel selection or expose edge cases even with `--no-enable-chunked-prefill`. Test 2x, 4x, 8x budgets (16384, 32768, 65536) for prefill kernel improvements.
+
+### Quick + full eval results
+
+| Arm | tokens | Quick speedup | Full speedup | VRAM (MiB) | Δ vs PR #156 |
+|---|---:|---:|---:|---:|---:|
+| arm1 | 16384 | 1.9075x | **1.8658x** | 92719 | **−0.83% ❌** |
+| arm2 | 32768 | 1.9128x | (not promoted) | 89077 | — |
+| arm3 | 65536 | 1.9104x | (not promoted) | 86197 | — |
+| PR #156 (baseline) | 8192 | ~1.901x | 1.881x | ~91-93k | — |
+
+All 3 arms within 0.6% of each other at quick; arm1 promoted per simplest-tie-breaker rule. Full eval -2.2% quick→full vs PR #156's typical -1.0% drop — net -0.83% below baseline. Quality 0.953 ratio (passes gate).
+
+### Analysis
+
+- **Hypothesis falsified cleanly.** Token budget beyond input length is NOT a Sc A lever at the PR #156 operating point. vLLM's prefill at conc=1, no-chunked-prefill, FP8 is insensitive to budget headroom — verified across 2×, 4×, 8× budgets.
+- **VRAM rebalancing confirmed engine behavior:** Larger budgets → smaller VRAM peak (90.5GB → 86.2GB). vLLM rebalances KV cache vs prefill activation allocation but does NOT change prefill kernel dispatch.
+- **Sc A vLLM 0.11 scheduling/precision exhausted on this operating point.** PR #143 hypothesis space (tokens beyond 8192) is now fully tested.
+
+### Next Sc A directions (from student suggestions + advisor)
+
+1. **SGLang FP8 weights on Sc A** — different prefill kernel implementation. Untested in this launch.
+2. **vLLM 0.12+ FlashInfer** — high-risk, high-value. Unblocks the 5-layer cascade from PR #148. Requires per-PR venv bootstrap.
+3. **CUDA graph capture / `--enforce-eager` toggle** — single-flag test at PR #156 operating point.
+
+---
+
 ## 2026-05-28 19:39 UTC — PR #181: Sc C SGLang mem-fraction push on PR #172 winner (MERGED — new Sc C best 29.768x)
 
 - **Branch:** `fern/sc-c-sglang-mem-push`

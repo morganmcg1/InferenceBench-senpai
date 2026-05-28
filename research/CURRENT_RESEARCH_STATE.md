@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 19:46 UTC
+- **As of:** 2026-05-28 20:08 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,14 +22,15 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | pending | C/A | (PR #181 merged 29.768x; new assignment in flight) | **idle 19:46 UTC — assigning Sc C mem 0.95 retest** |
-| frieren | #180 | A | `--max-num-batched-tokens` sweep beyond 8192 (3-arm: 16384, 32768, 65536) on PR #156 base | **assigned 19:10 UTC** |
+| fern | #182 | C | mem 0.95 single-arm full eval on PR #181 base | **assigned 19:46 UTC** |
+| frieren | pending | A | (PR #180 closed did_not_improve; assigning SGLang Sc A FP8 weights) | **idle 20:08 UTC — assigning SGLang Sc A** |
 | tanjiro | #179 | B | FP8 weights composition: arm2 fp8+spec20 quick 7.789x → full eval running (rule #17 caution: Sc B quick→full may collapse) | **arm2 full eval running** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #180 | frieren | A | tokens 16384 full 1.8658x = -0.83% vs PR #156 1.881x | CLOSED — did_not_improve; tokens beyond 8192 not a Sc A lever |
 | #181 | fern | C | **29.768x** SGLang mem 0.85→0.90 on PR #172 (+0.80%) | MERGED — new Sc C best |
 | #172 | fern | C | **29.532x** SGLang FP8wt+FP8KV (+7.4% over 27.497x) | MERGED — superseded by #181 |
 | #166 | frieren | B | spec25/min=1: quick 5.601x (+44%), full **3.329x (-14.4%)** | CLOSED — quick→full collapse; rule #17 established |
