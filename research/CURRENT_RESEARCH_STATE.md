@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 20:57 UTC
+- **As of:** 2026-05-28 21:08 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -24,7 +24,7 @@
 |---|---:|---|---|---|
 | fern | #187 | C | SGLang engine upgrade (newer pip release) + FlashInfer probe (arm1 triton, arm2 flashinfer) | **assigned 20:57 UTC** |
 | frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **assigned 20:35 UTC** |
-| tanjiro | #185 | B | max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1; arm2 full seqs=1+no-chunked) | **assigned 20:32 UTC** |
+| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (vs PR #179 quick 3.856x = +113%!); arm1 full eval running | **partial result 20:59 UTC** |
 
 ## Completed experiments this session
 
