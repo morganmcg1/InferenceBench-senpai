@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-c-r1`
 
-- Date: 2026-05-28 (updated ~T+90)
+- Date: 2026-05-28 (updated ~T+95, launch entering review/scorekeeping window)
 - Active research tag: `ib-20260528-scen-c-r1`
 - Advisor branch: `ib-20260528-scen-c-r1`
 - Scope: Scenario C only (high-load, geomean throughput across burst/poisson/constant).
@@ -30,13 +30,18 @@ Lineage:
 
 ## Current state
 
-- ~T+90 of 120 min launch budget; ~30 min remaining, ~15 min reserved for final review/scorekeeping.
-- frieren just merged the winning PR #165 and is idle.
-- fern (PR #167) is stale_wip — no commits since 17:39, no comments since launch. May be stuck.
+- ~T+95 of 120 min launch budget. Entering review/scorekeeping window (~25 min remaining, ~10-15 reserved).
+- All Scenario C PRs in this launch are now resolved:
+  - PR #161 merged (rank 3, 20.84x)
+  - PR #163 merged (rank 2, 22.18x)
+  - PR #165 merged (**rank 1, 23.98x** — current winner)
+  - PR #167 closed (no commits since assignment; insufficient wall time for full eval; would have needed to clear 23.98x not 22.18x)
+- frieren is idle after the PR #165 merge. fern's PR #167 was stuck — no commits, no comments since 17:39, and `--min-remaining-s 1800` would refuse a fresh full eval at this point.
+- No new assignments planned for the remaining budget; the launcher-defaults hardcoding follow-up (see below) is non-urgent and not worth a partial-attempt PR in the final ~10 min.
 
 ## Active PRs
 
-- #167 (scen-c-fern): SGLang concurrency push + hardcode defaults — **stale, may need to be wrapped up**.
+_None._ Launch is in scorekeeping phase.
 
 ## Potential next research directions (for future launches)
 
