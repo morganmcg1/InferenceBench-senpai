@@ -1,48 +1,55 @@
-# SENPAI Research State — `ib-20260528-scen-d-r1`
+# SENPAI Research State — `ib-20260528-scen-d-r1` (LAUNCH CLOSED)
 
-- **Updated:** 2026-05-28 17:47 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~49 min left; review at 18:20 UTC, latest full-eval start ~17:55 UTC)
-- **MAJOR FINDING:** Scenario D speed eval runs at concurrency=1 because `src/eval/inference/runner.py:1159` defaults profile-level concurrency to 1 when scenario.json has only a `profile` dict (no `profiles` list). Scenario D's profile is `{"name":"burst","pattern":"burst"}` with no concurrency. The PyTorch baseline_metrics.json also only has the c=1 burst profile, so speedups vs baseline are apples-to-apples. Wider-batch / chunked-prefill / prefix-cache levers are dormant; per-token decode levers (speculative decoding, quantization, decoder kernels) dominate.
-- **Launch budget:** ~2 hours, single Scenario D.
-- **Most recent human directive:** none in this launch (no open team issues).
-- **GPU topology:** 1 RTX PRO 6000 Blackwell, shared by 2 logical students (scen-d-frieren, scen-d-fern). Coordinate via `senpai/gpu_slot.py`.
+- **Updated:** 2026-05-28 18:24 UTC (start gate 16:36:57 UTC, budget end 18:36 UTC; advisor closing launch with ~12 min of buffer)
+- **Launch outcome: PR #155 (scen-d-frieren vLLM tuned balanced) is the terminal winner — `scenario/D/speedup_over_pytorch = 1.2919x`** (full eval, n=96, quality_ratio=1.020 PASS on MMLU-Pro n=500, 96/96 success, W&B `lyzskqbu`).
+- **Scenario D RTX PRO 6000 Blackwell shakedown baseline:** 1.2919x. Not leaderboard-comparable until repeated on H100.
 
-## Current focus
+## What happened
 
-Round 1 complete for frieren (merged, 1.2919x). Round 2 (speculative decoding) now active via fern.
+Two students sharing one RTX PRO 6000 Blackwell GPU optimized Scenario D over the 2-hour budget. Engine-diversified round-1: vLLM (frieren) + SGLang (fern). Discovery mid-launch that the speed evaluator runs at c=1 (not the scenario.json's c=4) collapsed the lever space and reframed round 2 around per-token decoder levers (speculative decoding, decoder kernels).
 
-**Current best:** PR #155 merged — vLLM tuned, **1.2919x speedup_over_pytorch**, quality 1.02 (PASS, n=500), 96/96 success, W&B `lyzskqbu`.
-
-Slot is FREE as of 17:45 UTC. Fern has been directed to take it immediately for n-gram speculative decoding pivot.
-
-## Active portfolio
-
-| PR | Student | Engine | Latest signal | Next step |
+| PR | Student | Engine / recipe | Best result | Disposition |
 |---|---|---|---|---|
-| #155 | scen-d-frieren | vLLM tuned | **MERGED** at 17:46 UTC — full eval **1.2919x**, quality 1.02, 96/96. Launcher: `senpai/launchers/D/frieren-vllm-balanced/start_server.sh`. | Stood down. |
-| #157 | scen-d-fern | vLLM-spec NGRAM (pivot) | Arm 1 LPM quick **1.168x** at c=1. Pivoted to speculative decoding. Go directive posted at 17:46 UTC. Slot free since 17:45. | Take slot immediately. Quick probe: vLLM + `--speculative-config '{"method":"ngram","num_speculative_tokens":5,...}'`. If quick ≥ 1.3x → full. Terminal SENPAI-RESULT by 18:15 UTC. |
+| **#155** | scen-d-frieren | **vLLM tuned balanced** (chunked-prefill, prefix-cache, max-num-seqs 64, max-num-batched-tokens 16384, block-size 16, kv-cache auto, gpu-mem 0.92, CUDA graphs, FLASH_ATTN) | **1.2919x full (terminal)**, quality 1.020 PASS | **MERGED** at 17:46. Launcher saved at `senpai/launchers/D/frieren-vllm-balanced/start_server.sh`. |
+| #170 | scen-d-frieren | vLLM no-prefix-cache ablation (contingency, quick-only) | launcher prep only (no GPU window) | Closed 18:22 as `contingency-not-needed`. Launcher staged for future H100 launch. |
+| #157 | scen-d-fern | SGLang LPM (Arm 1), SGLang FCFS (Arm 2), vLLM tuned (Arm 3) | 1.234x quick (Arm 3), no terminal | Closed 18:23 as `research-signal-not-terminal`. Three launchers staged for future use. |
 
-### Concurrency-1 caveat (now load-bearing for the launch)
+## The c=1 harness discovery (load-bearing for any future scen-D launch)
 
-The scenario.json `concurrency: 4` field is NOT read by the speed evaluator. `runner.py:1159` falls back to `config.get('profile', ...)` and Scenario D's profile dict has no `concurrency`, so default=1. This means BOTH quick AND full eval run at c=1 for Scenario D. Wider-batch / chunked-prefill / prefix-cache levers are dormant at c=1 by construction. The c=1 PyTorch baseline (38.21 tok/s gen, 0.0382 req/s) is the real comparison.
+`src/eval/inference/runner.py:1159` falls back to `config.get('profile', ...)` when `profiles` is missing. Scenario D's `scenario.json` has only a single `profile` dict (`{"name":"burst","pattern":"burst"}`) with no `concurrency` key, so the runner defaults profile-level concurrency to **1**. The top-level `concurrency: 4` field in `scenario.json` is **not read** by the speed evaluator.
 
-This is not a bug we should fix — `scenario.json` is a protected benchmark file. We optimize for the actual c=1 scoring function.
+The c=1 PyTorch baseline (`baseline_metrics.json`) was also generated by this same evaluator, so it too is c=1. **Speedup ratios are apples-to-apples** vs the baseline, but the *level* of the baseline (38.21 tok/s gen, 0.0382 req/s, ttft.p50 0.21s, tpot.p50 0.025s) is the c=1 level, not c=4. Wider-batch, chunked-prefill, prefix-caching, scheduler choice (LPM vs FCFS) are all dormant at c=1 by construction.
 
-### What actually moves the metric at c=1
+Both students independently surfaced this finding (fern in her Arm 1 LPM checkpoint, frieren in her Arm 2 full analysis). Confirmed in advisor inspection.
 
-1. **n-gram (lookup) speculative decoding** — biggest single lever at c=1, no draft model needed. vLLM: `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":3,"prompt_lookup_min":2}'`. SGLang: `--speculative-algorithm NGRAM ...`.
-2. **Decoder kernel choice** — SGLang's triton kernel gave +59% gen throughput vs PyTorch; vLLM's FLASH_ATTN gave +46%. Both already on the board.
-3. **CUDA graphs ON** — already enabled in merged recipe.
-4. **FP8 quantization** — deferred; quality risk.
+## What moved the metric at c=1
 
-## What we learned from round 1
+1. **CUDA graphs ON + decoder kernel** — drove TPOT p50 from 0.025s → 0.017s (1.48x) on frieren's winning recipe. The single biggest contributor in round 1.
+2. **Wider in-flight batch + chunked prefill** — tightened TPOT p99 from 0.127s → 0.048s (2.64x). Worked even at c=1 (in-flight = 1 request) by amortizing setup cost.
+3. **Decoder backend choice** — SGLang's triton attention gave +59% gen throughput; vLLM's FLASH_ATTN gave +47%. Same ballpark.
+4. **Prefix caching** — likely inert at c=1 with unique LongBench prompts; not directly tested in this launch (PR #170 didn't get a GPU window).
+5. **n-gram speculative decoding** — never actually tested in this launch despite repeated direction; fern's Arm 3 pivoted to tuned vLLM (without spec) instead. **This is the highest-priority candidate for the next launch.**
 
-- **vLLM tuned (no spec):** 1.2919x at c=1. TPOT p50 1.48x faster, p90 2.06x. TTFT p99 regresses (chunked-prefill interleaving). Quality marginally above baseline.
-- **SGLang LPM triton:** 1.168x at c=1 (quick only). +59% gen throughput — the triton decode kernel is fast, but TTFT is slower and there's no speculative acceleration.
-- **c=1 is the real workload.** All measurements are apples-to-apples vs the c=1 PyTorch baseline.
+## Risks and known issues for the next launch
 
-## Remaining budget / risks
+- **FlashInfer on RTX PRO 6000 Blackwell:** disabled by `senpai/runtime_env.sh` because it's flaky. fern's Arm 3 may have re-enabled it via vLLM defaults — worth confirming before repeating.
+- **Full-eval foreground blocking:** when a student calls `gpu_slot.py run --wait --mode full`, the eval blocks the foreground shell for ~33 min. The student cannot post heartbeats during that time. Both frieren and fern hit this. Fix going forward: background the eval, use sparse `ScheduleWakeup` heartbeats. Both students mentioned the same lesson.
+- **Per-PR SGLang venv:** add ~2-3 min of install overhead; the `sglang[all]` wheel set is large. May be worth a pre-built image variant for future SGLang work.
+- **scenario.json concurrency mismatch:** this is a real evaluator issue but `scenario.json` is a protected benchmark file. Filing as a tooling-PR candidate (separate from research work).
 
-- Hard wall: 18:36 UTC. Review window: 18:20 UTC. Fern's full eval must complete by 18:15 to leave 5 min for validate+finalize+review.
-- If fern's speculative quick < 1.3x, the spec config may be wrong (temperature mismatch, acceptance rate near zero). Should try `num_speculative_tokens 3` once.
-- If spec quick ≥ 1.3x but fern can't start full by 17:55, we still have a merged baseline at 1.2919x — the launch is not empty-handed.
-- FlashInfer is still disabled — keep it that way.
+## Next-launch candidates (for whoever picks up Scenario D next)
+
+1. **vLLM + NGRAM speculative decoding** on frieren's merged recipe. `--speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":3,"prompt_lookup_min":2}'`. Biggest single untested lever for c=1.
+2. **SGLang + NGRAM speculative decoding** (`--speculative-algorithm NGRAM ...`). Engine-diversified comparison.
+3. **vLLM + FP8 KV cache** on the merged recipe. Risky on RTX PRO 6000, but on H100 should give a clear ~2x decode lift. Defer until H100 repeat.
+4. **vLLM block-size 32 vs 16** on the merged recipe. Smaller probe, may not be worth a slot lease.
+5. **vLLM no-prefix-cache ablation** (PR #170's hypothesis). Launcher already staged in branch `scen-d-frieren/round2-prefix-cache-ablation`.
+6. **TGI or TensorRT-LLM exploratory probe** — only if budget allows ≥40 min for engine setup + eval.
+
+## Final state
+
+- Live baseline: **1.2919x** (PR #155, frieren-vllm-balanced, merged).
+- BASELINE.md updated and pushed.
+- PR #155 launcher in `senpai/launchers/D/frieren-vllm-balanced/start_server.sh` — ready for clean relaunch.
+- Both students standing down. PR #157 and PR #170 closed.
+- Launch closes at 18:36 UTC.
