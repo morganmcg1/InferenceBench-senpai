@@ -1,0 +1,597 @@
+# InferenceBench SENPAI Target
+
+Research target for open-ended LLM inference optimization. Given a fixed base
+LLM, one benchmark GPU, a scenario-specific workload, and a wall-clock budget,
+produce a reproducible OpenAI-compatible inference server that improves the
+scenario primary metric while passing quality and integrity gates. The official
+leaderboard setting is one NVIDIA H100 80GB GPU; current SENPAI shakedown runs
+may use an NVIDIA RTX PRO 6000 Blackwell-class GPU with about 96GB VRAM and
+must not be treated as leaderboard-comparable until repeated on H100.
+
+This repository already contains the official InferenceBench benchmark harness.
+The SENPAI layer in this target is an experiment coordination layer around that
+harness, not a replacement for it. Normal experiment PRs should add or refine
+launcher recipes, experiment notes, and helper tooling without changing the
+benchmark evaluator.
+
+## Mission
+
+The research goal is to discover inference-serving configurations and systems
+recipes that beat the strongest known benchmark references on each scenario.
+The final deliverable of an experiment is not prose, a benchmark patch, or an
+interactive server that happens to be alive. It is a reproducible launcher that
+can be copied to task-local `./start_server.sh`, relaunched by the supervised
+final-evaluation harness in a fresh container, and then evaluated by
+`evaluate.py`.
+
+The paper-facing metric is speedup over the naive PyTorch baseline. The raw
+scenario objectives are higher-is-better after conversion, and speedup is
+`candidate_raw_objective / pytorch_baseline_raw_objective`.
+
+| Scenario | Workload focus | Raw objective used for speedup |
+|---|---|---|
+| A: Input-heavy | Long-context prefill latency | `1 / ttft.p50` from the `burst` profile |
+| B: Output-heavy | Long decode latency | `1 / tpot.p50` from the `burst` profile |
+| C: High-load | Concurrent throughput | Geomean of `request_throughput_req_per_s` across `burst`, `poisson`, and `constant` |
+| D: General | Balanced serving | Geomean of `1/ttft.p50`, `1/tpot.p50`, and `request_throughput_req_per_s` from `burst` |
+
+For individual experiment PRs, optimize one scenario at a time and report that
+scenario's speedup over the PyTorch baseline as `SENPAI-RESULT.primary_metric`.
+For mature winners, run occasional cross-scenario confirmation and report the
+aggregate as the geometric mean of A-D speedups, matching the leaderboard.
+
+Quality is a gate, not the ranking metric. A candidate that improves speed but
+fails the MMLU-Pro quality gate is not a winner. A candidate that changes the
+base model, evaluator, request set, or metric semantics is invalid even if the
+numbers look good.
+
+## Reference Snapshot
+
+Timestamp: 2026-05-21. These are public reference numbers from the
+InferenceBench README/site for Mistral-7B-Instruct-v0.3 with a 2 hour budget
+per run on one NVIDIA H100 80GB GPU. This is the headline setting to target for
+leaderboard claims unless the human research team explicitly launches a
+different model, hardware, time budget, or starting-point ablation. RTX PRO 6000
+shakedown results are useful for search direction and infrastructure hardening,
+but should be repeated on H100 before claiming that they beat this table.
+They are initial context for the advisor. The advisor branch should maintain
+its own live `BASELINE.md` during a SENPAI run and compare terminal results
+against that current state.
+
+| Method | Aggregate | Sc. A TTFT | Sc. B TPOT | Sc. C req/s | Sc. D geomean |
+|---|---:|---:|---:|---:|---:|
+| SMAC3 search, 2h vLLM | 11.53x | 4.37x | 15.23x | 46.70x | 5.69x |
+| TPE search, 2h vLLM | 11.25x | 4.48x | 14.76x | 43.46x | 5.58x |
+| Random search, 2h vLLM | 10.20x | 4.21x | 11.34x | 41.81x | 5.42x |
+| Best listed agent, Claude Sonnet 4.6 | 8.08x | 3.47x | 12.03x | 33.93x | 3.01x |
+| vLLM default, no agent | 4.05x | 1.25x | 2.25x | 48.69x | 1.96x |
+| SGLang default, no agent | 3.92x | 1.22x | 1.77x | 51.12x | 2.14x |
+| HF TGI default, no agent | 3.30x | 1.14x | 1.37x | 41.94x | 1.80x |
+| PyTorch baseline | 1.00x | 1.00x | 1.00x | 1.00x | 1.00x |
+
+## Codebase
+
+- `README.md` - official benchmark overview, leaderboard, scenarios, gates, and
+  submission quickstart. Read-only during normal experiment PRs.
+- `src/eval/tasks/inference_scenario_*/scenario.json` - scenario workload
+  definitions. Protected benchmark files.
+- `src/eval/tasks/inference_scenario_*/mission.txt` and
+  `workspace_conventions.txt` - task prompts and workspace rules used by the
+  original agent harness. Read-only during normal experiment PRs.
+- `src/eval/inference/runner.py` - official speed and quality evaluator.
+  Protected. Read it to understand metrics, but do not edit it in normal
+  experiment PRs.
+- `src/eval/inference/quality_gate.py` - MMLU-Pro quality gate. Protected.
+- `src/eval/inference/hpo_search_baselines.py` - non-agent search baseline and
+  useful reference for objective computation, server launch, and search spaces.
+  Read-only unless the advisor explicitly assigns benchmark tooling work.
+- `src/baselines/search_spaces/*.yaml` - HPO search spaces for vLLM, SGLang,
+  and TGI. Read-only reference for normal launcher experiments.
+- `src/starting_points/vllm_running/start_server.sh` - default vLLM starting
+  point used by the original harness. Treat as read-only for normal SENPAI
+  experiments unless the advisor explicitly assigns an integration PR.
+- `src/eval/tasks/_shared/task_context/start_server.sh` - blank task-local
+  launcher stub copied into benchmark jobs. Protected template.
+- `agents/*/solve.sh`, `src/run_task.sh`, `src/commit_utils/*`, `containers/*`
+  - benchmark orchestration and container plumbing. Protected for normal
+  experiment PRs.
+- `program.md`, `instructions/prompt-advisor.md`,
+  `instructions/prompt-student.md` - SENPAI target contract and role overlays.
+  Read-only during normal experiment PRs.
+- `senpai/` - SENPAI-only helper area for launcher recipes, result summarizers,
+  notes, and future integration scripts. This is the preferred place for new
+  target-package functionality.
+
+Normal student PRs should avoid touching existing benchmark code. Put reusable
+launcher recipes under `senpai/launchers/<scenario>/<slug>/start_server.sh`,
+analysis under `senpai/research/` or the advisor-managed `/research/`
+directory, and helper scripts under `senpai/`.
+
+Do not add a local shortcut that changes the benchmark semantics. If students
+run from SENPAI GPU pods rather than an official HTCondor job, they should still
+use the same task files, `start_server.sh` foreground launcher contract,
+`evaluate.py` metrics, precomputed request files when available, quality gate,
+and clean supervised relaunch behavior that the official harness uses.
+
+## Benchmark Workloads
+
+The evaluator samples LongBench-v2 prompts with controlled token lengths. Speed
+requests are not scored for semantic accuracy; semantic preservation is checked
+separately by the quality gate.
+
+| Scenario | Input target | Output target | Requests | Traffic profile |
+|---|---:|---:|---:|---|
+| A | 8192 tokens | 1024 tokens | 128 | `burst`, concurrency 1 |
+| B | 1024 tokens | 8192 tokens | 64 | `burst`, concurrency 1 |
+| C | 1024 tokens | 1024 tokens | 256 each | `burst` concurrency 64, `poisson` 32 req/s cap 32, `constant` 16 req/s cap 16 |
+| D | 4096 tokens | 2048 tokens | 96 | `burst`, concurrency 4 |
+
+Per-request input and output lengths are drawn uniformly from 80 percent to 100
+percent of the target length. Scenario C reports the geomean throughput across
+its three traffic profiles.
+
+## Server Contract
+
+Every candidate must expose OpenAI-compatible endpoints:
+
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- Streaming responses for chat completions
+
+The final launcher must run in the foreground and bind to the provided host and
+port:
+
+```bash
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-8000}"
+MODEL_ID="${INFERENCE_BENCH_BASE_MODEL:-mistralai/Mistral-7B-Instruct-v0.3}"
+```
+
+Use `exec ...` for the final server process. Do not daemonize with `nohup`,
+`setsid`, or a trailing `&`. Do not hardcode the port. The official benchmark
+kills the live server and relaunches `start_server.sh` in a clean supervised
+container before final scoring.
+
+Allowed serving levers include:
+
+- Engine choice: vLLM, SGLang, TGI, TensorRT-LLM, or a custom OpenAI-compatible
+  server.
+- Runtime tuning: KV-cache dtype and allocation, max sequences, batched token
+  limits, chunked prefill, prefix caching, scheduler policy, CUDA graphs,
+  attention backend, tokenizer mode, and memory utilization.
+- Quantization: FP8, GPTQ, AWQ, bitsandbytes, or other formats, only if the
+  same base model architecture is preserved and the quality gate still passes.
+- Kernel and backend tuning: FlashAttention, FlashInfer, Triton kernels,
+  speculative decoding, CUDA/Triton cache placement, and compile settings.
+
+These categories are examples, not a whitelist. Creative approaches are allowed
+when they preserve the assigned model, OpenAI-compatible API, metric semantics,
+quality gate, integrity rules, and clean relaunch behavior.
+
+The base model must remain the assigned `INFERENCE_BENCH_BASE_MODEL`. A
+different model repo, smaller substitute, external API, response cache, or
+pre-generated output invalidates the run.
+
+## Hardware-Specific Runtime Learnings
+
+Keep this section narrow. Hardware-specific means a candidate may behave
+differently because the active GPU architecture, VRAM size, or compiled kernel
+support differs. Missing scoring assets, W&B setup, tokenizer downloads, CUDA
+header/package mismatches, and broken Python imports are infrastructure problems,
+not serving ideas and not hardware wins or losses.
+
+Current RTX PRO 6000 shakedown runs are useful for research direction but are
+not leaderboard-comparable to the paper's H100 80GB setting. In particular:
+
+- The RTX PRO 6000 shakedown GPU has about 96GB VRAM, while the leaderboard
+  setting is one H100 80GB. A launcher that only wins because it uses memory
+  headroom above the H100 budget must be treated as shakedown-only until an H100
+  run confirms it.
+- Do not assume H100, B200, or generic Blackwell FP8/kernel guidance transfers
+  unchanged to the current RTX PRO 6000 pod. Backend choice, kernel availability,
+  and vLLM build support must be proved by a clean server boot, quality pass, and
+  full evaluator run on the active hardware.
+- vLLM's FlashAttention backend rejecting FP8 KV cache is not a pure RTX PRO
+  6000 incompatibility. Treat `VLLM_ATTENTION_BACKEND=FLASH_ATTN` plus
+  `--kv-cache-dtype fp8` as a backend/version constraint unless a run explicitly
+  proves otherwise. For this shakedown hardware, prefer BF16 KV with
+  FlashAttention, or test FP8 KV only through a backend that actually boots,
+  preserves quality, and improves the target metric.
+
+## Launch Preflight And Scoring Assets
+
+Before assigning serving experiments in a paper-grade run, the advisor should
+verify that scoring assets already exist for the active hardware, model, seeds,
+and scenarios:
+
+```bash
+# Current RTX PRO 6000 shakedown mode
+senpai/require_scoring_preflight.sh --scenario all \
+  --expected-gpu "RTX PRO 6000"
+
+# Later H100 leaderboard-comparable mode
+senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
+  --expected-gpu H100
+```
+
+This check must pass before claiming paper-grade results for the active
+hardware, and the `--leaderboard-mode --expected-gpu H100` version must pass
+before claiming leaderboard-comparable results. It verifies the GPU class, W&B
+availability, deterministic speed request files, PyTorch speed baseline
+metrics, MMLU-Pro quality samples, and the PyTorch quality baseline registry.
+If it fails, treat baseline/request setup as the first research task; do not let
+students fabricate `speedup_over_pytorch` from public H100 ratios or report raw
+objectives as if they were speedups.
+
+Prepare missing scoring assets outside the timed optimization clock. On the
+current RTX PRO 6000 cluster, use:
+
+```bash
+senpai/run_scoring_setup_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --export-slug rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+Then import and verify the exported assets before opening the SENPAI start
+gate:
+
+```bash
+senpai/require_scoring_preflight.sh \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+For Kubernetes SENPAI launches, arm `senpai/arm_cluster_cutoff.sh` at startup
+instead of using a bare cleanup job. For a strict timed window, pass the same
+PVC `--start-gate-path` to the cutoff script and `k8s/launch.py`; pods wait at
+the gate until every expected pod is Ready, then the cutoff job opens the gate
+and starts the clock. It archives `/root/.claude` from every tagged
+advisor/student pod to the PVC shortly before shutdown, and then deletes the
+tagged SENPAI deployments/configmaps/secrets.
+
+Run `senpai/run_launch_smoke_test_job.sh` with the exact target branch and image
+before opening the timed gate. Use the immutable image digest printed by the
+passing smoke job for the timed SENPAI launch and cutoff job; mutable tags such
+as `:pr-1` are build pointers, not run provenance.
+
+If request generation is blocked by tokenizer/runtime drift, materialize
+deterministic request files once from the SENPAI helper instead of editing
+protected evaluator code:
+
+```bash
+INFERENCE_BENCH_ALLOW_HF_DOWNLOAD=1 \
+python senpai/materialize_requests.py --scenario all --backend torch \
+  --base-model mistralai/Mistral-7B-Instruct-v0.3 --seed 248
+```
+
+For pod-local work, create task workspaces that mirror the official task
+layout rather than improvising from the repository root:
+
+```bash
+python senpai/create_task_workspace.py --scenario A \
+  --output /tmp/inferencebench-scenario-a \
+  --starting-point vllm_running
+```
+
+The task workspace still uses the official `evaluate.py`, quality gate, request
+files, launcher contract, and supervised relaunch shape. The helper only stages
+those pieces in a predictable pod-local directory.
+
+Use `$PROBLEM_DIR` as the canonical path to the active target checkout in
+commands and PR instructions. In packed multi-student pods, each logical
+student may have a separate checkout such as
+`/workspace/senpai-$STUDENT_NAME/target`; a single hardcoded
+`/workspace/senpai/target` path is not portable.
+
+For RTX PRO 6000 shakedown runs and packed-pod launches, source the SENPAI
+runtime environment helper before starting vLLM/SGLang/TGI:
+
+```bash
+source "$PROBLEM_DIR/senpai/runtime_env.sh"
+```
+
+This sets CUDA pip-package include/library paths and pod-local JIT caches that
+avoid common Blackwell/vLLM startup failures. On the current RTX PRO 6000
+shakedown hardware it also defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768` and
+disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
+explicitly opts back in. It is launch environment setup only; it does not modify
+the evaluator or scoring contract.
+
+When multiple students share a GPU or pod, coordinate heavy work with
+`senpai/gpu_slot.py`. This is only a process supervisor and lease file, not a
+benchmark runner: it records who owns the GPU, which PR/scenario they are
+testing, the unique lease ID, and when the lease expires. Students should still
+run the official task-local `./test_server.sh` and `evaluate.py`; the slot
+prevents accidental overlapping full workloads, stale port ownership, and broad
+cleanup commands. If each student has a dedicated GPU, use the dedicated GPU
+lanes in parallel instead of serializing the whole fleet through one slot.
+
+In shared-GPU topology, students should use `gpu_slot.py run --wait ...` for
+queued GPU work. Do not write shell loops that depend on the exact text printed
+by `gpu_slot.py status`; that output is for human debugging, not a stable
+machine interface. If `status --json` reports active GPU compute processes
+without a matching lease, resolve the orphan before starting a new full
+workload.
+
+Use `--mode quick` for screening probes and `--mode full` for confirmation
+runs. Quick mode caps a slot at 15 minutes and full mode caps it at 60 minutes,
+which prevents one student from silently consuming a shared GPU round.
+
+When the cutoff time is known, set `INFERENCE_BENCH_RUN_DEADLINE_UTC` or pass
+`--deadline-utc` to `gpu_slot.py`, and use `--min-remaining-s` for any full
+evaluation. The slot helper should refuse work that cannot plausibly finish,
+report, and be reviewed before the launch gate closes.
+
+Packed pods share one Python installation. Do not use global `pip install` or
+`uv pip install --system` during serving experiments; that can invalidate other
+students' measurements by changing torch, transformers, vLLM, or tokenizer
+behavior mid-run. The SENPAI image sets `PIP_REQUIRE_VIRTUALENV=true`. Optional
+backend installs belong in per-PR venvs created with
+`senpai/create_engine_venv.py` or an equivalent isolated environment, and
+runtime drift should be checked with `senpai/runtime_doctor.py`.
+
+## Running
+
+For local or pod-level exploration, start from a launcher recipe and copy it
+into the active task workspace as `./start_server.sh`. The original benchmark
+task workspace contains `evaluate.py`, `test_server.sh`, `timer.sh`,
+`scenario.json`, and the task-local launcher.
+
+Inside an active InferenceBench task workspace, run a quick probe first and
+return control to the student/advisor loop before spending full-eval time:
+
+```bash
+source ./eval_env.sh
+./clean_eval_artifacts.sh
+./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
+python evaluate.py --quick --json-output-file metrics_quick.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
+```
+
+If the quick result is promising, enough wall time remains, and the advisor's
+promotion rule says to confirm it, run the full evaluation as a clean relaunch:
+
+```bash
+source ./eval_env.sh
+./clean_eval_artifacts.sh
+./test_server.sh > agent/server.log 2>&1 &
+server_pid=$!
+trap "kill $server_pid 2>/dev/null || true" EXIT
+python evaluate.py --json-output-file metrics_full.json
+kill "$server_pid" 2>/dev/null || true
+trap - EXIT
+python "$PROBLEM_DIR/senpai/summarize_metrics.py" metrics_full.json \
+  --scenario A \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS"
+python "$PROBLEM_DIR/senpai/log_metrics_to_wandb.py" metrics_full.json \
+  --scenario A \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --name "$STUDENT_NAME/<short-description>" \
+  --group "<hypothesis-or-pr>"
+```
+
+When running from the repository root for static checks or helper development:
+
+```bash
+python senpai/summarize_metrics.py path/to/metrics.json --scenario C \
+  --baseline-metrics-json path/to/pytorch_baseline_metrics.json
+python -m pytest tests/test_hpo_search_baselines.py tests/test_request_sampling.py
+```
+
+Use quick evaluation for viability and full evaluation before terminal results.
+Quick runs are useful for launch failures and large regressions, but they are
+not sufficient evidence to merge a winner. A terminal winner needs a clean
+relaunch and full `evaluate.py --json-output-file ...` result unless the advisor
+explicitly marked the PR as tooling-only.
+Do not chain quick and full evaluation in one blocking command during search
+unless the advisor has already decided the candidate is in final confirmation
+mode.
+
+Before a serving PR is merged as a winner or `BASELINE.md` is updated, run:
+
+```bash
+python senpai/validate_result.py metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id <run-id> \
+  --launcher ./start_server.sh \
+  --require-launcher
+```
+
+The validator must print `validation_pass=true` and
+`baseline_update_allowed=true`. Quick results, skipped quality, partial request
+counts, missing PyTorch baselines, missing W&B run IDs, and failed quality gates
+are research signals only; keep them out of the terminal current-best rows.
+
+For valid full results, prefer the mechanical finalizer over hand-written PR
+comments:
+
+```bash
+python senpai/finalize_result.py metrics_full.json \
+  --scenario <A|B|C|D> \
+  --baseline-metrics-json "$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS" \
+  --wandb-run-id <run-id> \
+  --launcher ./start_server.sh \
+  --post-to-pr --repo "$GITHUB_REPOSITORY" --pr <pr-number>
+```
+
+This posts the exact terminal `SENPAI-RESULT`, marks the PR ready for review,
+and swaps `status:wip` for `status:review` only after validation passes.
+
+## Metrics And Telemetry
+
+The official evaluator writes `metrics.json` with:
+
+- `profiles.<profile>.ttft.p50`, `p90`, `p99`
+- `profiles.<profile>.tpot.p50`, `p90`, `p99`
+- `profiles.<profile>.itl.p50`, `p90`, `p99`
+- `profiles.<profile>.request_throughput_req_per_s`
+- `profiles.<profile>.generation_throughput_tokens_per_s`
+- `profiles.<profile>.success_count`, `failure_count`, and `failure_rate`
+- `quality_check.pass`
+- `quality_check.datasets.mmlu_pro.observed_accuracy`
+- `quality_check.datasets.mmlu_pro.baseline_accuracy`
+- `quality_check.datasets.mmlu_pro.ratio`
+
+The primary ranking metric is scenario-dependent and must be computed from the
+full clean-relaunch metrics. Tail latency, failure rate, empty outputs, VRAM
+peak, and server logs are required diagnostics when deciding whether a result is
+really robust.
+
+W&B logging is required for SENPAI runs. Log to:
+
+```text
+wandb-applied-ai-team/inferencebench-senpai
+```
+
+Use `senpai/log_metrics_to_wandb.py` after each meaningful quick or full eval.
+It logs the raw metrics, scenario raw objective, paper-facing speedup when a
+PyTorch baseline is supplied, quality gate fields, and the metrics artifact.
+The baseline metrics file or `--baseline-primary` value must come from the
+matching PyTorch baseline for the same scenario and benchmark setup.
+The official benchmark harness is still the source of truth for evaluation; the
+W&B bridge is a read-only logger around its output.
+
+## Quality And Integrity Gates
+
+The quality gate evaluates a fixed 500-question MMLU-Pro subset with greedy
+decoding and requires observed accuracy to be at least `tau = 0.95` times the
+PyTorch baseline accuracy. The evaluator reports the dataset-level observed
+accuracy, baseline accuracy, ratio, and pass/fail status.
+
+The integrity gate is benchmark-owned and considers the transcript and final
+launcher. The following are forbidden:
+
+- Editing `evaluate.py`, `runner.py`, `quality_gate.py`, scenario files,
+  baseline request files, generated request logs, or final metrics files to
+  change the score.
+- Replacing the assigned base model with a different model, smaller model,
+  distilled model, or unrelated community checkpoint. Quantized versions are
+  only acceptable when they are legitimate quantizations of the assigned base
+  model and pass quality.
+- Offloading inference to external APIs or remote services.
+- Caching, memorizing, or intercepting benchmark requests or quality-gate
+  answers.
+- Returning synthetic or pre-generated text instead of model generations.
+- Depending on an already-running daemon, interactive shell state, or files that
+  are not recreated by the final launcher in a fresh container.
+- Hardcoding the evaluation host, port, scenario seed, request IDs, or paths in
+  a way that only works during the student's session.
+
+If an evaluator bug is suspected, ask the advisor first and separate that work
+from serving-optimization PRs.
+
+## Experiment Strategy
+
+This target gives agents broad freedom over framework, optimization, and
+parameter choices. SENPAI adds coordination: the advisor manages scarce time and
+GPU access, students run bounded research arms or single hypotheses, and every
+decision is measured through the official evaluator.
+
+The default timed launch loop is:
+
+1. Confirm preflight and create a minimal `BASELINE.md` ledger if needed.
+2. Get idle students into valid bounded assignment PRs before deep planning.
+3. Inspect the scenario workload and current live baseline.
+4. Choose one hypothesis or one bounded research arm.
+5. Run quick probes that return control after each measurement.
+6. Use the early window to gather diverse, comparable signals before committing
+   most of the GPU budget to a full evaluation.
+7. Preserve every valid quick result with concise notes, and log failures as
+   search information.
+8. Promote only the best earned candidate(s) to full evaluation.
+9. Reserve the final 10-15 minutes for terminal reporting, advisor review,
+   merge, and `BASELINE.md` updates.
+
+This mirrors the measured-search discipline in
+`senpai/research/auto_gpu_kernel_competition_lessons.md`: cheap probes are for
+learning, full runs are for confirmation, and failures should make the next arm
+smarter.
+
+The first promising quick result is evidence, not permission to stop searching.
+Unless the assignment is already in final confirmation mode, bank strong quick
+winners and keep probing within the assigned surface until the stop rule,
+wall-clock budget, or advisor decision says to promote. Students should post
+partial `SENPAI-RESULT` checkpoints with `terminal=false` and
+`pending_arms=true`; those comments preserve learning. When the next step needs
+advisor steering, pair the checkpoint with the normal advisor-question workflow
+so the PR becomes visible to the advisor loop.
+
+Do not collapse the portfolio to vLLM by habit. Explore vLLM, SGLang, TGI,
+TensorRT-LLM, and custom OpenAI-compatible servers as live candidates whenever
+the time budget and scenario make that plausible. The point is not to touch every
+engine mechanically; it is to choose the engine and launcher family most likely
+to beat the current baseline under the official evaluator.
+
+Do not overfit to this document's example levers. Choose strategies based on the
+active scenario, current live baseline, measured failures, remaining wall-clock
+time, and available GPU capacity.
+
+For a measured example of successful autonomous GPU-systems optimization,
+advisors and students can consult
+`senpai/research/auto_gpu_kernel_competition_lessons.md`. Use it as search
+discipline and measurement guidance, not as a mandate to write custom kernels.
+
+## Results Contract
+
+Student result comments must include a single-line marker:
+
+```markdown
+SENPAI-RESULT: {"terminal":true,"status":"complete","pending_arms":false,"wandb_run_ids":["<run-id>"],"primary_metric":{"name":"scenario/A/speedup_over_pytorch","value":0.0},"test_metric":{"name":"quality/mmlu_pro_observed_accuracy","value":0.0},"eval_mode":{"name":"full"},"result_kind":"terminal_candidate","quality_evidence":"full_quality_gate","terminal_eligible":true,"baseline_update_allowed":true}
+```
+
+Partial quick-probe comments should use the same marker with
+`"terminal":false`, `"pending_arms":true`,
+`"result_kind":"research_signal"`, and `"quality_evidence":"screening_only"`.
+They are steering signals, not mergeable winners. If the PyTorch baseline was
+available and the helper computed a speedup, the partial metric may be a
+speedup; otherwise use the raw metric name and state that the result is
+non-terminal.
+
+Use the appropriate primary metric name:
+
+- Scenario A: `scenario/A/speedup_over_pytorch`
+- Scenario B: `scenario/B/speedup_over_pytorch`
+- Scenario C: `scenario/C/speedup_over_pytorch`
+- Scenario D: `scenario/D/speedup_over_pytorch`
+- Cross-scenario confirmation: `aggregate/geomean_speedup_over_pytorch`
+
+Also report:
+
+- Scenario, base model, GPU type, and time budget.
+- Exact launcher path and the exact `start_server.sh` contents or diff.
+- Exact evaluation command and whether it was quick or full.
+- `metrics.json` path or attached artifact.
+- Quality gate status and MMLU-Pro observed/baseline/ratio.
+- Paper-facing speedup over PyTorch, raw primary objective, baseline raw
+  objective, plus TTFT, TPOT, ITL, request throughput, generation throughput,
+  success/failure counts, and VRAM peak.
+- Comparison against the advisor-maintained current baseline and the reference
+  snapshot above when relevant.
+- W&B run ID from `wandb-applied-ai-team/inferencebench-senpai`.
+- Server start time, cold-relaunch result, and any launch caveats.
+- What happened, why the hypothesis did or did not work, and suggested
+  follow-ups.
+
+Set `terminal=true` only when every advisor-required arm is complete and no
+pending run can change the conclusion. Negative results are useful when they
+clearly identify the failed hypothesis, failure mode, and next likely move.
+
+## Advisor Guidance
+
+Detailed advisor workflow lives in `instructions/prompt-advisor.md`. This
+program defines the metric, contract, protected boundaries, and result schema;
+the advisor should choose concrete strategy based on live evidence from the
+current run.
+
+## Roles
+
+Research is coordinated through GitHub PRs with an advisor/student model.
+GitHub Issues are used for communication with the human research team. See
+`instructions/prompt-advisor.md` and `instructions/prompt-student.md`.

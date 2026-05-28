@@ -62,7 +62,17 @@ def _count_chat_tokens(messages: List[Dict[str, str]], tokenizer: AutoTokenizer)
                 add_generation_prompt=True,
                 tokenize=True,
             )
-            return len(tokens)
+            if isinstance(tokens, dict) and "input_ids" in tokens:
+                ids = tokens["input_ids"]
+            elif hasattr(tokens, "keys") and "input_ids" in tokens.keys():
+                ids = tokens["input_ids"]
+            else:
+                ids = tokens
+            if hasattr(ids, "tolist"):
+                ids = ids.tolist()
+            if isinstance(ids, list) and ids and isinstance(ids[0], list):
+                return len(ids[0])
+            return len(ids)
         except Exception:
             pass
     joined = "\n".join(f"{m.get('role')}: {m.get('content','')}" for m in messages)
@@ -496,7 +506,12 @@ def _prepare_requests(
         messages = [dict(m) for m in item["messages"]]
         messages = _truncate_messages(messages, tokenizer, target_input_tokens, keep="head")
         realized_input_tokens = _count_chat_tokens(messages, tokenizer)
-        if not (min_input_tokens <= realized_input_tokens <= target_input_tokens):
+        token_tolerance = max(1, _get_input_token_margin())
+        if not (
+            (min_input_tokens - token_tolerance)
+            <= realized_input_tokens
+            <= (target_input_tokens + token_tolerance)
+        ):
             raise RuntimeError(
                 "Sampled LongBench-v2 request realized outside input range: "
                 f"seed={seed} request_index={req_idx} target_input_token_count={target_input_tokens} "

@@ -1,3 +1,175 @@
+## SENPAI Preparation Overlay
+
+This branch prepares the official InferenceBench repository to run as a SENPAI
+target while keeping the original benchmark README below intact.
+
+What changed for SENPAI:
+
+- Added `program.md` with the SENPAI target contract: scenario metrics,
+  protected benchmark boundaries, W&B logging requirements, result schema,
+  quality/integrity expectations, and the public 2026-05-21 reference snapshot.
+- Added `instructions/prompt-advisor.md` and `instructions/prompt-student.md`
+  with role-specific guidance for advisor/student coordination, branch
+  isolation, two-hour urgency, one-GPU scheduling, live `BASELINE.md`
+  management, and LLM inference optimization scope.
+- Added `senpai/` helpers for SENPAI-only functionality:
+  `preflight.py`, `materialize_requests.py`, `create_task_workspace.py`,
+  `gpu_slot.py`, `summarize_metrics.py`, `log_metrics_to_wandb.py`,
+  `validate_result.py`, `runtime_doctor.py`, and `create_engine_venv.py`.
+- Task workspaces created by `senpai/create_task_workspace.py` now include
+  `eval_env.sh` and `clean_eval_artifacts.sh` so students inherit the base
+  model, scenario, deterministic request file, PyTorch baseline metrics path,
+  quality registry, and runtime cache setup before evaluation.
+- `senpai/gpu_slot.py` provides a lightweight shared-pod GPU lease for
+  multi-student, one-GPU runs. It records owner/PR/scenario/TTL and can wrap
+  heavy evaluation commands without changing the official benchmark harness.
+- `senpai/preflight.py` now catches broken torch/vLLM runtime imports in the
+  target image before the 2 hour clock opens, including the vLLM OpenAI API
+  server entrypoint used by launcher experiments.
+- `senpai/run_launch_smoke_test_job.sh` runs the exact pod image and target
+  branch intended for launch before the 2 hour clock opens. It checks Claude
+  config, Weave plugin config, `nvidia-smi`, mounted secrets, and scoring
+  preflight from inside Kubernetes, then prints the immutable image digest to
+  use for the timed launch.
+- `senpai/validate_result.py` mechanically separates quick research signals
+  from terminal baseline updates. It rejects quick mode, partial request
+  counts, skipped or failed quality, missing W&B IDs, missing PyTorch baselines,
+  and empty launchers before `BASELINE.md` can be updated.
+- The cutoff harvester archives Claude Code logs from `/root` and per-student
+  homes under `/workspace/home-*`, plus SENPAI student logs, before deleting
+  pods.
+- Added a combined SENPAI + InferenceBench container definition at
+  `docker/senpai-inferencebench.Dockerfile` and a GHCR build workflow. The
+  image pins the vLLM-compatible CUDA 12.8 torch/xformers stack even when the
+  CoreWeave base image ships a newer torch.
+- Configured the expected W&B destination as
+  `wandb-applied-ai-team/inferencebench-senpai`.
+- Kept reusable SENPAI launchers, research notes, scoring preflight, and W&B
+  logging outside the protected benchmark evaluator and scenario files.
+
+Current hardware note:
+
+- Today’s SENPAI shakedown runs are on an NVIDIA RTX PRO 6000 Blackwell-class
+  GPU with about 96 GB VRAM, not the official leaderboard H100 80 GB setting.
+- RTX PRO 6000 results are useful for debugging orchestration, image/runtime
+  compatibility, request generation, baseline readiness, and promising
+  launcher directions.
+- Do not claim README leaderboard wins from RTX PRO 6000 measurements. The
+  final leaderboard-comparable runs should be repeated on a single H100 80 GB
+  GPU with matching PyTorch baselines, quality baseline registry, request
+  files, seeds, and full clean relaunch.
+
+Recommended SENPAI preflight:
+
+```bash
+# Current RTX PRO 6000 shakedown mode: hard launch gate
+senpai/require_scoring_preflight.sh --scenario all \
+  --expected-gpu "RTX PRO 6000" \
+
+# Later H100 leaderboard-comparable mode
+senpai/require_scoring_preflight.sh --leaderboard-mode --scenario all \
+  --expected-gpu H100
+```
+
+If preflight fails, prepare the missing deterministic request files, PyTorch
+speed baselines, MMLU-Pro samples, and quality baseline registry before
+assigning serving-optimization PRs. Raw objectives from shakedown runs are
+research signals, not `speedup_over_pytorch` leaderboard results.
+
+Required scoring setup before the 2 hour clock:
+
+```bash
+# Runs on one GPU outside the SENPAI optimization budget and exports assets
+# to the shared PVC for inspection or reuse.
+senpai/run_scoring_setup_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --export-slug rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+
+# In any clone that should be eligible for SENPAI launch, import/check them:
+senpai/require_scoring_preflight.sh \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+Do not start a SENPAI replicate unless `senpai/require_scoring_preflight.sh`
+passes in the same target branch/image/hardware context the advisor and
+students will use.
+
+Required launch smoke test before the 2 hour clock:
+
+```bash
+senpai/run_launch_smoke_test_job.sh \
+  --repo-branch codex/inferencebench-senpai-target \
+  --image ghcr.io/morganmcg1/inferencebench-senpai:pr-1 \
+  --image-pull-secret ghcr-morganmcg1-pull \
+  --import-dir /mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248 \
+  --scenario all \
+  --expected-gpu "RTX PRO 6000"
+```
+
+This job runs outside the benchmark budget and should pass before arming
+`senpai/arm_cluster_cutoff.sh`. It catches broken image/runtime wiring such as
+an empty `nvidia-smi` shim, invalid Claude/Weave JSON config, missing launch
+secrets, or absent scoring assets before advisor/student pods start waiting at
+the gate. Use the printed `@sha256:...` image digest in the timed SENPAI launch
+and cutoff commands rather than relying on a mutable tag.
+
+Shared-pod shakedown notes:
+
+- Source `senpai/runtime_env.sh` before launching vLLM/SGLang/TGI in the RTX
+  PRO 6000 pod. It exports CUDA pip-package include/library paths and pod-local
+  cache directories, defaults `INFERENCE_BENCH_MAX_MODEL_LEN=32768`, and
+  disables vLLM's implicit FlashInfer sampler/prefill path unless a launcher
+  explicitly opts back in. This avoids current RTX PRO 6000 FlashInfer startup
+  failures without touching benchmark code.
+- Wrap heavy server/evaluator work with `senpai/gpu_slot.py run --wait` rather
+  than ad hoc shell polling. The helper uses a unique lease, blocks when
+  `nvidia-smi` shows unleased GPU compute processes, heartbeats active runs, and
+  kills its command process group if the lease is lost. When the cutoff time is
+  known, pass `--deadline-utc` or set `INFERENCE_BENCH_RUN_DEADLINE_UTC`, plus
+  `--min-remaining-s`, so late full evaluations refuse to start.
+- Do not mutate the shared system Python in packed pods. The image and runtime
+  helper set `PIP_REQUIRE_VIRTUALENV=true`; optional SGLang/TGI/TensorRT/custom
+  backend installs should use per-PR venvs via `senpai/create_engine_venv.py`
+  or equivalent isolated environments.
+- Run `senpai/validate_result.py` before merging a serving PR as a winner or
+  updating `BASELINE.md`. Quick probes belong in the provisional ledger even
+  when their speedup looks strong.
+- Coordinate teardown carefully in one-GPU multi-student pods. Kill only the
+  server process group you launched; avoid broad `pkill` cleanup that can stop
+  another student's active benchmark server.
+- Use SENPAI's cluster cutoff harvester before deleting deployments so
+  root and per-student `.claude` conversations are archived to the PVC. A bare
+  cleanup job that only deletes deployments cannot recover `.claude` after pods
+  are gone.
+
+For five parallel 2 hour InferenceBench SENPAI replicates using one advisor pod
+and one shared-student pod per replicate, arm the cutoff/harvest job as part of
+startup:
+
+```bash
+senpai/arm_cluster_cutoff.sh \
+  --run-slug ib-YYYYMMDD-rerun \
+  --tags-csv ib-YYYYMMDD-r1,ib-YYYYMMDD-r2,ib-YYYYMMDD-r3,ib-YYYYMMDD-r4,ib-YYYYMMDD-r5 \
+  --expected-pods 10 \
+  --expected-deployments 10 \
+  --budget-hours 2 \
+  --harvest-lead-seconds 300 \
+  --start-gate-path /mnt/new-pvc/senpai-start-gates/ib-YYYYMMDD-rerun/start \
+  --image ghcr.io/morganmcg1/inferencebench-senpai@sha256:<digest-from-smoke> \
+  --image-pull-secret ghcr-morganmcg1-pull
+```
+
+The job writes logs to
+`/mnt/new-pvc/senpai-conversation-logs/<run-slug>/` before deleting the tagged
+deployments, and starts a best-effort local mirror into `conversation_logs/`.
+Pass the same `--start_gate_path` value to `k8s/launch.py` so advisor and
+student pods wait until every expected pod is Ready before the 2 hour clock
+opens.
+
 <div align="center">
 
 <h1>InferenceBench: A Benchmark for Open-Ended LLM Inference Optimization by AI Agents</h1>
