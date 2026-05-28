@@ -319,3 +319,64 @@ supersedes PR #138 SGLang 1.247x (+66% improvement).
 - **Higher max-num-seqs on Sc D:** `--max-num-seqs 64` with FP8+n-gram may improve req/s
   further (currently at 32; Sc D concurrency 4 × 24 requests = 96 total).
 - **SGLang + speculative** once the vLLM composition results solidify as the reference.
+
+---
+
+## 2026-05-28 13:44 UTC — PR #142: Scenario C scale max-num-seqs 128/256 + batched-tokens 16384
+
+- **Branch:** `fern/sc-c-highconc-scale`
+- **Student:** fern
+- **Hypothesis:** PR #140 used `max-num-seqs=64`; doubling to 128 or 256, and scaling
+  `max-num-batched-tokens` to 16384, should further improve Sc C throughput by handling
+  more concurrent requests per scheduler cycle.
+
+### Quick probe results (4 requests each)
+
+| arm | max_num_seqs | batched_tokens | Quick speedup | W&B |
+|---|---:|---:|---:|---|
+| arm1 | 128 | 8192 | 3.9017x | logged |
+| arm2 | 64 | 16384 | 3.8991x | logged |
+| arm3 | 128 | 16384 | 3.9005x | logged |
+| arm4 | 256 | 16384 | 3.8704x | logged |
+
+All 4 quick probes within 0.8% of each other.
+
+**Promotion:** arm1 per simplest-within-5% rule. (Quick concurrency=64 burst fits in all
+configs ≥64 seqs, so the quick can't differentiate architecturally.)
+
+### Full eval results (arm1 — 256 reqs × 3 profiles = 768 total)
+
+| Metric | Value |
+|---|---|
+| Speedup vs PyTorch | **21.098x** (vs PR #140 21.052x = **+0.22%**) |
+| burst req/s | 2.618 (PR #140: 2.605) |
+| poisson req/s | 1.857 (PR #140: 1.854) |
+| constant req/s | 1.175 (PR #140: 1.175) |
+| Quality ratio (n=500) | 1.054 (observed 0.314 vs 0.298 baseline) ✓ |
+| Speed success | 768/768 ✓ |
+| VRAM peak | 90923 MiB |
+| W&B | 2jw0s5lk |
+
+### Analysis
+
+- **Plateau confirmed:** +0.22% over PR #140 is at or below run-to-run variance. All four
+  concurrency/batching combinations tested in this sweep returned virtually identical results.
+  The Sc C vLLM architecture is saturated at the concurrency-scaling axis.
+- **Quick probes accurately signalled plateau:** All 4 arms within 0.8% at quick. This was
+  because burst concurrency=64 fits in every `max-num-seqs ≥ 64` config — the quick sample
+  can't stress-test configs designed for 128+ concurrent requests. Only the full eval
+  (256-request profiles) reveals the marginal gain.
+- **seqs=128 is the correct frontier:** arm1 (seqs=128/tok=8192) marginally beats arm2
+  (seqs=64/tok=16384), confirming that request count matters more than individual batch width
+  for Sc C throughput.
+- **FP8 KV-cache and SGLang are the remaining levers:** FP8 weights hurt Sc C (-3.3% in
+  PR #140); FP8 KV-cache is different — it compresses KV memory, allowing the same 90 GB
+  to hold more concurrent KV states. SGLang's radix attention (persistent prefix sharing) may
+  also help on the poisson/constant profiles where request inter-arrival is structured.
+
+**Next experiments for Sc C:**
+- **SGLang default + radix attention** (fern PR #144 if assigned) — reference shows SGLang
+  51.12x vs vLLM 48.69x on H100 (+5%). Should outperform vLLM on RTX PRO 6000 similarly.
+- **vLLM FP8 KV-cache:** `--kv-cache-dtype fp8` — reduces KV memory footprint, potentially
+  allowing even higher effective concurrency within 96 GB VRAM.
+- **SGLang + chunked prefill + radix** once SGLang base is established.

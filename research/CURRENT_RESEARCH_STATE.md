@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 13:39 UTC
+- **As of:** 2026-05-28 13:50 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -26,7 +26,8 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 |---|---|---|---|---:|---|
 | fern | B (output-heavy TPOT) | vLLM 0.11 | n-gram speculative (quick 3.52x → full 2.687x) | #136 | **MERGED 12:19 UTC — Sc B best 2.687x** |
 | fern | C (high-load throughput) | vLLM 0.11 | high-conc BF16 + prefix caching (arm1 BF16 high-conc, full 21.052x) | #140 | **MERGED 13:03 UTC — Sc C first winner 21.052x** |
-| fern | C (high-load throughput) | vLLM 0.11 | scale to max-num-seqs 128/256, batched-tokens 16384 | #142 | **terminal 21.098x (+0.22% over #140), rebase requested 13:39 UTC** |
+| fern | C (high-load throughput) | vLLM 0.11 | scale to max-num-seqs 128/256, batched-tokens 16384 | #142 | **MERGED 13:44 UTC — Sc C new best 21.098x** |
+| fern | C (high-load throughput) | SGLang | SGLang default + chunked prefill + radix cache vs vLLM | #144 | **assigned 13:50 UTC** |
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **MERGED 12:50 UTC — Sc D first winner 1.247x** |
 | tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **arm3 (spec15/lookup8) quick 6.918x — full eval running** |
