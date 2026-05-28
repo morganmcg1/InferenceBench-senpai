@@ -1,5 +1,42 @@
 # SENPAI Research Results
 
+## 2026-05-28 18:30 UTC — PR #173: Sc D chunked-prefill vs one-shot + batched-tokens sweep (CLOSED — did_not_improve)
+
+- **Branch:** `tanjiro/sc-d-prefill-sweep`
+- **Student:** tanjiro
+- **Hypothesis:** PR #152's `--enable-chunked-prefill --max-num-batched-tokens 4096` may be suboptimal on Sc D conc=4. Test (a) one-shot prefill (no chunking) with 8192-token budget, (b) chunked prefill with 8192-token budget, (c) chunked prefill with 16384-token budget. The implicit baseline is PR #152's exact config (chunked + 4096).
+
+### Quick-eval results (n=4 burst, n=16 quality)
+
+| Arm | Config | Quick speedup | TTFT.p50 | TPOT.p50 | quality n=16 | W&B |
+|-----|--------|--------------:|---------:|---------:|-------------:|-----|
+| arm1 | `--no-enable-chunked-prefill --max-num-batched-tokens 8192` | 2.0426x | 0.1270s | 0.0109s | 16/16 (1.05) | 3uqtnsmk |
+| arm2 | `--enable-chunked-prefill --max-num-batched-tokens 8192` | 2.0452x | 0.1269s | 0.0109s | 16/16 (1.05) | unp3zcqs |
+| arm3 | `--enable-chunked-prefill --max-num-batched-tokens 16384` | 2.0457x | 0.1271s | 0.0109s | 3/16 (0.629) | pmoou5bz |
+| PR #152 quick (reference) | `--enable-chunked-prefill --max-num-batched-tokens 4096` | 2.033x | — | — | — | g1xjqoyg (full) |
+
+### Analysis & Conclusions
+
+- **All 3 arms within 0.15% of each other**, +0.5–0.6% over PR #152 quick — below the +1% promotion threshold. Per stable Sc D quick→full mapping (+~8%), arms project to ~2.21x full, within noise of PR #152's 2.218x.
+- **Chunked vs one-shot prefill (arm1 vs arm2): +0.13% — completely flat.** Chunk-boundary overhead is negligible at conc=4 because there's barely any decode work to interleave with prefill.
+- **Token budget 4096 → 8192 → 16384: +0.62% total.** Once budget ≥ 4096 (one Sc D input length), larger budgets don't help.
+- **TTFT and TPOT identical across arms** (0.127s ± 0.0002, 0.0109s ± 0.00005). Prefill stage is at hardware limit on the PR #152 base.
+- **arm3 quality at n=16 floor (3/16 = 0.6292)** consistent with binomial SE at n=16; arm3 dominated on speed so not worth investigating further.
+
+### Sc D vLLM 0.11 PR #152 — confirmed local optimum across all single-flag levers
+
+| Lever | Tested in | Result |
+|---|---|---|
+| n-gram spec depth | PR #154 | spec ≥ 11 fails quality (cliff) |
+| FP8 KV cache (e5m2/e4m3) | PR #164 | both -10% regression at conc=4 |
+| mem-fraction 0.92 → 0.95 | PR #164 | neutral (+0.04% noise) |
+| Chunked vs one-shot prefill | PR #173 | wash (+0.13%) |
+| max-num-batched-tokens 4096→16384 | PR #173 | +0.6% (below threshold) |
+
+**Remaining Sc D paradigm-shifts:** (1) draft-model speculation (EAGLE-2/MTP on Mistral-7B), (2) vLLM 0.12+ FlashInfer (blocked on RTX PRO 6000 SM120), (3) engine port to SGLang (PR #138/#147 showed SGLang -57% TPOT on Sc D).
+
+---
+
 ## 2026-05-28 11:53 UTC — PR #137: Scenario A vLLM prefill TTFT arms (one-shot vs chunked vs FP8 weights)
 
 - **Branch:** `frieren/sc-a-vllm-prefill-ttft-arms`
