@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 14:50 UTC
+- **As of:** 2026-05-28 15:35 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,8 +22,8 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #147 | D | SGLang LPM + radix cache (port of PR #144 +15.2% mechanism to Sc D) | **assigned 14:50 UTC** |
-| frieren | #148 | A | FlashInfer prefill attention + FP8 weights (kernel-level TTFT attack) | **assigned 14:55 UTC** |
+| fern | #147 | D | SGLang LPM + radix cache (port of PR #144 +15.2% mechanism to Sc D) | **quick complete, full eval running** |
+| frieren | #150 | C | SGLang FP8 KV cache (`fp8_e5m2`) + mem-fraction push (0.85→0.92) — extend PR #144 | **assigned 15:35 UTC** |
 | tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
 
 All 3 student GPUs occupied.
@@ -41,8 +41,12 @@ All 3 student GPUs occupied.
 | #142 | fern | C | 21.098x vLLM seqs=128 | MERGED — superseded by #144 |
 | #143 | frieren | A | 1.8603x FP8+n-gram | CLOSED — spec metric-orthogonal to TTFT |
 | #144 | fern | C | 24.305x SGLang LPM+radix | MERGED — current Sc C best (+15.2%) |
-| #145 | frieren | A | 1.380x FP8 weights + FP8 KV cache | CLOSED — FP8 KV regresses TTFT -26% on SM120 concurrency-1 |
-| #146 | tanjiro | B | 3.83x FP8 weights + spec15/lookup8 | CLOSED — quality gate fails (0.913), FP8 drift amplified by greedy spec verify |
+| #145 | frieren | A | 1.380x FP8 weights + FP8 KV cache | CLOSED — FP8 KV regresses Sc A TTFT -26% at conc=1 compute-bound prefill |
+| #146 | tanjiro | B | 3.83x FP8 weights + spec15/lookup8 | CLOSED — quality gate fails (0.913); FP8 drift amplified by greedy spec verify |
+| #147 | fern | D | partial: quick arm4 1.506x (FP8+NGRAM) | **full eval running** — below PR #139 2.073x expected |
+| #148 | frieren | A | 1.484x Triton fallback (did_not_improve) | CLOSED — FlashInfer blocked on vLLM 0.11/FlashInfer 0.6 stack (5-layer cascade) |
+| #149 | tanjiro | B | spec20/25/30 BF16 — quick probes pending | **assigned 15:15 UTC** |
+| #150 | frieren | C | SGLang FP8 KV + mem 0.92 — quick probes pending | **assigned 15:35 UTC** |
 
 ## Key learnings
 
@@ -54,48 +58,50 @@ All 3 student GPUs occupied.
 
 4. **SGLang LPM scheduler unlocks radix cache on Sc C** (+15.2% over vLLM best, 24.305x). In SGLang 0.5.x, radix cache is ON by default — `--schedule-policy lpm` reorders the request queue to maximise prefix-tree hits. FCFS scheduling wastes the radix cache.
 
-5. **FP8 hurts on Sc C** (scheduler/KV-memory-bound, not bandwidth-bound). FP8 dequant overhead dominates at high concurrency.
+5. **FP8 hurts on Sc C in vLLM** (scheduler/KV-memory-bound, not bandwidth-bound). FP8 dequant overhead dominates at high concurrency. **SGLang FP8 KV is a different mechanism** — being tested in PR #150 (different regime: KV block size reduction, not weight dequant).
 
 6. **N-gram spec is metric-orthogonal to Sc A** (TTFT-only primary metric — speculation only improves TPOT, which Sc A doesn't score). Closed PR #143 as a learning, not a failure.
 
-7. **FP8 KV cache hurts Sc A TTFT** (PR #145, -26% regression). At concurrency 1 with an 8192-token prefill, the attention kernel is compute-bound on SM120, not KV-bandwidth-bound. FP8 KV adds dequantization overhead with zero bandwidth benefit at this operating point. The vLLM FP8 bandwidth-reduction levers are now exhausted for Sc A; next attack is the attention kernel itself (FlashInfer).
+7. **FP8 KV cache hurts Sc A TTFT** (PR #145, -26%). At concurrency 1 with an 8192-token prefill, the attention kernel is compute-bound on SM120, not KV-bandwidth-bound. FP8 KV adds dequantization overhead with zero bandwidth benefit at this operating point. This is regime-specific — Sc C's 256-concurrency, KV-memory-bound workload is expected to behave differently.
 
-8. **FP8 + spec15 composition fails quality gate on Sc B** (PR #146, 0.913 ratio). +7.9% speed but -8.7% quality vs PR #141 baseline. FP8 weight precision drift is amplified by greedy speculative verify at depth=15 — each rejected draft token is from a slightly different distribution, causing cumulative accuracy degradation. Contrast with Sc D (PR #139): FP8+spec5 passed quality at 0.953 because spec=5 verify is a much smaller perturbation per step. **Rule established: FP8 + deep spec (depth ≥ 15) fails quality on Sc B.** Next Sc B attack: deeper spec (20/25/30) without FP8.
+8. **FP8 + spec15 composition fails quality gate on Sc B** (PR #146, 0.913 ratio). +7.9% speed but -8.7% quality vs PR #141 baseline. FP8 weight precision drift is amplified by greedy speculative verify at depth=15. Rule: FP8 + deep spec (depth ≥ 15) fails quality on Sc B.
 
-7. **Quick-to-full ratios for speculative decoding:** Sc B consistently ~51–76% (quick overestimates due to repetitive samples at n=4). Treat quick speculative results as upper bounds.
+9. **SGLang LPM + radix does NOT transfer to Sc D** (PR #147, partial). Sc D has 4-concurrency with unique requests — no prefix sharing, so radix cache adds overhead with no benefit. arm1 (LPM+radix) gave only 1.121x quick. Best single lever was FP8 (arm2, 1.316x quick), composition arm4 (FP8+NGRAM) gave 1.506x quick but projected ~1.72x full — below PR #139 2.073x. Full eval running to confirm.
+
+10. **FlashInfer attention is blocked on vLLM 0.11 + FlashInfer 0.6.x stack** (PR #148). Five-layer SM120 incompatibility cascade (plan() arg drift, cudagraph fast-path mismatch, FP8 GEMM linker failure). Triton fallback regressed -20% vs FA2 baseline. vLLM ≥ 0.12 would unblock this. All vLLM 0.11 Sc A levers are now exhausted.
 
 ## Current research focus
 
-**Primary focus: close the gap to H100 SMAC3 ceilings, especially Sc B (23%) and Sc D (36%).**
+**Primary focus: close the gaps to H100 SMAC3 ceilings, especially Sc B (23%) and Sc D (36%).**
 
-The SGLang LPM mechanism is now confirmed on Sc C. Three active hypotheses test whether it transfers to other scenarios and whether composition levers work on each scenario:
+### Active hypothesis queue (in priority order)
 
-- **Sc D (fern #147):** SGLang LPM + radix on 4096-token inputs. These longer prefixes should hit the radix tree harder than Sc C's 1024-token inputs. Composition with FP8 and/or n-gram spec (if SGLang supports it) in later arms.
+1. **Sc B tanjiro #149:** Deeper spec sweep (spec20/25/30 BF16). The superlinear depth scaling from PR #141 (spec5→spec15: +32%) hasn't hit saturation. If spec20-30 continues the trend, Sc B could reach 5-7x. Low risk. Most important experiment in flight.
 
-- **Sc A (frieren #145):** FP8 KV-cache to shrink attention memory footprint at prefill. FP8 KV frees KV-block VRAM, allowing a larger effective batch even at concurrency=1. Potential for another 1.2–1.5x gain on top of the 1.866x FP8-weight baseline.
+2. **Sc C frieren #150:** SGLang FP8 KV (`fp8_e5m2`) + mem-fraction push (0.85→0.92). PR #144 left 15 GiB unused VRAM. FP8 KV halves KV block size → more concurrent states at high concurrency. Different regime from Sc A's FP8 KV regression. Expected +8-15% → ~26-28x.
 
-- **Sc B (tanjiro #146):** FP8 weights + spec15/lookup8 composition. Mirroring the confirmed Sc D composition pattern (FP8 cuts TTFT bandwidth, spec cuts TPOT forward passes). Expected 5–7x if effects are independent, which they should be on Sc B's 1024in/8192out workload.
+3. **Sc D fern #147:** SGLang LPM + radix transfer to Sc D. Quick probes show this likely underperforms PR #139 (radix-cache mechanism requires shared prefixes across requests; Sc D has 4 unique requests with 4096-token inputs). Full eval running to confirm. If did_not_improve, next Sc D attack is vLLM spec15 upgrade from PR #139's spec5.
 
-## Potential next experiments (after current round)
+### Next experiments (after current round)
 
-See full list in `research/RESEARCH_IDEAS_2026-05-28_14:45.md`. Top priorities ordered by expected impact:
+1. **Sc D: vLLM spec15/lookup8 upgrade** — PR #139 Sc D winner uses spec5/lookup4. Upgrading to spec15/lookup8 (two integer changes) gave +32% on Sc B. Should give ~+15% on Sc D → ~2.4x. LOW risk.
 
-1. **Sc D: vLLM spec15/lookup8 composition** (researcher H1) — upgrade PR #139 Sc D winner from spec5/lookup4 to spec15/lookup8 (two integer changes). Confirmed +32% on Sc B; should give ~2.4–2.6x on Sc D. LOW risk. Complements fern's #147 (SGLang engine test) — different axes.
+2. **Sc B: `prompt_lookup_min=1`** — Quick add-on to tanjiro's depth sweep (PR #149 arm3). Single-token lookback allows matching shorter n-grams, may increase accept rate at depth=20+.
 
-2. **Sc B deeper speculation sweep (spec20/lookup10, spec25/lookup12)** (researcher H6) — 3.550x vs 15.23x ceiling = large gap. The spec depth sweep hasn't hit saturation yet; arm1→arm2→arm3 at (7,4)→(10,6)→(15,8) was superlinear. Plus try `prompt_lookup_min=1` as a free add-on.
+3. **Sc A: INT4 weight quantization via Marlin** — 4x bandwidth reduction vs BF16 (vs FP8's 2x). Requires pre-quantized AWQ/GPTQ checkpoint of Mistral-7B-Instruct-v0.3. Higher quality risk but could push 1.866x toward 2.5x.
 
-3. **Sc C: SGLang FP8 KV cache + mem-fraction push** (researcher H2+H5) — 15 GiB of unused VRAM headroom in PR #144. FP8 KV halves KV block size, allowing more concurrent states. `--mem-fraction-static 0.92` + `--kv-cache-dtype fp8_e5m2`. Expected 8–15% req/s gain.
+4. **Sc A: vLLM 0.12+ per-PR venv** — Unblocks FlashInfer attention (layers 2-3 of the PR #148 cascade fixed in vLLM 0.12+). Same install approach as SGLang's per-PR venv.
 
-4. **Sc D SGLang + n-gram spec composition** (researcher H3) — after fern's #147 establishes SGLang LPM baseline on Sc D, compose with spec. SGLang NGRAM flag: `--speculative-algorithm NGRAM`. Note: SGLang NGRAM may disable overlap scheduler (measure empirically).
-
-5. **Sc C: SGLang + n-gram spec** (researcher H4) — 1024-token decode per request may accept spec proposals. Add `--speculative-algorithm NGRAM --num-speculative-tokens 5/10` to PR #144 arm3 config. Expected 3–12% gain on constant/poisson profiles.
-
-6. **Sc A: TensorRT-LLM** — if FlashInfer (PR #148) plateaus, TRT-LLM with fused FP8 kernels targets the 1.866x → 4.48x gap. High install risk; reserve for late session.
+5. **Sc D: Sc C SGLang FP8 KV transfer** — If frieren's PR #150 wins on Sc C, apply the same FP8 KV + mem-fraction mechanism to SGLang on Sc D.
 
 ## Operational notes
 
 - SGLang relaunch contract: bundle `lib/libnuma.so.1` in every SGLang launcher PR; per-PR venv at `/tmp/inferencebench-engine-venvs/sglang-pr-<slug>` auto-bootstrapped via `uv venv` + `pip install sglang[all]==0.5.12.post1`.
 - `--enable-radix-cache` does NOT exist in SGLang 0.5.x. Use `--disable-radix-cache` if needed; radix cache is ON by default.
-- H100 reference timing: ~22:38 UTC hard close for this 12-hour shakedown. With ~7.75 hours remaining, we have room for ~2–3 more full-eval cycles per student.
+- `TRITON_ATTN` is the correct backend name in vLLM 0.11 (not `TRITON_ATTN_VLLM_V1`).
+- H100 reference timing: ~22:38 UTC hard close for this 12-hour shakedown. With ~7 hours remaining, we have room for ~2 more full-eval cycles per student.
 - Quality gate: MMLU-Pro tau=0.95 (observed/baseline ≥ 0.95), n=500. Gate floor: 0.283.
 - VRAM budget: 97.9 GiB total; practical ceiling ~93 GiB with fragmentation.
+- Rule: FP8 + spec ≥ 15 fails quality on Sc B.
+- Rule: FlashInfer attention is blocked on vLLM 0.11 + FlashInfer 0.6.x on SM120.
+- Rule: FP8 KV regresses Sc A TTFT at conc=1 (compute-bound prefill). Different for Sc C (high-concurrency KV-bound) — PR #150 testing.

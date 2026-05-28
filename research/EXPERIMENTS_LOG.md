@@ -679,3 +679,85 @@ Promotion: arm1 per >5% rule. arm2 (min=1) is much worse — single-token lookba
 - **arm3 (FP8+spec20) was slower than arm1 (FP8+spec15):** This is a confounded signal because FP8 amplifies rejection rate at depth=20. The clean depth=20 signal (BF16) is measured in PR #149.
 
 **Next experiment for tanjiro:** PR #149 — n-gram spec depth sweep beyond 15 (spec20, spec25, spec30) with BF16, no FP8. Tests whether the superlinear depth trend from PR #141 continues toward the H100 SMAC3 ceiling (15.23x).
+
+---
+
+## 2026-05-28 15:25 UTC — PR #148: Scenario A FlashInfer prefill attention + FP8 weights (CLOSED — blocked by SM120 / vLLM 0.11 stack)
+
+- **Branch:** `frieren/flashinfer-sc-a-prefill`
+- **Student:** frieren
+- **Hypothesis:** FlashInfer attention's fused prefill kernel (Tensor-Core tiling) should beat
+  FlashAttention 2 on Sc A's 8192-token prefill at concurrency 1. PR #145 closed the bandwidth
+  side of the Sc A problem (FP8 KV was net negative because attention is compute-bound), so the
+  next attack is kernel-level.
+
+### Result
+
+| Arm | Backend | Quick speedup | TTFT.p50 (s) | Status |
+|---|---|---:|---:|---|
+| arm1 FlashInfer + FP8w | FLASHINFER | — | — | **BLOCKED** at vLLM↔FlashInfer plan() signature mismatch |
+| arm1 FlashInfer + FP8w + compat shim + `--enforce-eager` | FLASHINFER | — | — | **BLOCKED** at FP8 GEMM JIT linker (`libcublas` not findable) |
+| arm2 / arm3 FlashInfer variants | FLASHINFER | — | — | Not run (same upstream blockers as arm1) |
+| **arm1-fallback Triton + FP8w** | **TRITON_ATTN** | **1.484x** | **0.2955** | Boots cleanly; **−20% vs PR #137 (1.866x)** |
+| PR #137 reference | FLASH_ATTN | 1.866x (full) | 0.2349 | Current Sc A best |
+
+**Closed:** did_not_improve, `baseline_update_allowed=false`. W&B run: `i7331pvj` (Triton arm1 quick).
+
+### The 5-layer FlashInfer ↔ vLLM 0.11 incompatibility cascade (frieren's investigation)
+
+Each fix surfaced the next blocker; frieren stopped at layer 5 (out-of-scope patches):
+
+1. **`max-num-seqs < 9` triggers FlashInfer kernel_warmup buffer overflow.** `kernel_warmup.py:55` calls
+   `_dummy_run(num_tokens=16, create_mixed_batch=True)`; `num_decode_tokens=8`, `num_reqs=9`. With
+   `max_num_seqs<9`, `seq_lens.np` cannot hold the array. PR's arm3 (`--max-num-seqs 4`) is therefore
+   infeasible without a vLLM patch.
+2. **vLLM 0.11 ↔ FlashInfer 0.6 `plan()` positional-arg drift.** vLLM pins `flashinfer-python==0.3.1`
+   but image has `0.6.11.post3`. `BatchDecodeWithPagedKVCacheWrapper.plan()` in 0.6.x inserts a new
+   `o_data_type` parameter between `kv_data_type` and `data_type`. vLLM's `fast_plan_decode` passes
+   positionally → `sm_scale` ends up bound to `rope_scale` (None). Assertion fires:
+   `assert decode_wrapper._sm_scale == self.scale` (`flashinfer.py:972`).
+3. **Cudagraph fast-path drift.** Even with a Python `.plan()` shim, the cudagraph fast-path makes a
+   DLPack call into a JIT-compiled `plan(0..18: DLTensor*/int/bool)` expecting 19 args but receiving 15.
+   `--enforce-eager` bypasses this path.
+4. **FlashInfer FP8 GEMM JIT linker error.** `flashinfer.gemm.gemm_base.fp8_gemm_sm100` JIT-builds for
+   `arch=compute_120f,code=sm_120f`. `nvcc` compile succeeds, but `/usr/bin/ld: cannot find -lcublas`
+   / `-lcublasLt`. `/usr/local/lib/python3.10/dist-packages/nvidia/cublas/lib/` has `libcublas.so.12`
+   / `libcublasLt.so.12` but no unversioned symlinks, and `LIBRARY_PATH` is not configured. Engine
+   dies on first FP8 layer-0 QKV projection.
+5. Not reached — out of scope.
+
+### Triton fallback detail (quick, n=4 burst)
+
+| Metric | Triton arm1 | PR #137 (full, n=128) | PyTorch |
+|---|---:|---:|---:|
+| TTFT.p50 | 0.2955 s | 0.2349 s | 0.4385 s |
+| TTFT.p90 | 0.5955 s | 0.2613 s | 0.5089 s |
+| Generation throughput | 53.6 tok/s | — | 35.7 tok/s |
+| Success | 4/4 | 128/128 | 128/128 |
+| VRAM peak | 91115 MiB | 93267 MiB | — |
+| **Speedup vs PT** | **1.484x** | **1.866x** | 1.000x |
+| **vs PR #137** | **−20.5%** | (baseline) | — |
+
+### Analysis & rules established
+
+- **FlashInfer prefill attention is NOT reachable on the vLLM 0.11 + FlashInfer 0.6.x stack on SM120.**
+  Three independent integration breaks (plan signature, cudagraph fast-path, FP8 GEMM linker) each
+  block engine boot. Patching any one surfaces the next. Frieren confirmed FlashInfer's kernel itself
+  JIT-compiles for `sm_120f` — the kernel works, the integration is the wall.
+- **Triton attention backend is ~20% slower than FlashAttention 2 on Sc A.** Triton is the only viable
+  alternative when FlashInfer breaks, but it cannot recover Sc A; the gap is far above the 2% quick-to-full
+  noise band. PR #137 FA2 + FP8 weights remains the Sc A frontier.
+- **Doc bug for next student:** vLLM 0.11's enum is `TRITON_ATTN`, not `TRITON_ATTN_VLLM_V1` (the PR's
+  instructions said the latter, which doesn't exist).
+- **Rule established: vLLM 0.11 + FlashInfer 0.6.x is broken on SM120.** To unblock FlashInfer requires
+  vLLM ≥ 0.12 (which rewrote `fast_plan_decode` for the new FlashInfer signature). This is a per-PR
+  venv with vLLM ≥ 0.12 — defer until other levers are exhausted.
+- **Rule established: Sc A bandwidth-reduction levers in vLLM 0.11 are FULLY EXHAUSTED.** FP8 weights
+  win (+1.866x), FP8 KV regresses (−26% at conc=1 compute-bound prefill), n-gram is metric-orthogonal
+  (TTFT-only metric), FlashInfer is integration-blocked. The next Sc A attack is either (a) per-PR
+  venv with vLLM ≥ 0.12 + FlashInfer attention, (b) TensorRT-LLM with its own SM120 kernel stack, or
+  (c) INT4 weight-only quantization via Marlin (4x bandwidth reduction vs FP8's 2x).
+
+**Next experiment for frieren:** Pivot to Sc C — extend PR #144 winner (24.305x SGLang LPM + radix)
+with FP8 KV cache + mem-fraction push (researcher H2+H5). Sc C is 256-concurrency, KV-memory-bound;
+FP8 KV halves block size — opposite of Sc A regime. PR #144 left 15 GiB of unused VRAM headroom.
