@@ -24,7 +24,7 @@
 |---|---:|---|---|---|
 | fern | #147 | D | SGLang LPM + radix cache (port of PR #144 +15.2% mechanism to Sc D) | **assigned 14:50 UTC** |
 | frieren | #148 | A | FlashInfer prefill attention + FP8 weights (kernel-level TTFT attack) | **assigned 14:55 UTC** |
-| tanjiro | #146 | B | FP8 weights + spec15/lookup8 composition (expected 5–7x) | **WIP** |
+| tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **assigned 15:15 UTC** |
 
 All 3 student GPUs occupied.
 
@@ -42,6 +42,7 @@ All 3 student GPUs occupied.
 | #143 | frieren | A | 1.8603x FP8+n-gram | CLOSED — spec metric-orthogonal to TTFT |
 | #144 | fern | C | 24.305x SGLang LPM+radix | MERGED — current Sc C best (+15.2%) |
 | #145 | frieren | A | 1.380x FP8 weights + FP8 KV cache | CLOSED — FP8 KV regresses TTFT -26% on SM120 concurrency-1 |
+| #146 | tanjiro | B | 3.83x FP8 weights + spec15/lookup8 | CLOSED — quality gate fails (0.913), FP8 drift amplified by greedy spec verify |
 
 ## Key learnings
 
@@ -58,6 +59,8 @@ All 3 student GPUs occupied.
 6. **N-gram spec is metric-orthogonal to Sc A** (TTFT-only primary metric — speculation only improves TPOT, which Sc A doesn't score). Closed PR #143 as a learning, not a failure.
 
 7. **FP8 KV cache hurts Sc A TTFT** (PR #145, -26% regression). At concurrency 1 with an 8192-token prefill, the attention kernel is compute-bound on SM120, not KV-bandwidth-bound. FP8 KV adds dequantization overhead with zero bandwidth benefit at this operating point. The vLLM FP8 bandwidth-reduction levers are now exhausted for Sc A; next attack is the attention kernel itself (FlashInfer).
+
+8. **FP8 + spec15 composition fails quality gate on Sc B** (PR #146, 0.913 ratio). +7.9% speed but -8.7% quality vs PR #141 baseline. FP8 weight precision drift is amplified by greedy speculative verify at depth=15 — each rejected draft token is from a slightly different distribution, causing cumulative accuracy degradation. Contrast with Sc D (PR #139): FP8+spec5 passed quality at 0.953 because spec=5 verify is a much smaller perturbation per step. **Rule established: FP8 + deep spec (depth ≥ 15) fails quality on Sc B.** Next Sc B attack: deeper spec (20/25/30) without FP8.
 
 7. **Quick-to-full ratios for speculative decoding:** Sc B consistently ~51–76% (quick overestimates due to repetitive samples at n=4). Treat quick speculative results as upper bounds.
 

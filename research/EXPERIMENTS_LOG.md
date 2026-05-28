@@ -636,3 +636,46 @@ All 3 arms within 0.5% of each other — tighter than noise floor. All ~25% slow
 - **Pattern reinforced: scenario-hardware alignment matters.** The same FP8 KV trick that might help decode-bound scenarios (Sc B/D) is actively harmful on a single-stream prefill-dominated workload at concurrency 1 on SM120.
 
 **Next experiment for frieren:** FlashInfer prefill attention backend on Sc A (PR #148) — attack the 8192-token prefill at the kernel level rather than the memory/quantisation level.
+
+---
+
+## 2026-05-28 15:15 UTC — PR #146: Scenario B FP8 weights + spec15/lookup8 composition (CLOSED — quality fail)
+
+- **Branch:** `tanjiro/sc-b-fp8-spec-composition`
+- **Student:** tanjiro
+- **Hypothesis:** Compose FP8 weight quantization (confirmed TTFT gain on Sc A/D) with n-gram
+  spec15/lookup8 (confirmed TPOT gain on Sc B). Expected: multiplicative 5–7x speedup.
+
+### Quick probe results
+
+| Arm | Launcher | Quick speedup | Quality ratio (n=16) | W&B |
+|---|---|---:|---:|---|
+| **arm1** | FP8 + spec15/lookup8/min=2 | **6.39x** | 0.629 (screening) | tovkrsoz |
+| arm2 | FP8 + spec15/lookup8/min=1 | 2.88x | 0.839 | v7x45j9q |
+| arm3 | FP8 + spec20/lookup8/min=2 | 4.84x | 0.839 | sgrmetlf |
+
+Promotion: arm1 per >5% rule. arm2 (min=1) is much worse — single-token lookback increases noise. arm3 (spec20) regresses vs arm1 — FP8 dequant overhead cancels the deeper-spec gain.
+
+### Full eval results (arm1 — 64 requests, burst profile)
+
+| Metric | arm1 (FP8+spec15) | PR #141 baseline (spec15 BF16) | Δ |
+|---|---:|---:|---:|
+| **scenario/B/speedup_over_pytorch** | **~3.83x** | **3.550x** | **+7.9%** |
+| inverse_tpot_p50 | 152.21 tok/s | 141.15 tok/s | +7.8% |
+| TPOT.p50 | 6.57 ms | 7.08 ms | -7.2% |
+| TTFT.p50 | 0.0448 s | — | -37% (FP8 helps prefill) |
+| **MMLU-Pro quality ratio (n=500)** | **0.913** | **~1.007** | **−9.3% ❌ FAIL gate** |
+| Speed success | 64/64 ✓ | 64/64 ✓ | — |
+| VRAM peak | 90.5 GiB | 90.3 GiB | ≈ same |
+| W&B | jqaxzt67 | 8656lf5w | — |
+
+**Closed:** Not merged — quality gate fails (0.913 < 0.95). Speed gain (+7.9%) is not bankable with quality failure.
+
+### Analysis
+
+- **Speed composition was real but weak (+7.9%, not the predicted 50–100%).** At spec=15, the verify forward pass is itself prefill-like compute (15 draft tokens × 7B params). FP8 bandwidth savings are partially offset by dequant overhead in each verify step, which is now compute-bound. Contrast with Sc D PR #139: spec=5 verify is small enough that FP8 dequant is amortised.
+- **Quality failure is the decisive problem.** FP8 weight precision loss (small logit drift per token) accumulates differently in spec decoding's greedy verify: each verify step creates a slightly different accept/reject decision tree vs BF16. With 8192 decode tokens × spec15 batches, the number of verify decisions is ~8192/15 ≈ 546 per request. Each decision introduces a tiny FP8 distribution difference; across 500 MMLU-Pro questions at n=64 requests, this compounds to -2.6pp accuracy.
+- **Rule established:** FP8 + deep spec (depth ≥ 15) fails quality gate on Sc B. This is a hard constraint from this data point. Future Sc B experiments must choose: FP8 without deep spec (max spec=5 based on Sc D experience), OR deep spec without FP8 (the PR #141 winner pattern).
+- **arm3 (FP8+spec20) was slower than arm1 (FP8+spec15):** This is a confounded signal because FP8 amplifies rejection rate at depth=20. The clean depth=20 signal (BF16) is measured in PR #149.
+
+**Next experiment for tanjiro:** PR #149 — n-gram spec depth sweep beyond 15 (spec20, spec25, spec30) with BF16, no FP8. Tests whether the superlinear depth trend from PR #141 continues toward the H100 SMAC3 ceiling (15.23x).
