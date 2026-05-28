@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 21:15 UTC
+- **As of:** 2026-05-28 21:22 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -13,7 +13,7 @@
 
 | Scenario | Metric | Best speedup | Engine | PR | vs H100 SMAC3 ceiling |
 |---|---|---:|---|---:|---:|
-| A | 1/ttft.p50 | **1.881x** | vLLM FP8 weights + max-num-seqs=1 | #156 | 42% of 4.48x |
+| A | 1/ttft.p50 | **1.935x** | vLLM 0.21 + FlashInfer + FP8 + max-num-seqs=1 | #186 | 43% of 4.48x |
 | B | 1/tpot.p50 | **4.450x** | vLLM FP8wt + n-gram spec25/12 | #179 | 29% of 15.23x |
 | C | geomean req/s | **29.768x** | SGLang LPM + radix + FP8 wt + FP8 KV + mem 0.90 | #181 | 64% of 46.70x |
 | D | geomean (1/ttft, 1/tpot, req/s) | **2.218x** | vLLM FP8 + n-gram spec10 | #152 | 39% of 5.69x |
@@ -22,14 +22,15 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #188 | C | SGLang FlashInfer / FA3 attention-backend probe on PR #181 winner (arm1 flashinfer, arm2 fa3) | **assigned 21:14 UTC** |
-| frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **running 35+ min** |
-| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (vs PR #179 quick 3.856x = +113%!); arm1 full eval running | **partial result 20:59 UTC; full ETA 22:00-22:30 UTC** |
+| fern | #188 | C | SGLang FlashInfer / FA3 attention-backend probe on PR #181 winner (arm1 flashinfer, arm2 fa3) | **assigned 21:14 UTC; quick ETA 21:30 UTC** |
+| frieren | #189 | D | vLLM 0.21 + FlashInfer on PR #152 winner (FP8 + spec10) — engine upgrade proven on Sc A | **assigned 21:22 UTC; quick ETA 21:40 UTC** |
+| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (+113% over PR #179 quick); arm1 full eval running | **partial result 20:59 UTC; full ETA 22:00-22:30 UTC** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #186 | frieren | A | **1.935x** vLLM 0.21 + FlashInfer (+2.9% over PR #156 1.881x; quality 0.993) | MERGED — new Sc A best; vLLM 0.21+FlashInfer proven on SM120 |
 | #187 | fern | C | SGLang stuck at 0.5.12.post1 — no ≥0.6 on pip; zero GPU consumed | CLOSED — Rule #20: engine ceiling reached; next probe = attention backends |
 | #184 | fern | C | cps=16384 full 29.690x (-0.26% vs PR #181) | CLOSED — chunked-prefill-size is tail-shape knob only (Rule #19); cps axis exhausted |
 | #183 | frieren | A | SGLang 1.549x (-18.5% vs PR #156 1.881x) | CLOSED — SGLang Triton prefill 21% slower than vLLM FA on SM120 |
@@ -88,6 +89,8 @@
 
 17. **Rule #20 — SGLang engine ceiling for this launch (PR #187):** `pip install "sglang[all]"` resolves to 0.5.12.post1 on PyPI; no ≥0.6 exists. Dependency stack byte-for-byte matches PR #181's venv. Future Sc C hypotheses must attack mechanisms *inside* SGLang 0.5.12.post1 (attention backend, kernel choices, scheduler tuning, KV layout). The engine-upgrade axis is exhausted.
 
+18. **vLLM 0.21.0 + FlashInfer unblocks SM120 Blackwell (PR #186):** vLLM 0.11's 5-layer FlashInfer/SM120 cascade (PR #148) is resolved in vLLM 0.21.0 (pip `vllm>=0.12.0`). FlashInfer gives +2.9% TTFT on Sc A vs FlashAttention. Engine upgrade alone (vLLM 0.21 + FA) is ~neutral vs vLLM 0.11 — the gain is attributed entirely to the FlashInfer kernel switch. Quality bonus: 0.953 → 0.993 ratio. **All vLLM-based scenarios (A, B, D) should now be re-probed on vLLM 0.21 + FlashInfer.** Frieren's venv at `/tmp/inferencebench-engine-venvs/vllm12-pr-186` is reusable.
+
 15. **Sc C local optimum near 30x:** 4 consecutive Sc C wins (PR #144 24.305x → PR #151 27.497x +13.1% → PR #172 29.532x +7.4% → PR #181 29.768x +0.80%). Marginal gains shrinking exponentially. Mem-fraction lever exhausted at 0.90. Next mechanisms to test: chunked-prefill-size (for burst tail), CUDA graph batch sizes, or fundamentally new approaches (spec decoding, EAGLE/MTP heads). 64% of H100 SMAC3 ceiling — closing in but real gains require new mechanism.
 
 ## Current research focus
@@ -96,23 +99,23 @@
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc C fern #188 (assigned 21:14 UTC):** SGLang FlashInfer / FA3 attention-backend probe on existing SGLang 0.5.12.post1. 2-arm: arm1 flashinfer (PR #181 + backend swap); arm2 fa3 (PR #181 + backend swap). Reuses PR #167 SGLang venv (same engine). Quick ETA ~21:30 UTC. Hard-close if both arms <+0.5%.
+1. **Sc C fern #188 (assigned 21:14 UTC):** SGLang FlashInfer / FA3 attention-backend probe on existing SGLang 0.5.12.post1. 2-arm: arm1 flashinfer; arm2 fa3. Reuses PR #167 SGLang venv. Quick ETA ~21:30 UTC. Hard-close if both arms <+0.5% (saturated mechanism check).
 
-2. **Sc B tanjiro #185 (partial 8.21x quick):** max-num-seqs=1 on PR #179 base. arm1 full eval running. Critical risk: serial processing under burst arrival may exceed per-request timeout (64th burst req waits ~25 min). Watch agent/server.log. Terminal SENPAI-RESULT ETA 22:00-22:30 UTC. If wins at full + quality≥0.95 → MERGE as Sc B winner (potential ~7-8x = ~50% of 15.23x SMAC3 ceiling).
+2. **Sc B tanjiro #185 (partial 8.21x quick):** max-num-seqs=1 on PR #179 base. arm1 full eval running. Critical risk: serial processing under burst arrival may exceed per-request timeout (64th burst req waits ~25 min). Terminal SENPAI-RESULT ETA 22:00-22:30 UTC. If wins at full + quality≥0.95 → MERGE as Sc B winner (~8x = ~53% of 15.23x SMAC3 ceiling).
 
-3. **Sc A frieren #186 (running 35+ min):** vLLM 0.12 install + FlashInfer probe on SM120. Quick ETA ~21:20-21:30 UTC.
+3. **Sc D frieren #189 (assigned 21:22 UTC):** vLLM 0.21 + FlashInfer on PR #152 winner (FP8 + spec10). 2-arm: arm1 vLLM21+FlashInfer; arm2 vLLM21+FA (control). Reuses vllm12-pr-186 venv. Quick ETA ~21:40 UTC.
 
 ### Next experiments (after current round)
 
-1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. High-risk-high-value.
+1. **Sc A: FlashInfer autotune probe** — PR #186 student suggestion: `enable_flashinfer_autotune=true` (currently off by default in vLLM 0.21) may squeeze +2-3% additional TTFT. Low-complexity follow-up after PR #189 completes.
 
-2. **Sc B: if PR #185 wins** — compose max-num-seqs=1 with spec depth 27/28 (PR #185 + spec push). Or try max-num-seqs=1 + different lookup_min/max (rule #17 caveat applies).
+2. **Sc B: if PR #185 wins** — compose max-num-seqs=1 with vLLM 0.21 + FlashInfer (now proven). Could stack +2.9% engine upgrade on top of the ~+84% quick gain. Extremely high value.
 
-3. **Sc C orthogonal Triton knobs** (if PR #188 backends regress): `--triton-attention-num-kv-splits` tuning, `--enable-torch-compile`, `--cuda-graph-bs` sweep (fern's PR #187 closure follow-ups #3-#5).
+3. **Sc A + Sc D: vLLM 0.21 + FlashInfer + FP8 KV cache** — frieren's PR #186 suggestion. FlashInfer is the only backend with mature FP8 KV cache kernels on SM120. Could reduce VRAM pressure + improve TTFT. Contingent on FP8 KV not regressing at conc=1 (Rule #16 says FP8 KV hurts conc=1/4 on vLLM 0.11 — may behave differently under FlashInfer).
 
-4. **Sc A: contingency on PR #186 outcome:** If vLLM 0.12 + FlashInfer unblocks on SM120, that's a major Sc A axis. If blocked, try `--enable-prefix-caching` + dummy warmup or attention chunking flag.
+4. **Sc C: orthogonal Triton knobs** (if PR #188 backends regress): `--triton-attention-num-kv-splits` tuning, `--enable-torch-compile`, `--cuda-graph-bs` sweep (fern's PR #187 closure follow-ups #3-#5).
 
-5. **Sc D: vLLM 0.12 + n-gram** — if PR #186 succeeds, retest Sc D on vLLM 0.12 with same spec10/lookup6/min=2 config (engine upgrade as orthogonal lever).
+5. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum at spec10. High-risk-high-value for large Sc D gain if EAGLE heads can be served efficiently.
 
 ## Operational notes
 

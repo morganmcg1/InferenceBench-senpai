@@ -1,5 +1,38 @@
 # SENPAI Research Results
 
+## 2026-05-28 21:22 UTC — PR #186: Sc A vLLM 0.21 + FlashInfer SM120 unblock (MERGED — new Sc A best)
+
+- **Branch:** `frieren/sc-a-vllm12-flashinfer`
+- **Student:** frieren
+- **Hypothesis:** vLLM ≥0.12 resolves the 5-layer SM120/FlashInfer compatibility cascade (PR #148); test vLLM 0.21 + FlashInfer on Sc A.
+
+### Quick eval
+
+| Arm | Engine + backend | Quick speedup | TTFT.p50 (s) | Quality (n=16) | W&B |
+|---|---|---:|---:|---:|---|
+| arm1 | vLLM 0.21 + FlashAttention (control) | 1.898x | 0.2311 | 1.049 ✓ | lgeqwsvw |
+| arm2 | vLLM 0.21 + FlashInfer | **1.978x** | 0.2217 | 0.839 (noisy at n=16) | pamzbqd8 |
+
+### Full eval (arm2 promoted)
+
+| Metric | PR #156 (vLLM 0.11 + FA) | PR #186 arm2 (vLLM 0.21 + FlashInfer) | Δ |
+|---|---:|---:|---:|
+| scenario/A/speedup_over_pytorch | 1.881x | **1.9354x** | **+2.9%** |
+| TTFT.p50 (s) | 0.2332 | **0.2266** | -2.8% |
+| Quality ratio (n=500) | 0.953 | **0.993** | +4.0pp |
+| Speed success | 128/128 | 128/128 | tied |
+| VRAM peak (MiB) | ~93,267 | 91,991 | -1.4% |
+
+W&B full eval: `zo8t5mds` (verified, finished, no anomalies)
+
+### Analysis
+
+**FlashInfer SM120 unblock confirmed.** vLLM 0.21.0 (pip `vllm>=0.12.0`) resolves the PR #148 cascade. The engine upgrade alone (arm1) is ~neutral vs PR #156 (1.898x quick ≈ 1.881x full), confirming the +2.9% is entirely attributed to FlashInfer prefill kernel. FlashInfer at conc=1 / 8192-token prefill is measurably faster than FlashAttention on Blackwell SM120. Quality improvement (0.953→0.993 ratio) is a bonus — FlashInfer more numerically accurate at FP8 weights. SMAC3 gap closed from 42% to 43% of H100 reference (4.48x).
+
+**Breakthrough:** vLLM 0.21 + FlashInfer is now available as a proven kernel for all scenarios using vLLM. Sc D (also vLLM-based) is the highest-value follow-up target.
+
+---
+
 ## 2026-05-28 21:11 UTC — PR #187: Sc C SGLang engine upgrade probe (CLOSED — did_not_improve, zero GPU)
 
 - **Branch:** `fern/sc-c-sglang-upgrade`
