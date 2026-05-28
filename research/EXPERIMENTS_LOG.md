@@ -76,3 +76,89 @@ explicit exports.
    default sampler disabled.
 4. **Engine-family probe** (SGLang Triton backend) — only if vLLM hits a
    prefill ceiling that FP8 + structure cannot push past.
+
+## 2026-05-28 17:34 — PR #160 (MERGED, current best): FP8 weight quantization full eval
+
+- `scen-a-fern/fern-fp8-weights`
+- **Hypothesis:** On-the-fly vLLM `--quantization fp8` halves prefill GEMM bandwidth,
+  yielding large TTFT.p50 reduction at burst concurrency 1 while preserving
+  MMLU-Pro quality above the τ=0.95 floor.
+- **Result (full eval, 128/128, seed 248):**
+
+| Metric | Value |
+|---|---:|
+| `scenario/A/speedup_over_pytorch` | **1.8873x** |
+| `scenario/A/inverse_ttft_p50` (raw) | 4.3038 req/s |
+| TTFT.p50 (s) | 0.2325 |
+| MMLU-Pro observed accuracy (n=500) | 0.286 |
+| MMLU-Pro ratio (τ=0.95 floor) | 0.9597 (pass) |
+| Speed success / total | 128 / 128 |
+| VRAM peak | ~89.4 GB |
+| W&B run | `bt2ckkzz` (group `fern-fp8-weights`) |
+
+- **Conclusion:** Validated terminal winner. FP8 weight quantization is the
+  dominant Scenario A lever on RTX PRO 6000 in this image. Merged to
+  `ib-20260528-scen-a-r1`; `BASELINE.md` updated. Quality is just above the
+  0.95 floor (ratio 0.9597) — any subsequent FP8 variant that further reduces
+  model fidelity risks pushing quality below the gate.
+
+## 2026-05-28 17:55 — PR #168 (CLOSED): FlashInfer prefill + FP8 (quick probes)
+
+- `scen-a-fern/fern-flashinfer-fp8`
+- **Hypothesis:** FlashInfer's paged-attention prefill kernel (vLLM
+  `VLLM_ATTENTION_BACKEND=FLASHINFER` with `VLLM_DISABLE_FLASHINFER_PREFILL=0`)
+  is ~15-30% faster than FlashAttention-2 at 8192-token prefill on modern CUDA
+  GPUs; combined with FP8 weights it could push TTFT.p50 below 0.197s.
+- **Result:** **failed_to_boot.** vLLM crashes during cudagraph warmup with
+  `vllm/v1/attention/backends/flashinfer.py:972 AssertionError:
+  decode_wrapper._sm_scale == self.scale`. Sampler kept disabled per
+  fern-fp8-weights pattern; sampler JIT (`curand.h` missing) is a different
+  failure mode. C1 (FP8 KV) was skipped per decision tree.
+- **Conclusion:** FlashInfer prefill on vLLM 0.11.0 + this RTX PRO 6000 image
+  is unreachable with the in-tree backend. `VLLM_DISABLE_FLASHINFER_PREFILL=1`
+  default in `runtime_env.sh` is correct.
+
+## 2026-05-28 18:02 — PR #169 (CLOSED): FP8 + --enforce-eager sensitivity (quick probe)
+
+- `scen-a-frieren/frieren-eager-fp8`
+- **Hypothesis:** At burst concurrency 1, CUDA graph dispatch overhead could
+  be net-negative once the FP8 GEMM dominates; `--enforce-eager` would expose
+  this if so.
+- **Result (quick probe):**
+
+| Metric | D0 | PR #160 winner | Δ |
+|---|---:|---:|---:|
+| `scenario/A/speedup_over_pytorch` | 1.8108x | 1.8873x | **-4.1%** |
+| `scenario/A/inverse_ttft_p50` (raw) | 4.1293 req/s | 4.3038 req/s | -4.1% |
+| TTFT.p50 (s) | 0.2422 | 0.2325 | +9.7 ms |
+| W&B run | `d3oxwdko` (group `frieren-eager-fp8`) | `bt2ckkzz` | — |
+
+- **Conclusion:** Hypothesis rejected. CUDA graphs are net-positive at burst
+  concurrency 1 with FP8 weights on this image. Future Scenario A levers must
+  keep cudagraphs enabled.
+- **Infrastructure finding (carry to next round):** On a cold FlashInfer JIT
+  cache the FP8 path crashes — vLLM's `Fp8LinearOp` on SM_120 routes to
+  `flashinfer_w8a8_scaled_mm` which JIT-compiles `gemm.so`, and the link
+  fails because the nvidia pip cublas package only ships versioned
+  `libcublas.so.12`/`libcublasLt.so.12`. Frieren's launcher created
+  `/tmp/inferencebench-cublas-stubs/lib{cublas,cublasLt}.so` symlinks and
+  prepended that dir to `LIBRARY_PATH`. The PR #160 winner and
+  `senpai/runtime_env.sh` will hit the same crash on a cold cache. Next-round
+  infra task: bake the symlink fix into `senpai/runtime_env.sh` so every FP8
+  launcher survives a cold JIT cache.
+
+## 2026-05-28 18:04 — PR #171 (CLOSED): FlashInfer prefill + FP8 + --enforce-eager rescue
+
+- `scen-a-fern/fern-flashinfer-eager`
+- **Hypothesis:** PR #168 crashed during cudagraph warmup. If the
+  `_sm_scale` assertion is cudagraph-specific, `--enforce-eager` rescues it.
+- **Result:** **failed_to_boot, same assertion.** The probe confirmed
+  `cudagraph_mode=0`, `max_capture_size=0`, `cudagraph_capture_sizes=[]` — yet
+  the AssertionError fires inside `FlashInferImpl.forward` during
+  `kernel_warmup._dummy_run` before any cudagraph would be captured. The
+  wrapper-construction path itself is the broken layer, not cudagraph capture.
+- **Conclusion:** FlashInfer prefill direction is closed for this image. To
+  pursue this lever in a future launch: either (a) vLLM patch relaxing the
+  assertion, (b) a vLLM version bump with known-good FlashInfer 0.4.x on
+  SM_120, or (c) a different engine family (SGLang FP8, TensorRT-LLM) that
+  bypasses vLLM's FlashInfer wrapper entirely.
