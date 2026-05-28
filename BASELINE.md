@@ -27,15 +27,23 @@ baselines):
 
 ## Current best valid launcher (RTX PRO 6000 shakedown)
 
-_No advisor-validated terminal results yet for this branch. PyTorch baseline is
-the only currently-known floor on this hardware._
-
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
-| A | scenario/A/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+| **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | B | scenario/B/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
 | C | scenario/C/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
 | D | scenario/D/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+
+### Scenario A — current winner (PR #137, merged 2026-05-28)
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight-only quantization, BF16 KV cache
+- **Key flags:** `--quantization fp8 --max-num-seqs 8 --max-num-batched-tokens 10240 --no-enable-chunked-prefill --no-enable-prefix-caching --gpu-memory-utilization 0.92`
+- **TTFT.p50:** 0.2349 s (PyTorch 0.4385 s)
+- **Speedup:** 1.866x (inverse_ttft_p50: 4.256 vs 2.280)
+- **Quality:** MMLU-Pro 0.288 obs / 0.298 baseline = ratio 0.966 (gate 0.95, n=500) ✓
+- **Speed success:** 128/128 (failure_rate 0.0) ✓
+- **VRAM peak:** 93267 MiB / 97887 MiB
+- **Reproduce (from task workspace):** `cp senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 
 PyTorch baseline raw objectives (from imported metrics):
 
@@ -73,3 +81,6 @@ research signal only and must not be used to update the current-best row.
   students promoted their best arm to full eval. No terminal results yet.
   Tanjiro PR #138 sent back for libnuma packaging / vLLM-fallback decision
   before any SGLang full eval can become terminal.
+- 2026-05-28 11:53 UTC — Merged PR #137 (frieren). Scenario A new best:
+  1.866x (FP8 weight quantization, vLLM 0.11, FlashAttention). Quality 0.966,
+  128/128 speed success. First terminal win on this branch.
