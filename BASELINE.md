@@ -31,25 +31,25 @@ baselines):
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.881x** | `senpai/launchers/A/fern-vllm-scheduling-int4/arm1_fp8_seqs1_tokens8192.sh` | ds519cur | #156 |
 | **B** | scenario/B/speedup_over_pytorch | **3.888x** | `senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh` | wkedminm | #149 |
-| **C** | scenario/C/speedup_over_pytorch | **29.532x** | `senpai/launchers/C/fern-sglang-fp8wt/arm1_fp8wt_fp8kv.sh` | 5ncgrruu | #172 |
+| **C** | scenario/C/speedup_over_pytorch | **29.768x** | `senpai/launchers/C/fern-sglang-mem-push/arm1_mem090.sh` | 2iilmzji | #181 |
 | **D** | scenario/D/speedup_over_pytorch | **2.218x** | `senpai/launchers/D/fern-vllm-spec15/arm2_fp8_spec10_lookup6.sh` | g1xjqoyg | #152 |
 
-### Scenario C — current winner (PR #172, merged 2026-05-28) — supersedes PR #151
+### Scenario C — current winner (PR #181, merged 2026-05-28) — supersedes PR #172
 
 - **Engine:** SGLang 0.5.12.post1, Triton attention backend, **FP8 weight quantization** + **FP8 KV cache** (fp8_e5m2), radix cache ON, LPM scheduler
-- **Key flags:** `--mem-fraction-static 0.85 --chunked-prefill-size 8192 --schedule-policy lpm --max-running-requests 256 --attention-backend triton --kv-cache-dtype fp8_e5m2 --quantization fp8`
-- **Geomean req/s:** ~2.502 (PyTorch 0.0847) across burst/poisson/constant profiles
-- **Speedup:** 29.532x (+7.4% over PR #151's 27.497x)
+- **Key flags:** `--mem-fraction-static 0.90 --chunked-prefill-size 8192 --schedule-policy lpm --max-running-requests 256 --attention-backend triton --kv-cache-dtype fp8_e5m2 --quantization fp8`
+- **Geomean req/s:** ~2.522 (PyTorch 0.0847) across burst/poisson/constant profiles
+- **Speedup:** 29.768x (+0.80% over PR #172's 29.532x; cumulative +8.3% over PR #151's 27.497x)
 - **Quality:** MMLU-Pro 0.286 obs / 0.298 baseline = ratio **0.960** (gate 0.95, n=500) ✓
 - **Speed success:** 768/768 (failure_rate 0.0) ✓
-- **VRAM peak:** ~84.7 GiB (FP8 weights + FP8 KV reduce both weight and KV footprint)
-- **W&B run:** 5ncgrruu
+- **VRAM peak:** 87.5 GiB (mem 0.90 → +2.8 GiB KV pool vs PR #172's 84.7 GiB; arm2 mem 0.95 not promoted)
+- **W&B run:** 2iilmzji
 - **Reproduce (from task workspace):**
   ```bash
-  cp senpai/launchers/C/fern-sglang-fp8wt/arm1_fp8wt_fp8kv.sh ./start_server.sh && \
+  cp senpai/launchers/C/fern-sglang-mem-push/arm1_mem090.sh ./start_server.sh && \
   python evaluate.py --json-output-file metrics_full.json
   ```
-- **Key insight:** FP8 weights + FP8 KV cache compose additively on Sc C's 256-request KV-bandwidth-bound regime. FP8 weights halve per-batch weight read bandwidth (amortised across 256 concurrent requests); FP8 KV halves the per-token KV block size. Both bandwidth savings stack at high concurrency where neither causes significant compute overhead. arm3 quick control (FP8wt only, BF16 KV) edged arm1 by 1.2% at n=4 quick (concurrency-bound), but at 256-conc full eval the FP8 KV benefit materialises. H100 SMAC3 ceiling 46.70x; this winner closes the gap to 63%.
+- **Key insight:** Raising `--mem-fraction-static` from 0.85 → 0.90 allocates +2.8 GiB to the KV cache beyond the FP8 freed weight headroom, confirming that PR #172's config was still KV-capacity-limited at 256-conc. arm2 (0.95) had +0.19% in quick (below 1% promotion threshold) — not promoted. The 0.85→0.90 gain (+0.80%) is small, indicating KV-utilization ceiling is near. H100 SMAC3 ceiling 46.70x; this winner closes the gap to ~64%.
 
 ### Scenario D — current winner (PR #152, merged 2026-05-28) — supersedes PR #139
 
