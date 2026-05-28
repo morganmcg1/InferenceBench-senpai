@@ -1,5 +1,34 @@
 # SENPAI Research Results — `ib-20260528-scen-c-r1`
 
+## 2026-05-28 18:22 — PR #175 (CLOSED, exploratory): vLLM k=7 n-gram quick probe
+
+- **Branch**: `scen-c-frieren/vllm-ngram-k7-quick-probe`
+- **Hypothesis**: `num_speculative_tokens=7` may amortize TPOT further than k=5 in Scenario C's long-decode regime if draft-token acceptance is high enough that verifier-rejection cost doesn't dominate; alternatively, rejection overhead may neutralize or reverse the gain.
+- **Eval mode**: quick (4 reqs/profile, 12 reqs total). **Not promoted to full eval — no time budget, no baseline-update intent.**
+
+### Result
+
+| Metric | k=5 quick (PR #165 Arm E) | k=7 quick (this PR) | Delta |
+|---|---|---|---|
+| Quick speedup_over_pytorch | ~4.07x | **4.24x** | +0.17x (+4%) |
+| Quick geomean req/s | (not in PR #165 body) | 0.3595 req/s | — |
+| Speed requests | 12/12 | 12/12 | identical |
+| MMLU-Pro n=16 quick screen | failed (noise) | failed (3/16 ratio 0.629) | same regime |
+| VRAM peak | — | 89.29 GB | — |
+| W&B run | (PR #165) | 05zrttlc | — |
+
+### Analysis and conclusions
+
+- k=7 quick beats k=5 quick by ~4% — a small bump consistent with k=7 accepting 1-2 additional draft tokens per decode round without the verifier-rejection cost washing out the gain.
+- The MMLU-Pro n=16 quick screen failed (3/16 correct vs expected ~4.77/16), but the same noise affected the k=5 quick screen — PR #165's full n=500 eval passed quality at ratio 1.000, so there's no reason to think k=7 would be qualitatively worse (verifier scoring is unchanged by k).
+- **Quick mode is screening only**. The 4 reqs/profile sample is dominated by per-request overhead and is not representative of the 768-request full-eval steady state. The +4% quick edge could be amplified, neutralized, or reversed at full eval.
+
+### Next directions implied by this result (for future Scenario C launches)
+
+1. **Paired k=5 vs k=7 full evaluations** (192 req/profile each, n=500 quality) — required to know if the +4% quick edge survives the long-decode regime.
+2. k=9 worth probing **only if k=7 full beats k=5 full**. Diminishing returns are expected per acceptance probability decay.
+3. **Operational hazard logged**: SGLang server orphan on port 8000 — see CURRENT_RESEARCH_STATE.md research findings for mitigation suggestions.
+
 ## 2026-05-28 17:54 — PR #165: vLLM Scenario C — n-gram speculative decoding wins
 
 - **Branch**: `scen-c-frieren/vllm-c-chunked-prefill-full-speculative`

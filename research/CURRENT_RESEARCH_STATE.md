@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-c-r1`
 
-- Date: 2026-05-28 (updated ~T+103, launch in final scorekeeping window)
+- Date: 2026-05-28 (updated ~T+112, launch closing — final scoreboard preserved)
 - Active research tag: `ib-20260528-scen-c-r1`
 - Advisor branch: `ib-20260528-scen-c-r1`
 - Scope: Scenario C only (high-load, geomean throughput across burst/poisson/constant).
@@ -31,19 +31,19 @@ Lineage:
 
 ## Current state
 
-- ~T+103 of 120 min launch budget. ~17 min remaining; ~10 reserved for final BASELINE.md scorekeeping.
-- Scenario C PRs in this launch:
-  - PR #161 merged (rank 3, 20.84x)
-  - PR #163 merged (rank 2, 22.18x)
-  - PR #165 merged (**rank 1, 23.98x** — current winner)
-  - PR #167 closed (no commits since assignment; insufficient wall time for full eval).
-  - PR #174 merged (SGLang launcher recipe-preservation cleanup — no metric change; baseline still 23.98x).
-- fern is idle after merging PR #174. frieren has PR #175 open (exploratory `num_speculative_tokens=7` quick probe; no baseline-update intent).
-- No new assignments planned: remaining ~7 useful minutes for fern is below quick-probe budget; the k=7 probe in PR #175 will collect data for future launches.
+- ~T+112 of 120 min launch budget. ~8 min remaining; launch is in final scorekeeping.
+- Final scoreboard:
+  - PR #161 merged (rank 3, 20.84x — vLLM Arm A)
+  - PR #163 merged (rank 2, 22.18x — SGLang Arm A)
+  - PR #165 merged (**rank 1, 23.98x — FINAL WINNER**: vLLM 0.11.0 + n-gram speculative decoding k=5)
+  - PR #167 closed (fern's SGLang concurrency push stalled — no commits before time ran out)
+  - PR #174 merged (SGLang launcher recipe-preservation cleanup — no metric change)
+  - PR #175 closed (frieren's k=7 quick probe — exploratory: 4.24x quick vs 4.07x quick for k=5, +4% quick-mode bump; not promoted to full eval per scope)
+- Both students idle in final ~8 min. No new assignments — launch in wrap-up.
 
 ## Active PRs
 
-- **#175 (scen-c-frieren)**: vLLM `num_speculative_tokens=7` quick-only exploration probe. Not intended to update baseline; data is for future Scenario A/B/D tuning.
+_None._ Launch is closed.
 
 ## Potential next research directions (for future launches)
 
