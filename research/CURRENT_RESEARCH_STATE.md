@@ -1,6 +1,6 @@
 # SENPAI Research State
 
-- **Updated:** 2026-05-28T18:08Z
+- **Updated:** 2026-05-28T18:20Z
 - **Most recent direction from human researcher team:** No GitHub Issues. Run
   scope fixed by operator: Scenario A parity launch, RTX PRO 6000 shakedown,
   2h budget, 1 GPU shared, 2 logical students. Launch closes
@@ -23,6 +23,7 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
 | #168 | scen-a-fern | C0 FlashInfer + FP8 | Closed | failed_to_boot — `_sm_scale` AssertionError in vLLM FlashInfer wrapper |
 | #169 | scen-a-frieren | D0 FP8 + enforce_eager | Closed | -4.1% TTFT vs winner; cudagraphs are net-positive at burst concurrency 1 |
 | #171 | scen-a-fern | E0 FlashInfer + FP8 + enforce_eager (rescue) | Closed | Same `_sm_scale` assertion with cudagraphs off — wrapper-construction path itself is broken |
+| #176 | scen-a-frieren | F0 V0 engine + FP8 | Closed | failed_to_boot — vLLM 0.11.0 hard-asserts V1 in OpenAI API server; V0 unreachable on this image |
 
 ## Key findings (carry forward)
 
@@ -45,6 +46,10 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
   Workaround: explicit `VLLM_USE_FLASHINFER_SAMPLER=0` and
   `VLLM_DISABLE_FLASHINFER_SAMPLING=1` inside every launcher. The
   `senpai/runtime_env.sh` defaults do not persist through the gpu_slot shell.
+- **vLLM V0 engine is unreachable on this image** via the OpenAI entrypoint
+  (vLLM 0.11.0 hard-asserts `envs.VLLM_USE_V1` in
+  `vllm/entrypoints/openai/api_server.py:209`). Engine-version probes need to
+  come from a different engine family or a vLLM downgrade.
 
 ## Infrastructure carry-overs for next launch
 
@@ -58,14 +63,12 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
   Next-launch task: patch `senpai/runtime_env.sh` to apply the same fix
   upstream of every launcher.
 
-## Time budget (as of 18:08Z)
+## Time budget (as of 18:20Z)
 
-- Cutoff: `2026-05-28T18:36:57Z` → **~29 min remaining**.
-- Reserve 10-15 min for final review/baseline updates → effective student
-  probe window ends ~18:22-18:27.
-- A single new quick probe could fit if started immediately, but the
-  marginal value over the documented winner is low and the carry-over
-  research signal already exists for next-round work.
+- Cutoff: `2026-05-28T18:36:57Z` → **~17 min remaining**.
+- GPU freed early at 18:16:47Z when PR #176 F0 crashed in 15s.
+- One more Fern quick probe is feasible now that the GPU is free; assigned
+  as PR #178 below.
 
 ## Next-round directions (priority-ordered)
 
@@ -73,51 +76,46 @@ success, MMLU-Pro ratio 0.9597 (pass, tight but valid), TTFT.p50 0.2325s, W&B
    fix in so FP8 launchers survive a cold FlashInfer JIT cache. This is an
    infra bug-fix PR, separate from any hypothesis arm. High priority — the
    current winner launcher is fragile to fresh-pod environments.
-2. **vLLM V0 engine + FP8** (`VLLM_USE_V1=0`): pure engine-version comparison
-   on top of the FP8 winner. Cleanest single-flag arm not yet tested.
-3. **Triton attention backend + FP8** (`VLLM_ATTENTION_BACKEND=TRITON_ATTN`):
+2. **Triton attention backend + FP8** (`VLLM_ATTENTION_BACKEND=TRITON_ATTN`):
    alt prefill path that bypasses both FlashAttention-2 and FlashInfer's
    broken wrapper. Worth a quick probe.
-4. **`torch.compile` optimization level + FP8**: vLLM 0.11 supports compile
+3. **`torch.compile` optimization level + FP8**: vLLM 0.11 supports compile
    modes that may further fuse prefill ops. Quick to probe.
-5. **GPTQ or AWQ instead of naive FP8**: a quantization scheme with better
+4. **GPTQ or AWQ instead of naive FP8**: a quantization scheme with better
    quality preservation than naive FP8 weight-only could both pass MMLU-Pro
    more safely (current ratio 0.9597 is only 0.0097 above the τ=0.95 floor)
    and may maintain or improve speed.
-6. **SGLang Triton backend + FP8**: engine-family diversity. The natural
-   path if vLLM hits a hard ceiling we cannot move past.
-7. **vLLM patch to relax the `_sm_scale` assertion** or vLLM version bump
+5. **SGLang FP8 + Triton or TensorRT-LLM**: engine-family diversity. The
+   natural path to engine-version diversity now that vLLM V0 is confirmed
+   unreachable on this image.
+6. **vLLM patch to relax the `_sm_scale` assertion** or vLLM version bump
    that fixes FlashInfer 0.4.x on SM_120 — both unlock the FlashInfer prefill
    direction that this launch confirmed is otherwise closed on this image.
-8. **H100 leaderboard run**: repeat the winning FP8 recipe on H100 for
+7. **H100 leaderboard run**: repeat the winning FP8 recipe on H100 for
    leaderboard-comparable claim. The RTX PRO 6000 numbers here are shakedown
    only.
+8. **Tertiary single-flag levers within vLLM 0.11.0 V1 + FP8**:
+   `--max-num-batched-tokens=32768` (B1 only tested 16384 — does one-shot
+   prefill of 8k prompt help?), `--max-num-seqs=1` (single-concurrency KV
+   allocation), `--enable-prefix-caching` toggle, `--num-scheduler-steps>1`
+   (multi-step decode dispatch).
 
-## Final probe this round
+## Final probe this round (resolved)
 
-**PR #176** — Frieren arm F0: `VLLM_USE_V1=0` + FP8 weights (V0 vs V1 engine
-comparison). Single env-var toggle on top of the FP8 winner recipe, with
-Frieren's cublas symlink workaround embedded. Assigned 18:12Z; expected result
-~18:22-18:28Z. Quick-only; terminal=false regardless of result. If V0 is faster,
-flags as high-priority next-round full-eval candidate.
+**PR #176 (CLOSED)** — Frieren arm F0: `VLLM_USE_V1=0` + FP8 weights →
+**failed_to_boot.** vLLM 0.11.0 hard-asserts `envs.VLLM_USE_V1` at
+`api_server.py:209`. V0 engine path is unreachable through the OpenAI
+entrypoint on this image. Clean ruling-out — drop V0 engine probes from the
+search surface for vLLM 0.11.0 + this image. Carry SGLang/TensorRT-LLM as
+the path to engine-version diversity.
 
-## Fern is intentionally idle for the final ~21 min — why
+## Final Fern probe this round
 
-The CLAUDE.md "zero idle GPUs, ever" rule does not produce a productive
-assignment in the last cutoff window of this launch:
-
-- The pod has **1 GPU shared between both students**. With Frieren holding
-  the GPU for the V0 probe (queue → boot → quick eval ≈ 10-13 min from
-  acquisition), Fern's `gpu_slot.py run --wait` would block behind her.
-- `gpu_slot.py` enforces `--min-remaining-s 600` (10 min headroom to
-  deadline). At 18:15Z, the cutoff is 18:36:57Z (~21 min). Once Frieren
-  finishes around 18:26-18:31Z, the remaining wall clock drops below the
-  600s gate — `gpu_slot.py` will refuse Fern's acquisition.
-- A relaxed `--min-remaining-s 300` would let Fern acquire, but the probe
-  could not complete before cutoff with any margin for boot or eval
-  variance, producing a partial that adds no signal.
-
-Fern's experimental contribution this launch is the merged winner (PR #160,
-1.8873x) plus the FlashInfer ruling-out (PRs #168, #171). The launch's
-remaining ~21 min is the structural finalize window, not productive
-experiment time.
+**PR #178 (planned)** — Fern arm G0: FP8 weights +
+`--max-num-batched-tokens=32768` (force one-shot prefill of the full 8k
+prompt). Single CLI flag change on top of the PR #160 winner recipe, with
+the cublas symlink workaround embedded for cold FlashInfer JIT cache safety.
+B1 only tested 16384; pushing to 32768 ensures the entire 8192-token prompt
+plus any chat-template tokens lands in one prefill chunk (vs the default
+8192 max that may split across 2 chunks). Quick-only; terminal=false
+regardless. The GPU is free, so no queue wait.

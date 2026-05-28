@@ -162,3 +162,34 @@ explicit exports.
   assertion, (b) a vLLM version bump with known-good FlashInfer 0.4.x on
   SM_120, or (c) a different engine family (SGLang FP8, TensorRT-LLM) that
   bypasses vLLM's FlashInfer wrapper entirely.
+
+## 2026-05-28 18:18 — PR #176 (CLOSED): vLLM V0 engine + FP8 (engine-version probe)
+
+- `scen-a-frieren/frieren-v0-fp8`
+- **Hypothesis:** V0 vs V1 engine comparison via `VLLM_USE_V1=0` on top of
+  the FP8 winner recipe; V0 dispatch is simpler and may be faster at burst
+  concurrency 1.
+- **Result:** **failed_to_boot.** vLLM 0.11.0's OpenAI API server
+  unconditionally asserts `envs.VLLM_USE_V1` at
+  `vllm/entrypoints/openai/api_server.py:209`. With `VLLM_USE_V1=0`, the
+  AssertionError fires before any engine init, ~15s after launch.
+- **Boot log tail:**
+
+  ```
+  INFO 05-28 18:16:36 [api_server.py:1839] vLLM API server version 0.11.0
+  ... [model.py:1510] Using max model len 32768
+  ... [scheduler.py:205] Chunked prefill is enabled with max_num_batched_tokens=8192.
+  File ".../vllm/entrypoints/openai/api_server.py", line 209,
+    in build_async_engine_client_from_engine_args
+      assert envs.VLLM_USE_V1
+  AssertionError
+  [supervised] launch script exited before readiness (rc=1)
+  ```
+
+- **Conclusion:** V0 engine is unreachable through the OpenAI entrypoint on
+  vLLM 0.11.0 in this image — no env flag bypasses the assertion. The only
+  paths to engine-version diversity are: (a) a different engine family
+  (SGLang FP8, TensorRT-LLM), or (b) a vLLM version downgrade.
+- **Suggested next-round levers (within vLLM 0.11.0 + V1 + FP8):**
+  `--max-num-batched-tokens=32768` (B1 only tested 16384), `--max-num-seqs=1`,
+  `--enable-prefix-caching` toggle, `torch.compile` compilation_config modes.
