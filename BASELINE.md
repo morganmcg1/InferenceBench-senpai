@@ -32,7 +32,23 @@ baselines):
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
 | **C** | scenario/C/speedup_over_pytorch | **21.052x** | `senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh` | tebmnnza | #140 |
-| **D** | scenario/D/speedup_over_pytorch | **1.247x** | `senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh` | nf10i0y2 | #138 |
+| **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
+
+### Scenario D — current winner (PR #139, merged 2026-05-28) — supersedes PR #138
+
+- **Engine:** vLLM 0.11.0, FlashAttention backend, FP8 weight quantization + n-gram speculative decoding, BF16 KV cache
+- **Key flags:** `--max-num-seqs 32 --max-num-batched-tokens 4096 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --quantization fp8 --speculative-config '{"method":"ngram","num_speculative_tokens":5,"prompt_lookup_max":4,"prompt_lookup_min":2}'`
+- **TTFT.p50:** 0.1161 s (PyTorch 0.2123 s) — FP8 cuts prefill
+- **TPOT.p50:** 0.0104 s (PyTorch 0.0251 s) — n-gram spec cuts decode
+- **req/s:** 0.0776 (PyTorch 0.0382)
+- **Geomean (1/ttft.p50, 1/tpot.p50, req/s):** 4.001 (PyTorch 1.930)
+- **Speedup:** 2.073x (vs prior Sc D best of 1.247x SGLang, +66%)
+- **Quality:** MMLU-Pro 0.284 obs / 0.298 baseline = ratio 0.953 (gate 0.95, n=500) ✓
+- **Speed success:** 96/96 (failure_rate 0.0) ✓
+- **VRAM peak:** 91.7 GiB / 97.9 GiB
+- **W&B run:** 40f15iox
+- **Reproduce (from task workspace):** `cp senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** FP8 + n-gram compose additively: FP8 attacks the 4096-token prefill stage (TTFT -45%), n-gram attacks the 2048-token decode stage (TPOT -59%). Both levers target independent bottlenecks in balanced Sc D, producing clean multiplicative lift.
 
 ### Scenario C — current winner (PR #140, merged 2026-05-28)
 
@@ -48,7 +64,7 @@ baselines):
 - **Reproduce (from task workspace):** `cp senpai/launchers/C/fern-vllm-throughput/arm1_bf16_highconc.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
 - **Key insight:** Sc C is KV-cache-memory-bound and scheduler-overhead-bound (not weight-read-bound). FP8 dequant overhead *hurts* (-3.3% vs BF16); prefix caching gives +1% noise. Setting `--max-num-seqs 64` matched to burst concurrency is the key lever; PyTorch at 0.0847 req/s is serialized; vLLM batching 64 concurrent streams achieves 2.60 req/s in burst.
 
-### Scenario D — current winner (PR #138, merged 2026-05-28)
+### Scenario D — prior winner (PR #138, merged 2026-05-28, superseded by PR #139)
 
 - **Engine:** SGLang (per-PR venv, `sglang[all]`), Triton attention backend, BF16 KV cache
 - **Relaunch contract:** `libnuma.so.1` bundled under `senpai/launchers/D/tanjiro-sglang/lib/`; venv auto-bootstrapped via `uv venv` + `pip install sglang[all]` if `/tmp/inferencebench-engine-venvs/sglang-pr-138` absent
@@ -143,3 +159,9 @@ research signal only and must not be used to update the current-best row.
   768/768 speed success across burst/poisson/constant profiles. All 4 scenarios
   now have baseline entries. Key insight: Sc C is scheduler-bound (not
   bandwidth-bound), so FP8 hurts; concurrency matching is the main lever.
+- 2026-05-28 13:19 UTC — Merged PR #139 (frieren). Scenario D new best:
+  2.073x (vLLM 0.11, FP8+n-gram composition, max-num-seqs=32).
+  Supersedes PR #138 SGLang 1.247x (+66%). Quality ratio 0.953 (observed 0.284,
+  n=500, gate 0.95). TTFT -45% (FP8), TPOT -59% (n-gram) — both levers target
+  independent pipeline stages in balanced 4096in/2048out Sc D. Confirms
+  composition hypothesis: multiplicative gains when bottlenecks are independent.

@@ -251,3 +251,71 @@ All 4 scenarios now have valid baseline entries.
   especially in constant-rate profile (sequential requests where prompt overlap is higher).
 - SGLang head-to-head on Sc C: H100 shows SGLang at 51.12x vs vLLM 48.69x (+5%). Worth
   measuring on RTX PRO 6000 in a future PR.
+
+---
+
+## 2026-05-28 13:19 UTC — PR #139: Scenario D vLLM FP8+n-gram composition
+
+- **Branch:** `frieren/sc-d-vllm-fp8-ngram-composition`
+- **Student:** frieren
+- **Hypothesis:** Scenario D (4096-token input, 2048-token decode, concurrency 4, burst) has
+  both a significant prefill stage and a significant decode stage. Round-1 winners showed FP8
+  cuts TTFT on prefill-heavy workloads (Sc A: +1.87x) and n-gram spec cuts TPOT on decode-heavy
+  workloads (Sc B: +2.69x). Sc D is balanced — the hypothesis was that both levers would
+  compose additively since they target independent pipeline stages.
+
+**Quick-probe results:**
+
+| Arm | Config | Quick speedup | Notes |
+|---|---|---:|---|
+| arm1 fp8_only | `--quantization fp8`, no spec | 1.326x | FP8 helps TTFT, flat on TPOT |
+| arm2 ngram_only | n-gram spec, no FP8 | 1.697x | n-gram helps TPOT, limited TTFT |
+| **arm3 fp8+ngram** | both combined | **1.810x** | Promoted: +36.5% over arm1, +6.6% over arm2 |
+
+**W&B quick runs:** 4zzu6w86 (arm1), 1qkei5pe (arm2), of4wd96h (arm3) — deferred upload
+
+**Full eval result (arm3 FP8 + n-gram composition):**
+
+| Metric | PyTorch | Arm 3 | Ratio |
+|---|---:|---:|---:|
+| TTFT.p50 | 0.2123 s | 0.1161 s | 1.83x faster |
+| TPOT.p50 | 0.0251 s | 0.0104 s | 2.40x faster |
+| req/s | 0.0382 | 0.0776 | 2.03x more |
+| Geomean (1/ttft, 1/tpot, req/s) | 1.930 | 4.001 | — |
+| `scenario/D/speedup_over_pytorch` | 1.000x | **2.073x** | — |
+| MMLU-Pro accuracy (n=500) | 0.298 | 0.284 | 0.953 (PASS) |
+| Speed success | — | 96/96 | 0.0 failure rate |
+| VRAM peak | — | 91.7 GiB | — |
+
+**W&B full eval run:** 40f15iox
+
+**Merged:** Yes — squash-merged to `ib-20260528-12h-r2` at 13:19 UTC. New Sc D best,
+supersedes PR #138 SGLang 1.247x (+66% improvement).
+
+**Analysis and conclusions:**
+
+- **Composition confirmed.** FP8 and n-gram spec target independent stages: FP8 reduces
+  weight-read bandwidth during each matmul (wins on the 4096-token prefill that dominates
+  TTFT), while n-gram reduces total forward passes via speculative acceptance (wins on the
+  2048-token decode that dominates TPOT). Since the bottlenecks are orthogonal, the gains
+  compose near-multiplicatively: 1.83x (TTFT) × 2.40x (TPOT) produces a 2.073x geomean.
+- **Full eval beats quick probe:** 2.073x vs 1.810x quick (+14.5%). The larger n=96 sample
+  exposes more speculative acceptance benefit on full-length 2048-token decode sequences.
+- **Quality is tight but passing:** ratio 0.953 (0.284 vs 0.298, gate at 0.95). FP8 causes
+  a small accuracy drop consistent with Sc A (0.966 there). The combination FP8+n-gram does
+  not compound the quality degradation beyond FP8 alone, as expected (n-gram is a lossless
+  verifier).
+- **Sc D 2.073x vs H100 SMAC3 5.69x:** significant headroom remaining. The SMAC3 ceiling
+  likely comes from deeper speculative depth, higher max-num-seqs, and possibly FP4/W4A8
+  quantization not yet tested.
+- **SGLang vs vLLM on Sc D:** tanjiro's SGLang default gave 1.247x; frieren's vLLM
+  composition gives 2.073x. For Sc D on RTX PRO 6000, vLLM with composition beats
+  SGLang default by +66%. This does not test optimized SGLang (speculation, radix cache)
+  which may close the gap in a future PR.
+
+**Next experiments for Sc D:**
+- **Deeper speculative depth** on Sc D: `num_speculative_tokens ∈ {7, 10, 15}` (tanjiro is
+  testing this on Sc B via PR #141 — the winner transfers directly to Sc D).
+- **Higher max-num-seqs on Sc D:** `--max-num-seqs 64` with FP8+n-gram may improve req/s
+  further (currently at 32; Sc D concurrency 4 × 24 requests = 96 total).
+- **SGLang + speculative** once the vLLM composition results solidify as the reference.

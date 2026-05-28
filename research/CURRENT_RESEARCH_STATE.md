@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 13:04 UTC
+- **As of:** 2026-05-28 13:20 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -30,7 +30,8 @@ Round 1 portfolio — status (PRs #136–#138), Round 2 open (#139, #140):
 | frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 weights (quick 1.90x → full 1.87x) | #137 | **MERGED — Sc A best 1.866x** |
 | tanjiro | D (general geomean) | SGLang per-PR venv | sglang_default + bundled libnuma (full 1.2506x terminal) | #138 | **MERGED 12:50 UTC — Sc D first winner 1.247x** |
 | tanjiro | B (output-heavy TPOT) | vLLM 0.11 | n-gram spec depth sweep (tokens 7/10/15, lookup 4/6/8) | #141 | **assigned 12:51 UTC** |
-| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram composition (arm3 quick 1.810x) | #139 | **WIP — full eval running (composition arm, started 12:40:21 UTC)** |
+| frieren | D (general geomean) | vLLM 0.11 | FP8 + n-gram composition (arm3 full 2.073x) | #139 | **MERGED 13:19 UTC — Sc D new best 2.073x (supersedes #138)** |
+| frieren | A (input-heavy TTFT) | vLLM 0.11 | FP8 + n-gram spec on Sc A (extend #137 winner) | #143 | **assigned 13:20 UTC** |
 
 Each PR is a bounded research-arm assignment with quick-probe arms first and a
 single full-eval promotion. Engine diversification is intentional: we want a
