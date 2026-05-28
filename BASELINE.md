@@ -14,10 +14,10 @@
 
 | Scenario | Primary metric | Current best speedup | Launcher | W&B run | PR | Notes |
 |---|---|---:|---|---|---|---|
-| A: Input-heavy | `scenario/A/speedup_over_pytorch` (1/ttft.p50, burst c=1, 128 reqs) | — | — | — | — | unmeasured on this hardware |
-| B: Output-heavy | `scenario/B/speedup_over_pytorch` (1/tpot.p50, burst c=1, 64 reqs) | — | — | — | — | unmeasured on this hardware |
-| C: High-load | `scenario/C/speedup_over_pytorch` (geomean req/s across burst c=64, poisson 32, constant 16) | — | — | — | — | unmeasured on this hardware |
-| D: General | `scenario/D/speedup_over_pytorch` (geomean of 1/ttft, 1/tpot, req/s, burst c=4, 96 reqs) | — | — | — | — | unmeasured on this hardware |
+| A: Input-heavy | `scenario/A/speedup_over_pytorch` (1/ttft.p50, burst c=1, 128 reqs) | — | — | — | #135 in flight (tanjiro) | unmeasured on this hardware |
+| B: Output-heavy | `scenario/B/speedup_over_pytorch` (1/tpot.p50, burst c=1, 64 reqs) | — | — | — | #133 in flight (fern) | unmeasured on this hardware |
+| C: High-load | `scenario/C/speedup_over_pytorch` (geomean req/s across burst c=64, poisson 32, constant 16) | — | — | — | #134 in flight (frieren) | unmeasured on this hardware |
+| D: General | `scenario/D/speedup_over_pytorch` (geomean of 1/ttft, 1/tpot, req/s, burst c=4, 96 reqs) | — | — | — | — | deferred — open after A/B/C have first measurements |
 | Aggregate | `aggregate/geomean_speedup_over_pytorch` (geomean of A–D) | — | — | — | — | confirmed only after A–D each have a clean full result |
 
 PyTorch baseline raw objectives (seed 248, RTX PRO 6000, this launch) live in the PVC-imported assets and are loaded from `$INFERENCE_BENCH_PYTORCH_BASELINE_METRICS` automatically by `senpai/summarize_metrics.py` / `validate_result.py`.
