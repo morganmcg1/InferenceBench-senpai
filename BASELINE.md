@@ -33,15 +33,26 @@ Reference points apply to H100 80GB at 2h, **not** RTX PRO 6000 shakedown. Treat
 
 ## Current best valid launcher (Scenario C)
 
-_None yet. No terminal Scenario C results merged into this branch._
-
-| Rank | PR | Launcher | Engine | Geomean speedup | Quality | W&B run | Notes |
+| Rank | PR | Launcher | Engine | Geomean speedup | Quality (ratio) | W&B run | Notes |
 |---:|---|---|---|---:|---|---|---|
-| — | — | — | — | — | — | — | search just opened |
+| 1 | #161 | `senpai/launchers/C/vllm-frieren/start_server.sh` | vLLM | **20.84x** | PASS (1.027) | btpqa2rl | max_num_seqs=384, max_num_batched_tokens=16384, gpu_mem_util=0.92, chunked_prefill ON, BF16 KV |
+
+**Reproduce:**
+```bash
+cd "$PROBLEM_DIR"
+source senpai/runtime_env.sh
+cp senpai/launchers/C/vllm-frieren/start_server.sh /tmp/workspace/start_server.sh
+# Full eval: python evaluate.py --json-output-file metrics_full.json
+```
+
+Full vLLM command: `python3 -m vllm.entrypoints.openai.api_server --model $MODEL --max-model-len 32768 --gpu-memory-utilization 0.92 --max-num-seqs 384 --max-num-batched-tokens 16384 --kv-cache-dtype auto --enable-chunked-prefill --no-enable-prefix-caching`
 
 ## Provisional / quick-only candidates (not yet terminal)
 
-_None yet._
+| PR | Engine | Quick speedup | Notes |
+|---|---|---:|---|
+| #161 Arm D | vLLM (chunked-prefill OFF) | 3.80x quick | Burst TTFT collapsed in quick mode (+37% vs Arm A quick); student predicts this reverses in steady-state full eval — **needs full eval to confirm** |
+| #163 Arm A0 | SGLang 0.5.9 defaults | 3.88x quick | Boot clean, quality passes; full eval pending |
 
 ## Failed launches and dead ends
 
@@ -49,5 +60,6 @@ _None yet._
 
 ## Update history
 
+- 2026-05-28 17:19: **PR #161 merged** — first terminal Scenario C result. vLLM Arm A full eval: 20.84x speedup, quality PASS (ratio=1.027, n=500, MMLU-Pro observed=0.306), 768/768 requests, validation_pass=true. W&B: btpqa2rl.
 - 2026-05-28: Created ledger at start of `ib-20260528-scen-c-r1`. Preflight passed against
   `/mnt/new-pvc/inferencebench-senpai/scoring-assets/rtxpro6000-seed248`.
