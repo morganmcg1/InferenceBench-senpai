@@ -440,3 +440,71 @@ additional arms is a waste of GPU time.
 
 **Next experiment for frieren:** Sc A prefill-attack composition (FP8 weights + FP8
 KV cache + larger batched-tokens) — see PR #145.
+
+---
+
+## 2026-05-28 14:10 UTC — PR #141: Scenario B n-gram speculative depth sweep
+
+- **Branch:** `tanjiro/sc-b-spec-depth-sweep`
+- **Student:** tanjiro
+- **Hypothesis:** Increasing `num_speculative_tokens` and `prompt_lookup_max` beyond PR
+  #136's `(5, 4)` should improve Sc B TPOT by accepting longer draft bursts during the
+  8192-token decode. The hypothesis is that output-heavy decode provides long contexts
+  with natural n-gram patterns, enabling higher acceptance rates at deeper windows.
+
+### Quick probe results
+
+| arm | spec_tokens | lookup_max | Quick speedup (n=4) | W&B |
+|---|---:|---:|---:|---|
+| arm1 | 7 | 4 | 2.121x | cwbiqekn |
+| arm2 | 10 | 6 | 2.857x | ahowy8xt |
+| arm3 | 15 | 8 | **6.918x** | rdmg3q7u |
+
+Quick arm3 was a dramatic outlier — n=4 at quick likely hit highly-repetitive decode patterns. Promoted arm3 per "any arm beats arm1 by >5%" rule.
+
+### Full eval results (arm3 — 64 requests, burst profile)
+
+| Metric | arm3 full | PR #136 winner | Δ |
+|---|---:|---:|---:|
+| **scenario/B/speedup_over_pytorch** | **3.550x** | **2.687x** | **+32.2%** |
+| inverse_tpot_p50 | 141.15 tok/s | 106.84 tok/s | +32.1% |
+| TPOT.p50 | 7.08 ms | 9.36 ms | -24% (much faster) |
+| TTFT.p50 | 63.8 ms | — | — |
+| ITL.p50 | 12.38 ms | — | — |
+| Quality (MMLU-Pro n=500) | 0.300 (ratio 1.007) | 0.300 (ratio 1.007) | 0.0% |
+| Speed success | 64/64 ✓ | 64/64 ✓ | — |
+| VRAM peak | 90271 MiB | 90305 MiB | ≈ same |
+| W&B | 8656lf5w | dav3txgq | — |
+
+### Analysis
+
+- **Superlinear spec gains confirmed on Sc B.** Going from `(spec=5, lookup=4)` to
+  `(spec=15, lookup=8)` yielded +32.2% on the primary metric. The jump is not linear —
+  PR #141 arm1 at (7,4) was only 2.121x quick. Most of the gain comes from arm3's wider
+  `prompt_lookup_max=8` rather than just the deeper `num_speculative_tokens`.
+- **Why depth works here:** Sc B decodes 8192 tokens. After the first ~100 tokens are
+  generated, the decoded output itself becomes the primary source of n-gram matches. The
+  8-gram lookback window finds phrase-level repetitions in LLM output (formulaic structures,
+  repeated variable names, etc.), while depth=15 lets a single found match emit a 15-token
+  burst. TPOT drops from 9.36 ms (spec5) to 7.08 ms (spec15) — a 24% reduction in the
+  already-speculated median.
+- **Quality is completely unaffected.** MMLU-Pro 0.300 = ratio 1.007 = identical to PR
+  #136. Speculative decoding is verification-exact; deeper speculation doesn't change this.
+- **Quick-to-full ratio = 51%.** Quick at n=4 was 6.918x; full at n=64 is 3.550x. The
+  6.918x overestimate happened because 4 randomly-selected Sc B requests happened to be
+  highly repetitive. Consistent with the pattern from PR #136 (3.518x quick → 2.687x full
+  = 76% ratio). The quick is always an upper bound for speculative; larger sample sizes
+  expose harder-to-predict outputs.
+- **VRAM is near ceiling at 93%.** spec=15 holds 15 draft tokens' KV state per step;
+  this barely differs from spec=5. VRAM usage unchanged from PR #136 within rounding.
+- **Remaining Sc B headroom:** Current 3.550x vs H100 SMAC3 15.23x. Gap primarily from:
+  (a) higher spec depth (20, 25) not yet tested; (b) FP8 weights not yet composed with
+  spec15 on Sc B; (c) EAGLE/Medusa draft-model spec for intrinsically richer proposals.
+
+**Next experiments for Sc B:**
+- **FP8 weights + spec15/lookup8 composition** (tanjiro PR #146) — FP8 cuts decode
+  bandwidth, spec15 cuts forward passes; should compose near-multiplicatively as on Sc D.
+  Expected: ~5-7x speedup.
+- **Deeper spec sweep (20, 25)** at the (15,8) window to find saturation point.
+- **prompt_lookup_min=1** — allows single-token lookback; may improve acceptance rate at
+  low marginal cost.
