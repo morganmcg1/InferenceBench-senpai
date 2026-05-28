@@ -121,3 +121,66 @@ composition — testing whether both Round-1 winning levers stack on the balance
 
 **Next speculative tuning axis (for future PR):** `num_speculative_tokens ∈ {7, 10, 15}` and
 `prompt_lookup_max ∈ {4, 6, 8}` — cheap quick-probe sweep, likely to push speedup toward 4–5x.
+
+---
+
+## 2026-05-28 12:50 UTC — PR #138: Scenario D SGLang in per-PR venv (default + tuned arms)
+
+- **Branch:** `tanjiro/sc-d-sglang-venv-baseline`
+- **Student:** tanjiro
+- **Hypothesis:** Scenario D is general balanced serving (4096-token input, 2048-token decode,
+  96 requests at concurrency 4, burst). The H100 public reference shows SGLang default already
+  beats vLLM default for this scenario (2.14x vs 1.96x), so this PR diversifies the engine
+  portfolio by standing up SGLang in a per-PR venv and benchmarking its baseline.
+
+**Quick-probe results:**
+
+| Arm | Config | Quick speedup | Notes |
+|---|---|---:|---|
+| arm1 `sglang_default` | `--mem-fraction-static 0.80 --attention-backend triton` | 1.167x | SGLang default; arm selected per simplicity tiebreak |
+| arm2 `sglang_tuned` | arm1 + `--chunked-prefill-size 4096 --schedule-policy lpm --max-running-requests 64` | 1.183x | Within 5% of arm1 |
+
+**W&B quick runs:** 2nfds9ud (arm1), 8zul6lqz (arm2)
+
+**Operational note:** Initial quick probes required `apt-get install libnuma1` on the pod
+(SGLang's `sgl_kernel` SM100 binary linked against `libnuma.so.1`). This broke the
+supervised-relaunch contract. Tanjiro chose Path A (bundle libnuma): committed
+`senpai/launchers/D/tanjiro-sglang/lib/libnuma.so.1.0.0` (48 KB, glibc-built) +
+symlinks + `LD_LIBRARY_PATH` prepend + `uv venv` auto-bootstrap guard in `start_server.sh`.
+Re-ran full eval with the relaunch-safe launcher after confirming bundled .so loads cleanly.
+
+**Full eval result (arm1 sglang_default, relaunch-safe):**
+
+| Metric | Value |
+|---|---|
+| `scenario/D/speedup_over_pytorch` | **1.2506x** |
+| Geomean (1/ttft.p50, 1/tpot.p50, req/s) | 2.413 (PyTorch 1.930) |
+| MMLU-Pro accuracy | 0.310 (baseline 0.298, ratio 1.040, n=500) |
+| Quality gate | **PASS** (ratio 1.040 ≥ tau 0.95) |
+| Speed success | 96/96 (failure_rate 0.0) |
+| W&B run | **nf10i0y2** |
+
+**Merged:** Yes — squash-merged to `ib-20260528-12h-r2` at 12:50 UTC. Sc D first winner.
+
+**Analysis and conclusions:**
+
+- SGLang default (arm1) and tuned (arm2) are within 5% on Sc D quick probes (1.167x vs 1.183x),
+  confirming that the light tuning axes tried (chunked-prefill-size, lpm scheduler,
+  max-running-requests) don't move the needle on Mistral-7B at concurrency 4.
+- The SGLang default result (1.247x full eval) is below the H100 public reference for SGLang
+  default (2.14x). This is expected: different hardware (RTX PRO 6000 vs H100), different
+  timing budget, and this is a first SGLang measurement on this hardware. The gap to the H100
+  ceiling is research signal, not a failure.
+- SGLang default outperforms the PyTorch baseline (+24.7%) and establishes Sc D as live.
+  However, frieren PR #139 has the vLLM FP8+n-gram composition quick at 1.810x — expected to
+  supersede this row once the full eval is confirmed.
+- The bundled-libnuma pattern (ship `libnuma.so.1` in the launcher directory, prepend
+  `LD_LIBRARY_PATH`) is a reusable operational pattern for future SGLang PRs on this image.
+  Document in the next round's scaffolding.
+
+**Next experiments for Sc D:**
+- **frieren PR #139 (in flight):** vLLM FP8+n-gram composition, quick 1.810x. Full eval
+  will likely supersede this SGLang result.
+- **SGLang speculative decoding** (`--speculative-num-steps > 0`): now that we have a clean
+  SGLang baseline, adding speculative decoding is the obvious next lever for a future PR.
+- **vLLM head-to-head on Sc D** once frieren's composition result is confirmed.

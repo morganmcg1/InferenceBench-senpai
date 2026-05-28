@@ -32,7 +32,19 @@ baselines):
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
 | **B** | scenario/B/speedup_over_pytorch | **2.687x** | `senpai/launchers/B/fern-vllm-tpot/arm3_ngram_spec.sh` | dav3txgq | #136 |
 | C | scenario/C/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
-| D | scenario/D/speedup_over_pytorch | 1.00x (PyTorch floor) | — | — | — |
+| **D** | scenario/D/speedup_over_pytorch | **1.247x** | `senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh` | nf10i0y2 | #138 |
+
+### Scenario D — current winner (PR #138, merged 2026-05-28)
+
+- **Engine:** SGLang (per-PR venv, `sglang[all]`), Triton attention backend, BF16 KV cache
+- **Relaunch contract:** `libnuma.so.1` bundled under `senpai/launchers/D/tanjiro-sglang/lib/`; venv auto-bootstrapped via `uv venv` + `pip install sglang[all]` if `/tmp/inferencebench-engine-venvs/sglang-pr-138` absent
+- **Key flags:** `--context-length 16384 --mem-fraction-static 0.80 --attention-backend triton --trust-remote-code`
+- **Geomean (1/ttft.p50, 1/tpot.p50, req/s):** 2.413 (PyTorch 1.930)
+- **Speedup:** 1.247x
+- **Quality:** MMLU-Pro 0.310 obs / 0.298 baseline = ratio 1.040 (gate 0.95, n=500) ✓
+- **Speed success:** 96/96 (failure_rate 0.0) ✓
+- **W&B run:** nf10i0y2
+- **Reproduce (from task workspace):** `cp senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh ./start_server.sh && SGLANG_LIB_DIR="$(realpath senpai/launchers/D/tanjiro-sglang/lib)" python evaluate.py --json-output-file metrics_full.json`
 
 ### Scenario B — current winner (PR #136, merged 2026-05-28)
 
@@ -81,8 +93,14 @@ research signal only and must not be used to update the current-best row.
 | A | frieren arm1 one-shot prefill | 1.276x | 0.839 | 5iump62l | #137 | vLLM 0.11, no chunked prefill flag (vLLM forces it anyway) |
 | A | frieren arm2 chunked prefill large | 1.279x | 0.839 | r20z2rm0 | #137 | within noise of arm1 |
 | A | frieren arm3 FP8 weights | **1.901x** | 0.839 | eyvyj8oz | #137 | +`--quantization fp8` — promoted to full eval |
-| D | tanjiro arm1 sglang_default | 1.167x | 0.629 | 2nfds9ud | #138 | SGLang per-PR venv; **launcher not relaunch-safe (libnuma host install)** |
+| D | tanjiro arm1 sglang_default | 1.167x | 0.629 | 2nfds9ud | #138 | SGLang per-PR venv; initial quick (libnuma not yet bundled) |
 | D | tanjiro arm2 sglang_tuned | 1.183x | 0.629 | 8zul6lqz | #138 | +chunked-prefill-size=4096, lpm scheduler; within 5% of arm1 |
+| D | frieren arm1 fp8 only | 1.326x | 0.839 | — | #139 | vLLM FP8-only quick probe |
+| D | frieren arm2 ngram only | 1.697x | 0.839 | — | #139 | vLLM n-gram-only quick probe |
+| D | frieren arm3 fp8+ngram | **1.810x** | 0.629 | — | #139 | vLLM FP8+n-gram composition — promoted to full eval |
+| C | fern arm1 BF16 high-conc | **3.888x** | 0.839 | qvcrnc4s | #140 | vLLM, max_num_seqs=64, batched_tokens=8192 — promoted to full eval |
+| C | fern arm2 + prefix cache | 3.928x | 0.839 | 2rtv6gxb | #140 | +`--enable-prefix-caching`; within 1% of arm1 |
+| C | fern arm3 + FP8 | 3.798x | 0.839 | wuvd1ycq | #140 | +`--quantization fp8`; FP8 hurts on high-conc (-3.3%) |
 
 ## Update history
 
@@ -99,3 +117,9 @@ research signal only and must not be used to update the current-best row.
   2.687x (n-gram speculative decoding, num_speculative_tokens=5, prompt_lookup_max=4,
   vLLM 0.11, FlashAttention). Quality ratio 1.007 (observed 0.300, n=500),
   64/64 speed success. Beats H100 vLLM default (2.25x) and SGLang default (1.77x).
+- 2026-05-28 12:50 UTC — Merged PR #138 (tanjiro). Scenario D first winner:
+  1.247x (SGLang default, per-PR venv, bundled libnuma.so.1, Triton attention backend,
+  mem-fraction-static 0.80). Quality ratio 1.040 (observed 0.310, n=500), 96/96
+  speed success. Relaunch-safe via bundled libnuma + uv venv auto-bootstrap.
+  Open research question: frieren PR #139 has FP8+n-gram composition quick at
+  1.810x — if full eval confirms ≥1.247x, that will supersede this row.
