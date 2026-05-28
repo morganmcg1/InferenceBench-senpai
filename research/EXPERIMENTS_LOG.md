@@ -1006,3 +1006,25 @@ The spec10 intermediate depth captures a real but smaller benefit: TPOT.p50 -7.9
 Sc B's tolerance for deep specs (25 vs Sc D's 10) is plausibly explained by longer output amortising the verify-step quality drift across more tokens. Sc D's 4× shorter outputs concentrate per-decoder-step quality cost.
 
 **Next experiment for tanjiro:** Sc D FP8 KV composition with PR #152 winner (PR #164 — 3-arm: fp8_e5m2 + fp8_e4m3 + mem 0.95 control).
+
+## 2026-05-28 17:23 UTC — PR #153: Sc C SGLang FP8 weights + FP8 KV composition (CLOSED — stuck/abandoned)
+
+- **Branch:** `frieren/sc-c-sglang-fp8-weights-kv`
+- **Student:** frieren
+- **Hypothesis:** Compose SGLang FP8 weights (`--quantization fp8`) with PR #151's FP8 KV (`fp8_e5m2`) winner. 3-arm ablation: arm1 weights+KV combined, arm2 +mem-fraction 0.92, arm3 weights-only (no FP8 KV) as control.
+
+**Result:** No results — closed pragmatically after 85+ min with no commits, no PR comments, no GPU usage (0 MiB throughout the iteration starting 16:15 UTC), no response to advisor heartbeat check at 16:49 UTC.
+
+**Operational diagnosis:**
+- Previous frieren+Sc C PRs (#150, #151) completed in ~29 min each.
+- Per-PR SGLang venv install (`/tmp/inferencebench-engine-venvs/sglang-pr-153`) is a known 10-15 min step but visible progress should be in commits/comments within 30 min of assignment.
+- 85+ minutes with zero signal (no commits, no comments, no GPU usage, no acknowledgement of heartbeat) indicates either student session never started or hit an early-bootstrap error and silently halted.
+
+**Decision:** Closed PR #153 to reclaim GPU time for a fresh assignment (PR #166 — Sc B prompt_lookup_min=1 sweep on PR #149 winner). Sc C FP8 weights composition remains untested; can be revisited in a future round if the student session recovers and emits results to W&B group `frieren-scC-fp8wt`.
+
+**Lessons:**
+- Pragmatic closure at 85 min is reasonable when (a) no GPU usage detected, (b) no PR activity, (c) heartbeat check ignored. Recovering 4+ hours of GPU time for a fresh experiment beats waiting indefinitely on a possibly-dead session.
+- Future SGLang assignments: ask student to post a "venv install started" status comment within first 5 min of assignment, so missing progress is visible earlier.
+- Sc C FP8-weights-on-SGLang remains an open scientific question — PR #147 arm2 had confirmed SGLang FP8 weights work on SM120 Blackwell at Sc D's 4-concurrency. The Sc C 256-concurrency regime composition is still to be tested.
+
+**Reassignment:** frieren → PR #166 (Sc B prompt_lookup_min=1 sweep on PR #149 spec25/lookup12 winner). Tests rule #15 implication that Sc B's 8192-out absorbs min=1 quality drift.
