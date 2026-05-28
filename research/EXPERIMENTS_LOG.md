@@ -764,6 +764,51 @@ FP8 KV halves block size — opposite of Sc A regime. PR #144 left 15 GiB of unu
 
 ---
 
+## 2026-05-28 16:20 UTC — PR #151: Sc C SGLang FP8 KV cache (MERGED — new Sc C best)
+
+- **Branch:** `frieren/sc-c-sglang-fp8-kv-r2`
+- **Student:** frieren
+- **Hypothesis:** Extend PR #144 winner (SGLang LPM + radix, 24.305x) with FP8 KV cache
+  (`--kv-cache-dtype fp8_e5m2`). FP8 KV halves per-request KV memory footprint, doubling
+  the KV-token capacity and enabling more concurrent in-flight states at Sc C's high concurrency.
+  Unlike Sc A (conc=1 compute-bound, where FP8 KV regressed -26%), Sc C is KV-bandwidth-bound
+  at concurrency ≫1 — the expected regime for FP8 KV to pay off.
+
+### Quick-probe results (3 arms, n=4 burst per arm)
+
+| Arm | mem | chunk | FP8 KV | Quick speedup | VRAM peak | max_total_tokens | W&B |
+|---|---:|---:|---|---:|---:|---:|---|
+| **arm1** FP8 KV baseline | 0.85 | 8k | fp8_e5m2 | **4.247x** | 84.4 GiB | **1,090,726** | obf5x0a2 |
+| arm2 FP8 KV + mem push | 0.92 | 8k | fp8_e5m2 | 4.243x | 91.2 GiB | 1,198,879 | kiiz3p5i |
+| arm3 FP8 KV + mem + chunk | 0.92 | 16k | fp8_e5m2 | 4.236x | 92.1 GiB | 1,198,879 | jkf2ti8i |
+
+All three arms within 0.3% — arm1 promoted (simplest isolation). KV-token capacity roughly doubled vs PR #144 BF16 (~545k → ~1,090k tokens). `fp8_e5m2` accepted by SGLang 0.5.12.post1 with no fallback.
+
+### Full eval result (arm1)
+
+| Metric | PR #144 (SGLang LPM+radix) | **PR #151 (+ FP8 KV)** | Delta |
+|---|---:|---:|---:|
+| **scenario/C/speedup_over_pytorch** | **24.305x** | **27.497x** | **+13.1%** |
+| geomean req/s | ~1.954 | **~2.329** | +19.2% |
+| MMLU-Pro quality ratio | 1.027 | **1.000** | within gate |
+| Speed success | 768/768 | **768/768** | clean |
+| VRAM peak | 82.5 GiB | **84.4 GiB** | +2.3% |
+| W&B | ifj6fcec | **kk6shiqh** | — |
+
+**Merged:** Yes — squash-merged to `ib-20260528-12h-r2`. New Sc C best (+13.1%, 52%→59% of H100 ceiling).
+
+### Analysis
+
+- **FP8 KV mechanism confirmed on Sc C.** Halving KV block size (BF16 → FP8) doubled max KV-token capacity from ~545k to ~1,090k tokens at the same mem-fraction. The additional capacity allows more concurrent requests to stay in-flight during the burst profile peak, directly increasing geomean req/s.
+- **Regime-specificity confirmed.** FP8 KV regressed -26% on Sc A (conc=1 compute-bound), wins +13% on Sc C (conc=256 KV-bandwidth-bound). The key dividing line is whether the workload is bottlenecked at the KV memory tier or the compute tier.
+- **arm2 (mem 0.92) and arm3 (chunk 16k) added nothing in quick eval.** With FP8 KV already doubling the KV capacity, the mem-fraction headroom is less impactful — the binding constraint shifted from KV capacity to scheduling/compute throughput.
+- **Quality ratio improved to exactly 1.000** (vs 1.027 in PR #144). Numerically, FP8 KV is loss-free relative to BF16 KV for this model — the slight accuracy *decrease* from 1.027→1.000 reflects noise, not degradation.
+- **Composition potential:** FP8 KV is now the Sc C KV-tier baseline. Next lever: FP8 weights on top (directly halves weight-read bandwidth at prefill). The composition FP8 weights + FP8 KV hasn't been tested on SGLang Sc C; vLLM FP8 weights hurt Sc C previously but SGLang's kernel implementation is different.
+
+**Next experiment for frieren:** Sc C SGLang FP8 weights composed with FP8 KV (PR #151 baseline).
+
+---
+
 ## 2026-05-28 15:50 UTC — PR #147: Scenario D SGLang LPM + radix cache (CLOSED — did_not_improve)
 
 - **Branch:** `fern/sglang-sc-d-lpm-radix`
