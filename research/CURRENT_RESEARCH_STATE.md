@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 21:08 UTC
+- **As of:** 2026-05-28 21:15 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,14 +22,15 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #187 | C | SGLang engine upgrade (newer pip release) + FlashInfer probe (arm1 triton, arm2 flashinfer) | **assigned 20:57 UTC** |
-| frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **assigned 20:35 UTC** |
-| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (vs PR #179 quick 3.856x = +113%!); arm1 full eval running | **partial result 20:59 UTC** |
+| fern | #188 | C | SGLang FlashInfer / FA3 attention-backend probe on PR #181 winner (arm1 flashinfer, arm2 fa3) | **assigned 21:14 UTC** |
+| frieren | #186 | A | vLLM 0.12 + FlashInfer unblock on SM120 (arm1 vLLM12+FA control; arm2 vLLM12+FlashInfer) | **running 35+ min** |
+| tanjiro | #185 | B | max-num-seqs=1: quick **8.21x** (vs PR #179 quick 3.856x = +113%!); arm1 full eval running | **partial result 20:59 UTC; full ETA 22:00-22:30 UTC** |
 
 ## Completed experiments this session
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #187 | fern | C | SGLang stuck at 0.5.12.post1 — no ≥0.6 on pip; zero GPU consumed | CLOSED — Rule #20: engine ceiling reached; next probe = attention backends |
 | #184 | fern | C | cps=16384 full 29.690x (-0.26% vs PR #181) | CLOSED — chunked-prefill-size is tail-shape knob only (Rule #19); cps axis exhausted |
 | #183 | frieren | A | SGLang 1.549x (-18.5% vs PR #156 1.881x) | CLOSED — SGLang Triton prefill 21% slower than vLLM FA on SM120 |
 | #179 | tanjiro | B | **4.450x** FP8wt + spec25/lookup12 (+14.5% over PR #149 3.888x) | MERGED — new Sc B best; arm2 (spec20) quality_failed at full |
@@ -85,6 +86,8 @@
 
 16. **Rule #19 — Sc C chunked-prefill-size is a tail-shape knob, not a headline knob (PR #184):** cps=16384 (full): -0.26% headline, but burst TPOT p99 −50% (0.65→0.32s) AND burst TTFT p90 +42% worse (1.071→1.526s). The two effects cancel in the geomean-of-3-profiles primary. Future Sc C work should target levers that change per-step decode throughput (engine version, speculation, attention kernel) — not prefill/decode scheduling rebalancing.
 
+17. **Rule #20 — SGLang engine ceiling for this launch (PR #187):** `pip install "sglang[all]"` resolves to 0.5.12.post1 on PyPI; no ≥0.6 exists. Dependency stack byte-for-byte matches PR #181's venv. Future Sc C hypotheses must attack mechanisms *inside* SGLang 0.5.12.post1 (attention backend, kernel choices, scheduler tuning, KV layout). The engine-upgrade axis is exhausted.
+
 15. **Sc C local optimum near 30x:** 4 consecutive Sc C wins (PR #144 24.305x → PR #151 27.497x +13.1% → PR #172 29.532x +7.4% → PR #181 29.768x +0.80%). Marginal gains shrinking exponentially. Mem-fraction lever exhausted at 0.90. Next mechanisms to test: chunked-prefill-size (for burst tail), CUDA graph batch sizes, or fundamentally new approaches (spec decoding, EAGLE/MTP heads). 64% of H100 SMAC3 ceiling — closing in but real gains require new mechanism.
 
 ## Current research focus
@@ -93,21 +96,23 @@
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc C fern #187 (assigned 20:57 UTC):** SGLang engine upgrade (latest pip release) + FlashInfer backend probe. 2-arm: arm1 newer SGLang + PR #181 config; arm2 newer SGLang + flashinfer backend. Quick ETA ~21:25 UTC. Hard-close if quick shows <+0.5% gain.
+1. **Sc C fern #188 (assigned 21:14 UTC):** SGLang FlashInfer / FA3 attention-backend probe on existing SGLang 0.5.12.post1. 2-arm: arm1 flashinfer (PR #181 + backend swap); arm2 fa3 (PR #181 + backend swap). Reuses PR #167 SGLang venv (same engine). Quick ETA ~21:30 UTC. Hard-close if both arms <+0.5%.
 
-2. **Sc B tanjiro #185 (assigned 20:32 UTC):** max-num-seqs=1 on PR #179 base (phantom KV freed at conc=1). Quick ETA ~21:00 UTC; full ETA ~22:00 UTC.
+2. **Sc B tanjiro #185 (partial 8.21x quick):** max-num-seqs=1 on PR #179 base. arm1 full eval running. Critical risk: serial processing under burst arrival may exceed per-request timeout (64th burst req waits ~25 min). Watch agent/server.log. Terminal SENPAI-RESULT ETA 22:00-22:30 UTC. If wins at full + quality≥0.95 → MERGE as Sc B winner (potential ~7-8x = ~50% of 15.23x SMAC3 ceiling).
 
-3. **Sc A frieren #186 (assigned 20:35 UTC):** vLLM 0.12 + FlashInfer unblock on SM120. Quick ETA ~21:05 UTC (add ~5 min for vLLM 0.12 install); full ETA ~22:05 UTC.
+3. **Sc A frieren #186 (running 35+ min):** vLLM 0.12 install + FlashInfer probe on SM120. Quick ETA ~21:20-21:30 UTC.
 
 ### Next experiments (after current round)
 
 1. **Sc D: EAGLE-2 draft-model speculation** — n-gram local optimum confirmed. High-risk-high-value.
 
-2. **Sc A: vLLM 0.12+ per-PR venv** — Conditional on PR #183 outcome. vLLM 0.12 unblocks FlashInfer cascade (20%+ Sc A TTFT potential).
+2. **Sc B: if PR #185 wins** — compose max-num-seqs=1 with spec depth 27/28 (PR #185 + spec push). Or try max-num-seqs=1 + different lookup_min/max (rule #17 caveat applies).
 
-3. **Sc B: spec depth fine-tune with FP8** — check if spec27/28 with FP8 gives marginal gain above spec25/FP8 (small, but the SMAC3 gap at 29% is still large).
+3. **Sc C orthogonal Triton knobs** (if PR #188 backends regress): `--triton-attention-num-kv-splits` tuning, `--enable-torch-compile`, `--cuda-graph-bs` sweep (fern's PR #187 closure follow-ups #3-#5).
 
-4. **Sc C burst-tail mechanism**: If chunked-prefill-size has no effect, try `--cuda-graph-bs` or `--max-running-requests` sweep.
+4. **Sc A: contingency on PR #186 outcome:** If vLLM 0.12 + FlashInfer unblocks on SM120, that's a major Sc A axis. If blocked, try `--enable-prefix-caching` + dummy warmup or attention chunking flag.
+
+5. **Sc D: vLLM 0.12 + n-gram** — if PR #186 succeeds, retest Sc D on vLLM 0.12 with same spec10/lookup6/min=2 config (engine upgrade as orthogonal lever).
 
 ## Operational notes
 
