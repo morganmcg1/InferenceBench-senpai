@@ -30,7 +30,7 @@ baselines):
 | Scenario | Primary metric | Best speedup vs PyTorch | Launcher | W&B run | PR |
 |---|---|---:|---|---|---|
 | **A** | scenario/A/speedup_over_pytorch | **1.866x** | `senpai/launchers/A/frieren-vllm-ttft/arm3_fp8_weights.sh` | izg22lch | #137 |
-| **B** | scenario/B/speedup_over_pytorch | **3.550x** | `senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh` | 8656lf5w | #141 |
+| **B** | scenario/B/speedup_over_pytorch | **3.888x** | `senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh` | wkedminm | #149 |
 | **C** | scenario/C/speedup_over_pytorch | **27.497x** | `senpai/launchers/C/frieren-sglang-fp8kv/arm1_fp8kv_mem085.sh` | kk6shiqh | #151 |
 | **D** | scenario/D/speedup_over_pytorch | **2.073x** | `senpai/launchers/D/frieren-vllm-composition/arm3_fp8_and_ngram.sh` | 40f15iox | #139 |
 
@@ -107,18 +107,22 @@ baselines):
 - **W&B run:** nf10i0y2
 - **Reproduce (from task workspace):** `cp senpai/launchers/D/tanjiro-sglang/arm1_sglang_default.sh ./start_server.sh && SGLANG_LIB_DIR="$(realpath senpai/launchers/D/tanjiro-sglang/lib)" python evaluate.py --json-output-file metrics_full.json`
 
-### Scenario B — current winner (PR #141, merged 2026-05-28) — supersedes PR #136
+### Scenario B — current winner (PR #149, merged 2026-05-28) — supersedes PR #141
 
-- **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding depth 15, BF16 KV cache
-- **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":15,"prompt_lookup_max":8,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
-- **TPOT.p50:** 0.00708 s (PyTorch 0.0252 s) — spec15/8 cuts decode latency vs spec5/4 (0.00936 s in PR #136)
-- **Speedup:** 3.550x (+32.2% over PR #136's 2.687x, `inverse_tpot_p50` 141.15 vs 39.76 tok/s)
-- **Quality:** MMLU-Pro 0.300 obs / 0.298 baseline = ratio 1.007 (gate 0.95, n=500) ✓
+- **Engine:** vLLM 0.11.0, FlashAttention backend, n-gram (prompt-lookup) speculative decoding depth 25, BF16 KV cache
+- **Key flags:** `--speculative-config '{"method":"ngram","num_speculative_tokens":25,"prompt_lookup_max":12,"prompt_lookup_min":2}' --max-num-seqs 16 --max-num-batched-tokens 2048 --enable-chunked-prefill --no-enable-prefix-caching --kv-cache-dtype auto --gpu-memory-utilization 0.92`
+- **TPOT.p50:** 0.00647 s (PyTorch 0.0252 s) — spec25/12 cuts decode latency vs spec15/8 (0.00708 s in PR #141)
+- **Speedup:** 3.888x (+9.5% over PR #141's 3.550x, `inverse_tpot_p50` 154.56 vs 141.15 tok/s)
+- **Quality:** MMLU-Pro 0.302 obs / 0.298 baseline = ratio 1.013 (gate 0.95, n=500) ✓
 - **Speed success:** 64/64 (failure_rate 0.0) ✓
-- **VRAM peak:** 90271 MiB / 97887 MiB (~93%)
+- **W&B run:** wkedminm
+- **Reproduce (from task workspace):** `cp senpai/launchers/B/tanjiro-vllm-deeper-spec/arm2_spec25_lookup12.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
+- **Key insight:** Spec depth continues to scale past PR #141's depth=15: spec25/lookup12 beats spec15/lookup8 by +9.5% (full), confirming the verify-step gain still exceeds the verify-step compute at depth=25. The arm3 quick probe at spec30/lookup15 was 4.30x — below both arm1 (4.83x at spec20) and arm2 (8.64x at spec25), indicating the verify-step compute dominates beyond depth=25. So depth=25 is at-or-near the n-gram ceiling on Sc B. Diminishing returns relative to spec5→spec15 (+32%); future Sc B gains likely need EAGLE/Medusa draft-model speculation instead of widening the n-gram window further.
+
+### Scenario B — prior winner (PR #141, merged 2026-05-28, superseded by PR #149)
+
+- **Speedup:** 3.550x (`num_speculative_tokens=15, prompt_lookup_max=8`)
 - **W&B run:** 8656lf5w
-- **Reproduce (from task workspace):** `cp senpai/launchers/B/tanjiro-vllm-spec-depth/arm3_spec15_lookup8.sh ./start_server.sh && python evaluate.py --json-output-file metrics_full.json`
-- **Key insight:** Deeper speculation wins superlinearly on Sc B's 8192-token outputs. Once the decoded prefix is long (~100+ tokens), the model generates natural n-grams that match `prompt_lookup_max=8` lookback patterns — spec15 emits 15-token bursts vs spec5's 5-token bursts. Quick probe overestimated (6.918x at n=4) due to highly-repetitive samples; full eval at n=64 gives authoritative 3.550x. Quick-to-full ratio ~51% is consistent with prior Sc B quick observations.
 
 ### Scenario B — prior winner (PR #136, merged 2026-05-28, superseded by PR #141)
 
@@ -231,3 +235,10 @@ research signal only and must not be used to update the current-best row.
   n=500, gate 0.95). TTFT -45% (FP8), TPOT -59% (n-gram) — both levers target
   independent pipeline stages in balanced 4096in/2048out Sc D. Confirms
   composition hypothesis: multiplicative gains when bottlenecks are independent.
+- 2026-05-28 16:22 UTC — Merged PR #149 (tanjiro). Scenario B new best:
+  3.888x (`num_speculative_tokens=25, prompt_lookup_max=12`, vLLM 0.11, BF16).
+  Supersedes PR #141 (spec15/lookup8, 3.550x) — +9.5% gain. Quality ratio 1.013
+  (observed 0.302, n=500), 64/64 speed success. Quick probe at spec30/lookup15
+  was 4.30x (vs 8.64x at spec25), confirming the n-gram verify-step compute
+  dominates beyond depth=25. Sc B near-ceiling for prompt-lookup; future gains
+  likely need EAGLE/Medusa draft-model speculation.
