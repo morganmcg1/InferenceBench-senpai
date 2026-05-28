@@ -1,6 +1,6 @@
 # SENPAI Research State — `ib-20260528-scen-d-r1`
 
-- **Updated:** 2026-05-28 16:44 UTC
+- **Updated:** 2026-05-28 17:02 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~94 min left)
 - **Launch budget:** ~2 hours, single Scenario D.
 - **Most recent human directive:** none in this launch (no open team issues).
 - **GPU topology:** 1 RTX PRO 6000 Blackwell, shared by 2 logical students (scen-d-frieren, scen-d-fern). Coordinate via `senpai/gpu_slot.py`.
@@ -13,22 +13,26 @@ The first round is **engine-diversified**: one vLLM arm and one SGLang arm. Goal
 
 ## Round 1 portfolio (in flight)
 
-| PR | Student | Engine | Lever family | Decision tree gate | Notes |
-|---|---|---|---|---|---|
-| #155 | scen-d-frieren | vLLM | chunked prefill + prefix cache + wider batch (max-num-seqs 32, max-num-batched-tokens 8192), FLASH_ATTN (no FlashInfer), CUDA graphs ON, gpu-mem 0.92 | ≥3x quick → full; 1.5–3x → Arm 2 wider batch; <1.5x → stop after Arm 2 | RTX PRO 6000 floor for tuned vLLM. |
-| #157 | scen-d-fern | SGLang (per-PR venv) | LPM scheduler + chunked-prefill 4096 + mem-fraction 0.85 + triton attention | ≥3x quick → full; 1.5–3x → quick FCFS vs LPM A/B; install fails → vLLM Arm 3 fallback | Engine diversity. RadixAttention prefix cache vs vLLM's. |
+| PR | Student | Engine | Latest signal | Next step |
+|---|---|---|---|---|
+| #155 | scen-d-frieren | vLLM tuned | Arm 1 quick **1.17x**, Arm 2 quick **1.25x** at quick-mode c=1 (4 requests). TPOT-p50 already 1.50x faster than PyTorch at c=1 — wider-batch / chunked-prefill / prefix-cache levers are dormant at c=1 by construction. | Approved Arm 2 full eval (c=4, n=96, MMLU-Pro n=500). Expected ~25 min. Arm 3 contingency: n-gram speculative decoding (`num_speculative_tokens=5`, `prompt_lookup_min=2`, `prompt_lookup_max=3`) if Arm 2 full < 2.0x. |
+| #157 | scen-d-fern | SGLang | No PR activity since assignment at 16:44 UTC. Pod log silent (student Claude session running). Likely mid SGLang venv install + boot. | Pinged for status checkpoint at 17:02 UTC. Latest reasonable full-eval start: 17:50 UTC. Fallback path: vLLM Arm 3 if SGLang install genuinely fails. |
 
 Both students must use `gpu_slot.py run --wait --mode {quick,full}`. Quick caps 15 min, full caps 60 min, `--min-remaining-s 1500` required for full eval. Post a `SLOT-FREE` line on release.
 
-## Next likely directions (round 2 candidates)
+### Quick-mode caveat (worth recording for future advisor loops)
 
-Pick the surviving best engine from round 1 and broaden. Hold each as one bounded research arm if a student becomes idle within the launch window:
+The default quick eval runs at `request_limit=4, concurrency=1`. At c=1, the wider-batch + chunked-prefill + prefix-caching levers of a tuned vLLM/SGLang recipe are fundamentally dormant: there is only one request in flight, so the batch scheduler has nothing to do. Quick mode is fine for detecting "does the server boot and approximately how fast is single-request decode" but should not be used to reject a tuned recipe before full eval, because the levers being tested are concurrency-activated. Full eval (c=4, n=96) is the first measurement that actually exercises Scenario D's lever space.
 
-- **Round-2A — speculative decoding (n-gram or EAGLE-3) on the winning engine.** Big lever on general 4096in/2048out workloads. Likely worth a single full eval if quality holds.
-- **Round-2B — KV-cache dtype FP8 / kv-cache-dtype auto comparison** on the winning engine. Only after round 1 confirms it boots cleanly here.
-- **Round-2C — `enforce-eager` true vs CUDA-graphs ON A/B**. Quick screen to confirm CUDA graphs are net-positive on RTX PRO 6000 Blackwell at concurrency 4.
-- **Round-2D — vLLM-vs-SGLang head-to-head** with both running the same prefix-cache + chunked-prefill recipe at the same memory fraction, to isolate engine effect from tuning effect.
-- **Round-2E — TGI or TensorRT-LLM exploratory probe** only if the round-1 leader is well above 3x and we have wall time to spare; otherwise defer.
+## Next likely directions (round 2 candidates, budget-permitting)
+
+Most of these will only be reachable if round-1 closes before t≈17:50 with a clearly winning engine and ≥30 min remaining. Otherwise, treat as deferred.
+
+- **Round-2A — n-gram speculative decoding on the winning engine.** Already promised to frieren as an in-PR Arm 3 contingency if Arm 2 full < 2.0x.
+- **Round-2B — vLLM-vs-SGLang head-to-head** with identical chunked-prefill + prefix-cache + memory-fraction settings, to isolate engine effect from tuning effect (only useful if both round-1 arms ship terminal results).
+- **Round-2C — block-size 32 vs 16** on the winning vLLM recipe (smaller probe, may not be worth a slot lease).
+- **Round-2D — KV-cache dtype FP8 on the winning engine.** Only if FP16 floor is well above 2.0x AND we know FP8 boots cleanly on RTX PRO 6000. Quality gate is the risk.
+- **Round-2E — TGI or TensorRT-LLM exploratory probe** — deferred unless round 1 leader is ≥3x and ≥40 min remain.
 
 ## Risks the advisor is tracking
 
