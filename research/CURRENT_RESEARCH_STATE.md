@@ -1,6 +1,6 @@
 # SENPAI Research State — InferenceBench
 
-- **As of:** 2026-05-28 16:35 UTC
+- **As of:** 2026-05-28 16:50 UTC
 - **Run tag / advisor branch:** `ib-20260528-12h-r2`
 - **Hardware (active):** NVIDIA RTX PRO 6000 (~96 GB) — shakedown only; not
   leaderboard-comparable to the H100 reference snapshot in `program.md`.
@@ -22,9 +22,9 @@
 
 | Student | PR | Scenario | Hypothesis | Status |
 |---|---:|---|---|---|
-| fern | #152 | D | vLLM spec depth upgrade: PR #139 spec5/lookup4 → spec15/lookup8 (researcher H1) | Quick probes done 16:01 UTC; **spec15 fails quality regardless of dtype**, arm2 (spec10) in full eval |
+| fern | #152 | D | vLLM spec10/lookup6 depth upgrade (extend PR #139) | **arm2 = 2.218x** (+7.0%, quality 0.960) — review-ready, sent back for rebase after PR #149 merge; spec15 fails quality regardless of dtype |
 | frieren | #153 | C | SGLang FP8 weights + FP8 KV composition (extend PR #151) — ablation arm3 isolates weight contribution | **assigned 16:25 UTC** |
-| tanjiro | #149 | B | Deeper n-gram spec sweep: spec20/25/30, BF16 (no FP8), extend PR #141 | **arm2 spec25/lookup12 = 3.888x** (+9.5%, quality 1.013) — sent back 16:35 UTC for BASELINE.md rebase |
+| tanjiro | #154 | D | n-gram spec depth fine-sweep: spec11/lookup7, spec12/lookup8, spec10/min=1 — find quality cliff above spec10 | **assigned 16:50 UTC** |
 
 All 3 student GPUs occupied.
 
@@ -32,6 +32,8 @@ All 3 student GPUs occupied.
 
 | PR | Student | Scenario | Result | Status |
 |---:|---|---|---|---|
+| #149 | tanjiro | B | **3.888x arm2 spec25/lookup12 (+9.5%)** — quality 1.013, 64/64 | MERGED — new Sc B best |
+| #152 | fern | D | **2.218x arm2 spec10/lookup6 (+7.0%)** — quality 0.960, 96/96 | review-ready pending rebase |
 | #137 | frieren | A | 1.866x FP8 weights | MERGED — current Sc A best |
 | #136 | fern | B | 2.687x n-gram spec5/4 | MERGED — superseded by #141 |
 | #138 | tanjiro | D | 1.247x SGLang default | MERGED — superseded by #139 |
@@ -86,11 +88,13 @@ All 3 student GPUs occupied.
 
 ### Active hypothesis queue (in priority order)
 
-1. **Sc B tanjiro #149:** Deeper spec sweep (spec20/25/30 BF16). RESULT: **arm2 spec25/lookup12 = 3.888x (+9.5%)**, quality 1.013, 64/64 successes. Sent back for rebase 16:35 UTC due to PR #151 BASELINE.md conflict. spec30 saturates (verify-compute overhead) — spec25 is the new Sc B sweet spot.
+1. **Sc B tanjiro #149 (MERGED):** arm2 spec25/lookup12 = 3.888x (+9.5%), quality 1.013, 64/64 successes. spec30 saturates — spec25 is the Sc B n-gram ceiling. Future gains need draft-model speculative decoding (EAGLE/Medusa).
 
-2. **Sc C frieren #153:** SGLang FP8 weights composed with FP8 KV (extend PR #151 winner). PR #151 confirmed FP8 KV +13.1% (24.305x→27.497x). Testing whether SGLang FP8 weight quantization adds further weight-bandwidth reduction. 3-arm ablation: arm1 FP8wt+FP8KV, arm2 arm1+mem0.92, arm3 FP8wt only (no FP8KV — isolates weight contribution). Key question: does vLLM-style "FP8 weights hurt at high concurrency" apply to SGLang's Triton kernels?
+2. **Sc C frieren #153:** SGLang FP8 weights composed with FP8 KV (extend PR #151 winner). Testing whether SGLang FP8 weight quantization adds further weight-bandwidth reduction on top of FP8 KV. Key question: does vLLM-style "FP8 weights hurt at high concurrency" apply to SGLang's Triton kernels?
 
-3. **Sc D fern #152:** vLLM spec depth upgrade (researcher H1). Extend PR #139 winner (FP8 + spec5/lookup4) to spec15/lookup8 — two integer changes. PR #141 showed spec5→spec15 gave +32% on Sc B. Expected +15-20% on Sc D → ~2.4x. 3-arm sweep: FP8+spec15 (full upgrade), FP8+spec10 (intermediate), BF16+spec15 (quality control). Quality risk lower than Sc B (4× less verify-step exposure with 2048 vs 8192 output tokens).
+3. **Sc D fern #152 (pending rebase → merge):** arm2 spec10/lookup6 = 2.218x (+7.0%), quality 0.960. Sent back for BASELINE.md rebase after PR #149 merge. Will become new Sc D best.
+
+4. **Sc D tanjiro #154:** n-gram spec depth fine-sweep — spec11, spec12, and spec10/min=1. Map the quality cliff between spec10 (safe, 2.218x) and spec15 (fail, 0.629 quality). If spec11-12 are safe, could push Sc D to 2.25-2.30x.
 
 ### Next experiments (after current round)
 

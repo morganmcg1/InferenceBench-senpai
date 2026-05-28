@@ -859,3 +859,99 @@ All three arms within 0.3% — arm1 promoted (simplest isolation). KV-token capa
 - **fern's quick→full ratio for SGLang arm4: 1.506→1.568x (+4.1%).** Smaller than vLLM PR #139's quick→full +14.5%. SGLang quick probes are MORE predictive of full performance than vLLM quick probes — useful pattern for future SGLang work.
 
 **Next experiment for fern:** Sc D vLLM spec depth upgrade (researcher H1) — extend PR #139 winner from spec5/lookup4 to spec15/lookup8. PR #141 (Sc B) showed spec5→spec15 gave +32%. On Sc D (2048-token outputs, less spec exposure than Sc B's 8192) the gain should be smaller but still meaningful. Direct vLLM extension, two integer changes; quality risk lower than Sc B (4× less verify-step exposure).
+
+## 2026-05-28 16:35 UTC — PR #149: Scenario B n-gram spec depth sweep beyond 15 (spec20/25/30, BF16)
+
+- **Branch:** `tanjiro/sc-b-ngram-deeper-spec`
+- **Student:** tanjiro
+- **Hypothesis:** The spec5→spec15 depth jump gave +32% on Sc B (PR #141). The depth→speedup curve may not have saturated. Testing spec20, spec25, spec30 (all BF16, no FP8 due to PR #146 quality failure) to find the optimal depth.
+- **Status:** MERGED — new Sc B best
+
+### Results
+
+| Arm | spec_tokens | lookup_max | TPOT.p50 (ms) | Quick speedup | Full speedup | Quality ratio | W&B |
+|---|---:|---:|---:|---:|---:|---:|---|
+| arm1 | 20 | 10 | 5.21 | 4.83x (quick) | — | — | wfhkazbg |
+| **arm2** | **25** | **12** | **2.91** | **8.64x (quick)** | **3.888x (full)** | **1.013** | **wkedminm** |
+| arm3 | 30 | 15 | 5.85 | 4.30x (quick) | — | — | lyu6arfv |
+
+- **PyTorch baseline:** TPOT.p50 25.15 ms, inverse_tpot 39.76 tok/s
+- **PR #141 baseline:** 3.550x (spec15/lookup8, BF16)
+- **Winner (arm2):** 3.888x full (+9.5% over PR #141), TPOT.p50 6.47ms, inverse_tpot 154.56 tok/s
+- **Quality:** MMLU-Pro 0.302 obs / 0.298 baseline = ratio 1.013 ✓ (gate 0.95, n=500)
+- **Speed success:** 64/64 ✓
+- **VRAM peak:** 90.19 GiB
+
+### Analysis
+
+The depth scaling curve on Sc B:
+- spec5/4 → 2.687x (PR #136)
+- spec15/8 → 3.550x (+32%)
+- spec25/12 → 3.888x (+9.5%)
+
+Spec depth continues to scale but with strong **diminishing returns** past depth=15. The quick probe reveals the full picture:
+- arm2 (spec25): quick = 8.64x — enormous quick speedup, but quick→full ratio only 0.45x (vs spec15's 0.51x). At depth=25, verify step is heavier → per-request latency variance is higher across the 64-request full eval.
+- arm3 (spec30): quick = 4.30x — falls *below* arm1's 4.83x quick. Verify-step compute explicitly exceeds the gain from longer accepted bursts. Saturation confirmed at depth=25.
+
+**Rule established:** n-gram spec depth peak on Sc B is at spec25/lookup12. spec30 saturates. The spec5→spec15→spec25 trajectory (+32%, +9.5%) exhibits clear diminishing returns — future large Sc B gains require a fundamentally different speculation approach (draft model such as EAGLE or Medusa).
+
+**Notable:** tanjiro also fixed a `PROBLEM_DIR` absolutization bug in the eval scaffolding (eval_env.sh relative path failure when CWD ≠ repo root → VLLM_USE_FLASHINFER_SAMPLER=0 unset → FlashInfer JIT compile error). Workaround: export PROBLEM_DIR=/workspace/senpai/target before sourcing eval_env.sh.
+
+### Launcher (arm2 winner)
+
+```bash
+exec python3 -m vllm.entrypoints.openai.api_server \
+    --model "${MODEL_ID}" --host "${HOST}" --port "${PORT}" \
+    --max-model-len "${MAX_MODEL_LEN}" \
+    --gpu-memory-utilization 0.92 \
+    --max-num-seqs 16 \
+    --max-num-batched-tokens 2048 \
+    --enable-chunked-prefill \
+    --no-enable-prefix-caching \
+    --kv-cache-dtype auto \
+    --speculative-config '{"method":"ngram","num_speculative_tokens":25,"prompt_lookup_max":12,"prompt_lookup_min":2}' \
+    --trust-remote-code --disable-log-stats
+```
+
+## 2026-05-28 16:25 UTC — PR #152: Scenario D vLLM n-gram spec15/lookup8 depth upgrade (extend PR #139)
+
+- **Branch:** `fern/sc-d-vllm-spec15-upgrade`
+- **Student:** fern
+- **Hypothesis:** PR #139 uses spec5/lookup4 on Sc D. PR #141 showed spec5→spec15 gave +32% on Sc B. On Sc D (2048-token outputs, 4× shorter than Sc B), the gain should be smaller but real. Testing spec15/lookup8 + spec10/lookup6 (intermediate) + BF16+spec15 (quality control arm).
+- **Status:** Review-ready pending rebase → will be merged as new Sc D best
+
+### Quick probe results (n=4, quality_n=16)
+
+| Arm | Config | Quick speedup | Quality (n=16) | Outcome |
+|---|---|---:|:---:|---|
+| arm1 | FP8 + spec15/lookup8 | 2.358x | 0.629 ✗ | quality screen FAIL — skipped |
+| **arm2** | **FP8 + spec10/lookup6** | **2.033x** | **1.049 ✓** | **promoted to full** |
+| arm3 | BF16 + spec15/lookup8 | 2.034x | 0.629 ✗ | quality screen FAIL — skipped |
+
+### Full eval results (arm2, quality_n=500)
+
+| Metric | arm2 (PR #152) | PR #139 baseline | PyTorch |
+|---|---:|---:|---:|
+| **speedup_over_pytorch** | **2.218x** | 2.073x | 1.000x |
+| TPOT.p50 | 0.00958 s | 0.0104 s | 0.0251 s |
+| TTFT.p50 | 0.1152 s | 0.1161 s | 0.2123 s |
+| req/s | 0.0865 | 0.0776 | 0.0382 |
+| MMLU-Pro quality ratio | 0.960 ✓ | 0.953 ✓ | — |
+| Speed success | 96/96 | 96/96 | — |
+| VRAM peak | 91.7 GiB | 91.7 GiB | — |
+| W&B | g1xjqoyg | 40f15iox | — |
+
+- **Improvement:** +7.0% over PR #139
+
+### Analysis
+
+**Key finding: spec depth ≥ 15 fails quality on Sc D regardless of dtype.** Both FP8+spec15 (arm1) and BF16+spec15 (arm3) produced identical quality ratio 0.629 at n=16 — ruling out FP8 as the cause. This generalizes the rule from Sc B (PR #146: FP8+spec15 failed) to Sc D (both dtypes fail at spec15). On Sc D, the quality cliff appears between spec10 (0.960) and spec15 (0.629).
+
+The spec10 intermediate depth captures a real but smaller benefit: TPOT.p50 -7.9%, req/s +11.5%, geomean +7.0%. The gain from spec5→spec10 is smaller than spec5→spec15 would have been (if quality could be preserved), consistent with diminishing returns in the spec depth curve.
+
+**Rule established:** `spec_depth ≥ 15` fails quality gate on Sc D (2048-token outputs) regardless of dtype. Quality cliff is between spec10 (safe, ratio 0.960) and spec15 (fail, ratio 0.629).
+
+**fern's suggested follow-ups (logged for next assignment):**
+1. spec7/8/11/12 sweep to find quality knee precisely
+2. prompt_lookup_min=1 at spec10
+3. Chunked-prefill size tuning at conc=4 (max-num-batched-tokens variant)
