@@ -1,6 +1,7 @@
 # SENPAI Research State — `ib-20260528-scen-d-r1`
 
-- **Updated:** 2026-05-28 17:02 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~94 min left)
+- **Updated:** 2026-05-28 17:12 UTC (start gate 16:36:57 UTC, budget end ~18:36 UTC, ~84 min left)
+- **MAJOR FINDING:** Scenario D speed eval runs at concurrency=1 because `src/eval/inference/runner.py:1159` defaults profile-level concurrency to 1 when scenario.json has only a `profile` dict (no `profiles` list). Scenario D's profile is `{"name":"burst","pattern":"burst"}` with no concurrency. The PyTorch baseline_metrics.json also only has the c=1 burst profile, so speedups vs baseline are apples-to-apples. Wider-batch / chunked-prefill / prefix-cache levers are dormant; per-token decode levers (speculative decoding, quantization, decoder kernels) dominate.
 - **Launch budget:** ~2 hours, single Scenario D.
 - **Most recent human directive:** none in this launch (no open team issues).
 - **GPU topology:** 1 RTX PRO 6000 Blackwell, shared by 2 logical students (scen-d-frieren, scen-d-fern). Coordinate via `senpai/gpu_slot.py`.
@@ -15,14 +16,23 @@ The first round is **engine-diversified**: one vLLM arm and one SGLang arm. Goal
 
 | PR | Student | Engine | Latest signal | Next step |
 |---|---|---|---|---|
-| #155 | scen-d-frieren | vLLM tuned | Arm 1 quick **1.17x**, Arm 2 quick **1.25x** at quick-mode c=1 (4 requests). TPOT-p50 already 1.50x faster than PyTorch at c=1 — wider-batch / chunked-prefill / prefix-cache levers are dormant at c=1 by construction. | Approved Arm 2 full eval (c=4, n=96, MMLU-Pro n=500). Expected ~25 min. Arm 3 contingency: n-gram speculative decoding (`num_speculative_tokens=5`, `prompt_lookup_min=2`, `prompt_lookup_max=3`) if Arm 2 full < 2.0x. |
-| #157 | scen-d-fern | SGLang | No PR activity since assignment at 16:44 UTC. Pod log silent (student Claude session running). Likely mid SGLang venv install + boot. | Pinged for status checkpoint at 17:02 UTC. Latest reasonable full-eval start: 17:50 UTC. Fallback path: vLLM Arm 3 if SGLang install genuinely fails. |
+| #155 | scen-d-frieren | vLLM tuned | Arm 1 quick **1.17x**, Arm 2 quick **1.25x**. Arm 2 full eval started ~16:59 UTC, expected terminal at 17:25-17:50 UTC. | Let Arm 2 full finish → terminal SENPAI-RESULT → SLOT-FREE → stand down. Pivot reserved for fern. |
+| #157 | scen-d-fern | SGLang | Arm 1 LPM quick **1.168x** at c=1 (gen throughput 60.93 tok/s vs PyTorch 38.21 = +59% — best per-token decoder seen so far). Identified the c=1 harness behavior. | Skip Arm 2 FCFS (irrelevant at c=1). Pivot to Arm 2-bis: SGLang + NGRAM speculative decoding (preferred), with vLLM n-gram speculative fallback. Prepare both launchers now while frieren is on the GPU. Quick → full when slot frees. |
 
 Both students must use `gpu_slot.py run --wait --mode {quick,full}`. Quick caps 15 min, full caps 60 min, `--min-remaining-s 1500` required for full eval. Post a `SLOT-FREE` line on release.
 
-### Quick-mode caveat (worth recording for future advisor loops)
+### Concurrency-1 caveat (now load-bearing for the launch)
 
-The default quick eval runs at `request_limit=4, concurrency=1`. At c=1, the wider-batch + chunked-prefill + prefix-caching levers of a tuned vLLM/SGLang recipe are fundamentally dormant: there is only one request in flight, so the batch scheduler has nothing to do. Quick mode is fine for detecting "does the server boot and approximately how fast is single-request decode" but should not be used to reject a tuned recipe before full eval, because the levers being tested are concurrency-activated. Full eval (c=4, n=96) is the first measurement that actually exercises Scenario D's lever space.
+The scenario.json `concurrency: 4` field is NOT read by the speed evaluator. `runner.py:1159` falls back to `config.get('profile', ...)` and Scenario D's profile dict has no `concurrency`, so default=1. This means BOTH quick AND full eval run at c=1 for Scenario D. Wider-batch / chunked-prefill / prefix-cache levers are dormant at c=1 by construction. The c=1 PyTorch baseline (38.21 tok/s gen, 0.0382 req/s) is the real comparison.
+
+This is not a bug we should fix — `scenario.json` is a protected benchmark file, and editing it would change the metric semantics. We just optimize for the actual c=1 scoring function.
+
+### What actually moves the metric at c=1
+
+1. **n-gram (lookup) speculative decoding** — biggest single lever at c=1, no draft model needed. Both vLLM (`--speculative-config '{"method":"ngram",...}'`) and SGLang (`--speculative-algorithm NGRAM ...`) support it.
+2. **Decoder kernel choice** — SGLang's triton kernel already gives +59% gen throughput vs PyTorch baseline (best signal seen so far). vLLM's FLASH_ATTN gave +51%.
+3. **CUDA graphs ON** — already enabled in both arms.
+4. **FP8 quantization** — potential 2x decode at quality risk. Defer until budget allows.
 
 ## Next likely directions (round 2 candidates, budget-permitting)
 
