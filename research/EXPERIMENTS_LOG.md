@@ -1,5 +1,44 @@
 # SENPAI Research Results
 
+## 2026-05-28 22:01 UTC — PR #189: Sc D vLLM 0.21 + FlashInfer engine upgrade (MERGED — new Sc D best +42.4%)
+
+- **Branch:** `frieren/sc-d-vllm21-flashinfer`
+- **Student:** frieren
+- **Hypothesis:** Apply vLLM 0.21 + FlashInfer (proven on Sc A via PR #186) to Sc D (decode-heavy: 4-conc, 4096-in/2048-out). FlashInfer's GQA paged-decode kernel expected to help more than on Sc A's prefill-bound workload.
+
+### Quick eval (arm comparison)
+
+| Arm | Engine + Backend | TTFT.p50 | TPOT.p50 | Quick speedup vs PyTorch full | W&B |
+|---|---|---:|---:|---:|---|
+| arm2 (FA2 control) | vLLM 0.21 + FlashAttention | 0.1571s | 0.00787s | 2.485x | bvq5ln5m |
+| **arm1 (FlashInfer)** | vLLM 0.21 + FlashInfer | 0.1196s | **0.00501s** | **3.242x** | b5f23fsf |
+| PR #152 (prior baseline) | vLLM 0.11 + FA | 0.1152s | 0.00958s | ~2.218x | g1xjqoyg |
+
+arm1 beat arm2 by +30.5%. Decisive promotion to arm1 full eval.
+
+### Full eval (arm1: vLLM 0.21 + FlashInfer + spec10)
+
+| Metric | PyTorch | PR #152 (prior best) | **PR #189 arm1 (new best)** | Δ vs PR #152 |
+|---|---:|---:|---:|---:|
+| TTFT.p50 (s) | 0.2123 | 0.1152 | **0.1082** | **-6.1%** |
+| TPOT.p50 (s) | 0.0251 | 0.00958 | **0.00567** | **-40.8%** |
+| req/s | 0.0382 | 0.0865 | **0.1390** | **+60.6%** |
+| VRAM (MiB) | — | 91,706 | **91,415** | -291 |
+| Quality ratio (n=500) | 1.000 | 0.960 | **0.960** | 0 |
+| **speedup_over_pytorch** | 1.000 | 2.218x | **3.158x** | **+42.4%** |
+
+96/96 speed requests succeeded. W&B: `uicvb6s4`.
+
+### Analysis
+
+**FlashInfer's GQA paged-decode kernel is dominant.** Sc D is the most decode-heavy scenario in this launch (conc=4, 2048-out, primary geomean of TTFT/TPOT/req/s). FlashInfer's paged attention pays off far more than on Sc A's prefill-bound workload — TPOT drops -40.8% vs PR #152's -7.9% from spec10. The decomposition from PR #186 holds: engine upgrade alone (arm2 FA2 control, 2.485x quick) is a fraction of the arm1 win (3.242x quick → 3.158x full). FlashInfer kernel = the win.
+
+N-gram spec10 is fully compatible with vLLM 0.21; quality ratio 0.960 is identical to PR #152. Previous Sc D quality cliff at spec≥15 was not disturbed. H100 SMAC3 ceiling 5.69x; this winner closes the gap from 39% to 55%.
+
+**Rule refinement confirmed:** FlashInfer decode kernel benefit scales with TPOT share of the primary metric. Sc A (TTFT-primary): +2.9%. Sc D (geomean with heavy TPOT share): +42.4%.
+
+---
+
 ## 2026-05-28 21:31 UTC — PR #188: Sc C SGLang FlashInfer / FA3 attention-backend probe (CLOSED — did_not_improve, quick only)
 
 - **Branch:** `fern/sc-c-sglang-flashinfer`
