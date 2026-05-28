@@ -111,7 +111,7 @@ the path to engine-version diversity.
 
 ## Final Fern probe this round
 
-**PR #178 (planned)** — Fern arm G0: FP8 weights +
+**PR #178 (CREATED)** — Fern arm G0: FP8 weights +
 `--max-num-batched-tokens=32768` (force one-shot prefill of the full 8k
 prompt). Single CLI flag change on top of the PR #160 winner recipe, with
 the cublas symlink workaround embedded for cold FlashInfer JIT cache safety.
